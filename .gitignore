@@ -1,0 +1,25 @@
+tools/
+work/
+dist/
+projects/
+.factory/
+.venv/
+node_modules/
+build/
+bin/
+obj/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.egg-info/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+credentials*.json
+.claude/settings.local.json
+
+# Raw generated art (large); processed sprites live in assets/sprites/
+assets/raw/

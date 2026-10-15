@@ -1,0 +1,28 @@
+name: PR quality
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+permissions: {}
+jobs:
+  description:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Validate PR description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          body = os.environ.get('PR_BODY', '')
+          body = body.replace('\r\n', '\n').replace('\r', '\n')
+          required = ['任务说明', '变更摘要', '测试结果', '潜在风险', '文档更新']
+          missing = [h for h in required if not re.search(r'^##\s+'+re.escape(h)+r'\s*$', body, re.M)]
+          if missing:
+              raise SystemExit('Missing PR sections: '+', '.join(missing))
+          for heading in required:
+              section = re.split(r'^##\s+', body, flags=re.M)
+              text = next((x.split('\n',1)[1].strip() for x in section if '\n' in x and x.split('\n',1)[0].strip() == heading), '')
+              if len(text) < 8: raise SystemExit('Describe section: '+heading)
+          print('PR description sections passed; human review verifies their accuracy.')
+          PY

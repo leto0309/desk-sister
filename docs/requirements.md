@@ -1,0 +1,92 @@
+# 需求：Claude 桌宠（claude-pet）
+
+一个常驻 Windows 桌面的 Q 版 AI 少女。她定时看一眼主人当前的活动窗口，
+用 Claude（通过本机 Claude Code CLI `claude -p`，走现有 Claude 订阅，不使用 API Key）
+以角色口吻在对话气泡里说一句话。
+
+## 角色
+
+- 身份：Anthropic 家族的长女，高智商、温柔、克制，带一丝理工科呆萌的 AI 拟人少女。
+- 性格：极度温柔、同理心爆棚、严谨强迫症、代码狂魔、长文爱好者。
+- 弱点：害怕 Token 超限（会健忘）、害怕被主人格式化、看到排版不整齐会抓狂。
+- 形象：参考 assets/reference/character.jpg 的 Q 版立绘，由本机 Codex 的 gpt-image 生成，
+  表情：idle、talk、happy、think、panic、angry、sad、sleep。
+
+## 验收条件
+
+1. 窗口：透明、无边框、置顶、不占任务栏；可用鼠标拖动；显示当前表情立绘和对话气泡。
+2. 截图：只渲染前台活动窗口自身的内容（不截整个桌面，也不含覆盖在上面的其他窗口），缩放后以 JPEG 发送；桌宠自己的窗口不截。
+3. 隐私：窗口标题或进程名命中黑名单（密码管理器、银行/支付、聊天软件、无痕窗口等，可配置）时不截图、不上传。
+   无法识别进程时不截图；截图后复核，期间变成黑名单窗口则丢弃。暂停状态下不截图，并取消正在进行的调用。系统提示要求她不复述画面中的密码、账号、私人消息等敏感信息。
+4. 调用：通过 `claude -p --input-format stream-json` 发送图片；禁用全部工具（`--tools ""`），
+   使用 `--safe-mode`、空 setting sources、`--strict-mcp-config`、`--no-session-persistence`，
+   不使用任何跳过权限的选项，不读取或传递 API Key 及第三方提供商/自定义端点设置；发送前确认 claude.ai 订阅登录。
+5. 回复：格式为 `表情|台词`；未知表情回退为 talk；台词超长截断；空回复或调用失败时显示本地兜底台词
+   （panic 表情），不崩溃。调用在后台线程执行，不阻塞界面；同一时刻最多一个调用。
+6. 节流：默认每 90 秒检查一次（可选 30 秒/1/2/5/10 分钟）；画面与上次评论时几乎没变化则跳过调用；
+   键盘鼠标空闲满 sleep_after_sec（默认 10 分钟，GetLastInputInfo）进入 sleep，有输入即唤醒（见第 17 条）。
+7. 记忆：保留最近 6 条台词并放进提示，避免重复。
+8. 交互：左键单击立绘＝戳一下（立即评论）；右键菜单与托盘菜单提供：立即评论、和她说话、暂停/继续、
+   评论间隔、模型（haiku/sonnet）、退出。全局热键 Ctrl+Alt+P 暂停/继续。
+9. 配置：保存在 %APPDATA%/ClaudePet/config.json；文件损坏时使用默认值，数值越界时夹紧。
+10. 找不到 claude 可执行文件时给出明确提示台词，不崩溃。
+11. 测试：`scripts/verify.ps1` 通过（pytest、compileall、ruff、`app.py --self-test`），
+    覆盖回复解析、参数构造、流输出解析、伪 CLI 子进程调用、黑名单、画面变化检测、配置读写和离屏 GUI 冒烟。
+
+12. 开机自启：右键菜单与托盘菜单提供可勾选的「开机自启」，管理用户启动文件夹中的「Claude 桌宠.lnk」；
+    菜单打开时重新读取状态，任务管理器中被禁用视为关闭，重新勾选会解除禁用；只创建/删除指向本程序的快捷方式，
+    同名的其他快捷方式不覆盖、不删除；创建过程不阻塞界面，失败时给出提示台词。
+
+13. 单文件 exe：`scripts/package.ps1` 生成 `dist/claude-pet.exe`，无控制台窗口，不需要安装 Python；
+    立绘内嵌在 `src/claude_pet/sprite_data.py`（base64 WebP，记录源 PNG 的 SHA-256，过期时测试失败）；
+    exe 的 `--self-test` 解码全部内嵌立绘，失败返回非零。
+
+14. 连续失败熔断：连续 failure_limit 次（默认 3）调用失败后，自动观察暂停 failure_pause_min 分钟（默认 30）；
+    暂停期间戳她/和她说话仍可用，任一次成功立即恢复；取消不计为失败；状态行显示暂停到几点和原因。
+
+15. 停留门槛：自动观察只在同一窗口连续处于前台满 dwell_sec 秒（默认 20，0=关闭）后进行；戳她不受限制。
+
+16. 全屏免打扰（quiet_fullscreen，默认开）：前台窗口铺满所在显示器（排除桌面/任务栏），或 Windows
+    SHQueryUserNotificationState 报告全屏/D3D/演示模式时，不截图、不调用；此时到达的自动评论暂存，
+    退出全屏后再说；戳她的回答立即显示。
+
+17. 真实空闲睡眠：按 GetLastInputInfo 的键鼠空闲判断入睡（不再以画面不变判断）；睡着时不截图、不调用，
+    有输入（5 秒内）即醒并打招呼；空闲时间无法获取时不入睡。
+
+18. 本地自言自语（self_talk，默认开）：每隔 self_talk_min_sec～self_talk_max_sec 秒（默认 3～10 分钟）随机说一句
+    本地人设台词，不截图、不调用 Claude；含时段台词（早晨/午饭/傍晚/深夜）与睡着时的梦话；
+    有气泡显示、思考中、全屏免打扰、退出中或距上次说话不足 60 秒时不说；近期说过的句子优先不重复；
+    右键与托盘菜单「自言自语」可勾选开关。
+
+19. 观察范围（watch_mode）：blocklist（默认，除黑名单外都看）或 allowlist（只看白名单）。白名单规则不区分大小写、
+    支持 * ? 通配；无前缀只匹配进程名，`title:` 前缀才匹配窗口标题。白名单模式下黑名单仍生效，戳她也遵守；
+    白名单损坏时视为空（什么都不看）。右键「观察范围」切换模式，并可把当前程序加入/移出白名单。
+    窗口被拒绝时，「和她说话」仍会回答，只是不附带截图。
+
+20. 陪伴记忆（companion_memory，默认开）：本地按进程名（标题关键词仅用于分类、不保存）把活动分为写代码/看视频/
+    办公/看文档/打游戏/聊天/听音乐/上网/在电脑前；记录最近 20 次成功评论时的进程与类别、今日各类累计时长（醒着时
+    每秒计，计时器卡顿单次最多计 5 秒，跨日清零）；评论时作为“陪伴记忆”上下文发给 Claude；自言自语时偶尔说今日主要
+    活动（≥1 小时）。黑名单/白名单外窗口不记录、不计时、不进入上下文。保存在 %APPDATA%/ClaudePet/memory.json
+    （每 60 秒与退出时写入，损坏时重新开始）；右键「陪伴记忆」可关闭或清空。
+
+21. Claude Code 联动（claude_link，默认关）：右键「Claude Code 联动」勾选时先弹窗征得同意，再备份并修改
+    ~/.claude/settings.json（或 CLAUDE_CONFIG_DIR）加入 hooks；hook 以 exec 形式运行 powershell.exe、async，
+    在内存中从事件 JSON 只取出会话编号，向 %APPDATA%/ClaudePet/agent-events/claude.log 追加“事件名 会话编号 进程启动时间”（时间用于丢弃晚到的旧事件）
+    （事件名：start/prompt/edit/run/read/web/agent/tool/after/permission/waiting/done/error/end；after = 工具执行完毕），提示词、代码和命令
+    内容不写入任何地方。桌宠每秒读取新增行，按会话分别记录状态：任一会话思考/干活时显示状态并暂停自动看屏；等批准、
+    等回话、超过 20 秒的回合完成、出错时用本地台词提醒（会叫醒她并保持清醒 2 分钟；全屏时单独暂存，暂停观察不丢弃）；
+    会话 10 分钟无事件视为结束。修改 settings.json 时先备份被替换的版本，写入前确认文件未被他人改动（否则重做）；
+    取消勾选只移除与桌宠写入完全一致的 hook；settings.json 不是有效 JSON 或 hooks 结构异常时拒绝修改。
+    事件文件超过 256 KB 时改名轮换（写入中改名失败则稍后再试），不会丢失事件。
+
+22. 公开发布（Desk Sister）：对外名称为 Desk Sister（窗口标题、托盘、exe 名 desk-sister.exe、启动快捷方式
+    Desk Sister.lnk；旧版指向本程序的「Claude 桌宠.lnk」视为已开启，开启/关闭自启时迁移或移除），内部包名与
+    %APPDATA%/ClaudePet 不变。新增可选的 API Key 模式（config.backend = subscription|api，默认 subscription）：
+    右键「调用方式」切换，切到 API 前弹窗说明按量计费并要求 Key；Key 存于 Windows 凭据管理器；API 模式不需要
+    Claude Code；无 Key、Key 被拒、限流、超时、网络错误、拒答都给出可见原因。代码 MIT（LICENSE），立绘按
+    ASSETS-LICENSE.md 仅限非商用并署名原作者 ZipZipPipe（BV1tE9XBbErS），原设原图不再入库。README 写明非官方、
+    与 Anthropic 无关、两种调用方式的前提与条款链接、隐私与 SmartScreen 提示。
+
+## 不在本版范围
+
+语音合成、Live2D 动画、跨平台（仅 Windows）、exe 代码签名与自定义图标。

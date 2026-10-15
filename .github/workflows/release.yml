@@ -1,0 +1,67 @@
+name: Approved release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Approved SemVer (example 0.1.0)'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    environment: release
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '8.0.x'
+      - name: Validate version and install project dependencies
+        env:
+          VERSION: ${{ inputs.version }}
+        shell: pwsh
+        run: |
+          if ($env:VERSION -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$') { throw 'Invalid version' }
+          if (Test-Path requirements-dev.txt) { python -m pip install -r requirements-dev.txt; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+          if (Test-Path package.json) { if (Test-Path package-lock.json) { npm ci } else { npm install --ignore-scripts }; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+      - run: ./scripts/package.ps1
+        shell: pwsh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-files
+          path: dist/*
+          if-no-files-found: error
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download verified build and publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          VERSION: ${{ inputs.version }}
+          TARGET: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" --repo "$GH_REPO" --name release-files --dir release-files
+          gh release create "v$VERSION" release-files/* --repo "$GH_REPO" --target "$TARGET" --title "v$VERSION" --generate-notes
