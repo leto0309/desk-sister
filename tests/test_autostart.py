@@ -20,6 +20,13 @@ def app_file(tmp_path):
     return file
 
 
+@pytest.fixture(autouse=True)
+def ascii_legacy_name(monkeypatch):
+    """The real legacy name is Chinese, and reading such a .lnk through WScript.Shell depends on the system
+    code page (an English CI runner cannot), so the migration logic is tested with an ASCII stand-in."""
+    monkeypatch.setattr(autostart, "LEGACY_NAMES", ("Old Pet.lnk",))
+
+
 def ours(app_file):
     return Launch(sys.executable, f'"{app_file}"', str(app_file.parent))
 
@@ -173,7 +180,7 @@ def test_both_shortcuts_count_when_only_the_new_one_is_disabled(tmp_path, app_fi
     monkeypatch.setattr(autostart, "clear_task_manager_flag", lambda name=SHORTCUT_NAME: None)
     monkeypatch.setattr(autostart, "LEGACY_NAMES", ())  # create both side by side first
     pet.enable()
-    legacy = folder / "Claude 桌宠.lnk"
+    legacy = folder / "Old Pet.lnk"
     legacy.write_bytes(pet.shortcut.read_bytes())
     monkeypatch.setattr(autostart, "LEGACY_NAMES", (legacy.name,))
     monkeypatch.setattr(autostart, "disabled_in_task_manager", lambda name=SHORTCUT_NAME: name == SHORTCUT_NAME)
