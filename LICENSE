@@ -2,10 +2,6 @@ MIT License
 
 Copyright (c) 2026 leto0309
 
-This license covers the source code of this repository only. The character art in
-assets/sprites/, src/claude_pet/sprite_data.py and docs/images/ is NOT covered by this
-license; see ASSETS-LICENSE.md.
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
