@@ -65,7 +65,9 @@ def main() -> int:
     logging.getLogger("claude_pet").info(
         "Desk Sister %s started (pid %d, %s)", __version__, os.getpid(), "exe" if getattr(sys, "frozen", False) else "source",
     )
-    autostart = Autostart(current_launch(Path(__file__).resolve(), data / "icon.ico"))
+    # The exe carries its own icon; a source run points the startup shortcut at the same picture.
+    icon = None if getattr(sys, "frozen", False) else Path(__file__).resolve().parent / "assets" / "icon.ico"
+    autostart = Autostart(current_launch(Path(__file__).resolve(), icon))
     controller = PetController(app, load_config(), resource_root() / "assets" / "sprites", autostart=autostart,
                                memory=CompanionMemory(data / "memory.json"))
     controller.start()

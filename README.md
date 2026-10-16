@@ -75,7 +75,8 @@ PowerShell 7：`./scripts/verify.ps1` 运行测试（pytest、compileall、ruff�
 `./scripts/build.ps1` 构建，`./scripts/package.ps1` 用 PyInstaller 生成单文件 `dist/desk-sister.exe`。
 需求与验收条件见 docs/requirements.md，架构见 docs/architecture.md。
 重新生成立绘后执行 `python devtools/process_sprites.py assets/raw assets/sprites`，
-再执行 `python devtools/embed_sprites.py` 更新内嵌立绘（否则测试会提示过期）。
+再执行 `python devtools/embed_sprites.py` 更新内嵌立绘（否则测试会提示过期），
+`python devtools/make_icon.py` 更新程序图标 assets/icon.ico。
 
 ## 致谢与许可
 

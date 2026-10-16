@@ -4,7 +4,8 @@
 
 - `assets/sprites/` 中的 8 张立绘；
 - `src/claude_pet/sprite_data.py` 中内嵌的同一套立绘；
-- `docs/images/` 中的效果图。
+- `docs/images/` 中的效果图；
+- `assets/icon.ico` 程序图标（从立绘裁出的头像）。
 
 ## 来源
 

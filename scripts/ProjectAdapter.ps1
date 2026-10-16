@@ -32,6 +32,14 @@ function Invoke-ProjectAction {
             } else {
                 $arguments = @('-m','PyInstaller','--noconfirm','--onefile','--paths','src','--name',$config.name,'--distpath','dist','--workpath','build/pyinstaller','--specpath','build')
                 if ($config.windowsGui) { $arguments += '--windowed' }
+                if ($config.icon) {
+                    # Absolute path: PyInstaller resolves a relative --icon against --specpath (build/).
+                    $icon = [IO.Path]::GetFullPath((Join-Path $root $config.icon))
+                    if (-not $icon.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $icon -PathType Leaf)) {
+                        throw "Icon not found inside the project: $($config.icon)"
+                    }
+                    $arguments += @('--icon', $icon)
+                }
                 $arguments += 'app.py'
                 Invoke-FactoryCommand $python $arguments $root $TimeoutSec
             }
