@@ -77,6 +77,7 @@ PowerShell 7：`./scripts/verify.ps1` 运行测试（pytest、compileall、ruff�
 重新生成立绘后执行 `python devtools/process_sprites.py assets/raw assets/sprites`，
 再执行 `python devtools/embed_sprites.py` 更新内嵌立绘（否则测试会提示过期），
 `python devtools/make_icon.py` 更新程序图标 assets/icon.ico。
+维护者从开发仓库同步到公开仓库：`./devtools/Sync-PublicRepo.ps1`（先列出变化，加 `-Push` 才提交、核对、扫描密钥并推送）。
 
 ## 致谢与许可
 

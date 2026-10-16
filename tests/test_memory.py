@@ -305,3 +305,27 @@ def test_corrupt_daily_seconds_are_dropped_without_failing(tmp_path):
     path.write_text(raw, encoding="utf-8")
     memory = CompanionMemory(path)  # must not raise
     assert memory.seconds == {"上网": 600.0}
+
+
+def test_ai_assistants_are_their_own_activity():
+    assert classify_activity("claude.exe", "Claude") == "和 AI 一起干活"
+    assert classify_activity("ChatGPT.exe", "") == "和 AI 一起干活"
+    assert classify_activity("chrome.exe", "Claude - Google Chrome") == "和 AI 一起干活"
+    assert classify_activity("msedge.exe", "DeepSeek - 探索未至之境") == "和 AI 一起干活"
+    assert classify_activity("msedge.exe", "豆包 - 字节跳动") == "和 AI 一起干活"
+    # Keeps priority: coding tools, videos about AI, documents, ordinary browsing.
+    assert classify_activity("Code.exe", "claude-pet - Visual Studio Code") == "写代码"
+    assert classify_activity("chrome.exe", "ChatGPT 教程_哔哩哔哩_bilibili") == "看视频"
+    assert classify_activity("chrome.exe", "Claude 论文.pdf") == "办公/看文档"
+    assert classify_activity("chrome.exe", "天气预报 - Google Chrome") == "上网"
+
+
+def test_the_new_activity_is_remembered(tmp_path):
+    memory = CompanionMemory(tmp_path / "memory.json")
+    memory.record_look("claude.exe", "和 AI 一起干活")
+    memory.add_time("和 AI 一起干活", 2 * 3600)
+    memory.flush()
+    loaded = CompanionMemory(tmp_path / "memory.json")
+    assert loaded.looks[-1]["activity"] == "和 AI 一起干活" and loaded.top_today() == ("和 AI 一起干活", 7200)
+    assert "和 AI 一起干活约 2.0 小时" in loaded.context("看视频")
+

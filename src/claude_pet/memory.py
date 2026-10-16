@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-ACTIVITIES = ("写代码", "看视频", "办公/看文档", "打游戏", "聊天", "听音乐", "上网", "在电脑前")
+ACTIVITIES = ("写代码", "和 AI 一起干活", "看视频", "办公/看文档", "打游戏", "聊天", "听音乐", "上网", "在电脑前")
 MAX_LOOKS = 20
 MAX_TS = 4102444800.0  # 2100-01-01: anything later in the file is corrupt
 
@@ -29,6 +29,11 @@ _GAMES = ("steam.exe", "epicgameslauncher.exe", "leagueclient.exe", "genshinimpa
 _CHAT = ("wechat.exe", "weixin.exe", "qq.exe", "telegram.exe", "discord.exe", "line.exe", "dingtalk.exe",
          "feishu.exe", "lark.exe", "slack.exe", "kook.exe", "whatsapp.exe")
 _MUSIC = ("spotify.exe", "cloudmusic.exe", "qqmusic.exe", "kugou.exe", "foobar2000.exe")
+# AI assistants as desktop apps (process name) and as sites in a browser (window title, matched locally only).
+_AI_PROCS = ("claude.exe", "chatgpt.exe", "codex.exe", "copilot.exe", "deepseek", "kimi", "doubao", "qianwen",
+             "tongyi", "yuanbao", "perplexity", "gemini")
+_AI_TITLES = ("claude", "chatgpt", "gemini", "deepseek", "kimi", "豆包", "通义", "千问", "元宝", "文心一言",
+              "perplexity", "copilot", "poe")
 _BROWSERS = ("chrome.exe", "msedge.exe", "firefox.exe", "opera.exe", "brave.exe", "vivaldi.exe", "quark.exe")
 
 
@@ -40,6 +45,8 @@ def classify_activity(process_name: str, title: str = "") -> str:
         return "在电脑前"
     if any(k in proc for k in _CODE) or "visual studio" in text:
         return "写代码"
+    if any(k in proc for k in _AI_PROCS):
+        return "和 AI 一起干活"
     if any(k in proc for k in _GAMES):
         return "打游戏"
     if any(k in proc for k in _VIDEO_PROCS) or any(k in text for k in _VIDEO_TITLES):
@@ -51,7 +58,8 @@ def classify_activity(process_name: str, title: str = "") -> str:
     if any(k in proc for k in _MUSIC):
         return "听音乐"
     if any(k in proc for k in _BROWSERS):
-        return "上网"
+        # Video and documents were matched above, so a video *about* ChatGPT is still a video.
+        return "和 AI 一起干活" if any(k in text for k in _AI_TITLES) else "上网"
     return "在电脑前"
 
 
