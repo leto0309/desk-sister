@@ -741,8 +741,8 @@ def test_the_screenshot_folder_is_private_even_in_a_shared_temp(tmp_path):
     for item in (folder.path, folder.path / "screen.jpg"):
         subprocess.run(["icacls", str(item), "/save", str(saved)], capture_output=True, check=True)
         sddl = saved.read_bytes().decode("utf-16-le").lstrip("\ufeff").splitlines()[1]
-        trustees = {ace.split(";")[-1] for ace in re.findall(r"\(([^)]*)\)", sddl)}
-        assert trustees <= {codex_client._current_user_sid(), "SY"}, sddl  # no Users, no Everyone
+        trustees = {_full_sid(ace.split(";")[-1]) for ace in re.findall(r"\(([^)]*)\)", sddl)}
+        assert trustees <= {codex_client._current_user_sid(), "S-1-5-18"}, sddl  # no Users, no Everyone
         assert "D:P" in sddl or item != folder.path  # the folder does not inherit from the shared parent
     assert codex_client.remove_folder(folder)
 
@@ -943,3 +943,19 @@ def test_a_request_cancelled_during_the_codex_search_is_never_sent(pet, monkeypa
     _finish_search(ctrl, queued)
     assert texts == [] and ctrl.codex == "codex.exe"  # the search result is still kept
 
+
+
+def _full_sid(text: str) -> str:
+    """icacls writes well-known accounts as SDDL aliases (SY, or LA when running as the built-in Administrator)."""
+    import ctypes
+    from ctypes import wintypes
+
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    sid, out = ctypes.c_void_p(), wintypes.LPWSTR()
+    if not advapi.ConvertStringSidToSidW(text, ctypes.byref(sid)):
+        return text
+    try:
+        advapi.ConvertSidToStringSidW(sid, ctypes.byref(out))
+        return out.value
+    finally:
+        ctypes.windll.kernel32.LocalFree(sid)
