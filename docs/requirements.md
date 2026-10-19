@@ -87,6 +87,17 @@
     ASSETS-LICENSE.md 仅限非商用并署名原作者 ZipZipPipe（BV1tE9XBbErS），原设原图不再入库。README 写明非官方、
     与 Anthropic 无关、两种调用方式的前提与条款链接、隐私与 SmartScreen 提示。
 
+23. 设置窗口（巴洛克风格，Claude 娘的橘白配色与金色装饰）：右键「设置…」打开，分常规、调用方式、观察范围、陪伴、
+    外观、关于六页。每项改动立即通过与菜单相同的控制器逻辑生效，菜单与窗口始终一致；黑名单/白名单可直接增删
+    （去空白、忽略大小写去重，改动会取消进行中的请求）；数值有上下限；API Key 只显示“是否已保存”，从不显示内容；
+    Claude Code 联动仍先征得同意；她的身高可实时调整，脚的位置不变。
+
+24. 多家 AI：调用方式增加 Codex（ChatGPT 订阅，经本机 Codex CLI）以及 OpenAI、DeepSeek、Gemini 的 API Key
+    （官方 openai SDK，OpenAI 兼容接口），与 Claude Code 订阅、Anthropic API Key 并列，共六种。每种有「快速省钱 /
+    更聪明」两个预设并可填自定义模型名（只允许常见模型名字符）；每家的 Key 分开存于 Windows 凭据管理器；切换到按量付费
+    的方式前说明计费与截图去向，切换到 Codex 前说明截图会短暂写入临时文件夹；Codex 只接受 ChatGPT 登录并关闭全部工具；
+    Key 无效、额度不足、超时、网络错误、拒答都给出可见原因，且错误信息中不出现 Key。
+
 ## 不在本版范围
 
 语音合成、Live2D 动画、跨平台（仅 Windows）、exe 代码签名与自定义图标。

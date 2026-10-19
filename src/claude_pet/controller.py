@@ -17,7 +17,8 @@ from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import agent_link, api_client, capture, claude_client, credstore, persona
+from . import agent_link, api_client, capture, claude_client, codex_client, credstore, openai_client, persona, providers
+from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
 from .autostart import Autostart, AutostartError
@@ -68,7 +69,10 @@ class Job:
     quiet_check: object | None = None
     allowlist: list[str] | None = None  # None: blocklist mode
     memory_context: str = ""
-    backend: str = "subscription"  # or "api": call is then an api_client.ApiCall
+    backend: str = "subscription"  # a providers.PROVIDERS key
+    kind: str = CLAUDE_CLI  # how that provider is called; decides which call object `call` is
+    codex: str = ""  # the Codex CLI, for CODEX_CLI
+    tier: str = "haiku"  # fast / smarter; Codex turns it into a reasoning effort
 
 
 @dataclass
@@ -192,6 +196,7 @@ class PetController(QObject):
     thinking = Signal(int)
     autostart_done = Signal(bool, str)
     autostart_state = Signal(int, str)
+    codex_found = Signal(object, object)  # (path or None, what to do next)
 
     def __init__(self, app: QApplication, config: Config, sprite_folder: Path, config_file: Path | None = None,
                  autostart: Autostart | None = None, memory: CompanionMemory | None = None) -> None:
@@ -224,6 +229,7 @@ class PetController(QObject):
         self.claude_settings = agent_link.claude_settings_path()
         self.claude_tail: agent_link.EventTail | None = None
         self._confirm = self._ask_confirm
+        self.settings_window = None  # built the first time it is opened
         self._ask_secret = self._ask_secret_dialog
         # The API key only ever moves between Windows Credential Manager and the request (test seams).
         self._load_key = credstore.load_secret
@@ -240,6 +246,8 @@ class PetController(QObject):
         self._memory_flush_at = self._clock()
         self.window.clock = lambda: self._clock()
         self.claude = claude_client.find_claude(config.claude_path)
+        self.codex: str | None = None  # found when Codex mode is first used
+        codex_client.schedule_cleanup(sweep=True)  # screenshots a crash left in %TEMP%, in the background
         self.last_external_hwnd = 0
         # Each request gets a generation number; pausing or quitting bumps it so late replies are dropped.
         self.generation = 0
@@ -247,6 +255,9 @@ class PetController(QObject):
         self.auth_ok_until = 0.0
 
         self.reply_ready.connect(self._on_reply)
+        self.codex_found.connect(self._on_codex_found)
+        self._codex_searching = False
+        self._codex_request: tuple | None = None  # what to do once the Codex search is done
         self.thinking.connect(self._on_thinking)
         self.autostart = autostart
         self.autostart_busy = False
@@ -289,8 +300,17 @@ class PetController(QObject):
             # First look once the dwell gate can pass, so she does not wait a whole interval.
             QTimer.singleShot(max(8, self.config.dwell_sec + 1) * 1000, self.tick)
 
+    @property
+    def _cleanup_running(self) -> bool:
+        return codex_client.cleanup_running()
+
     def shutdown(self) -> None:
         self._cancel_inflight()
+        if codex_client.has_pending():
+            codex_client.schedule_cleanup()
+        codex_client.wait_cleanup(1.0)  # quitting never hangs; leftovers are swept at the next start
+        if codex_client.has_pending():
+            log.warning("temporary Codex screenshot folders are still locked; they are removed at the next start")
         self.timer.stop()
         self.focus_tracker.stop()
         self.self_talk_timer.stop()
@@ -318,7 +338,11 @@ class PetController(QObject):
             if force:
                 self.window.say("sad", "我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）")
             return
-        if self.config.backend == "subscription" and not self.claude:
+        provider = self._provider()
+        if provider.kind == CODEX_CLI and not self.codex:
+            self._find_codex(("tick", force, user_message))  # searched off the UI thread; ticks again when found
+            return
+        if provider.kind == CLAUDE_CLI and not self.claude:
             self.claude = claude_client.find_claude(self.config.claude_path)
             if not self.claude:
                 if force:
@@ -339,20 +363,26 @@ class PetController(QObject):
         cwd = app_data_dir()
         cwd.mkdir(parents=True, exist_ok=True)
         self.generation += 1
-        if self.config.backend == "api":
-            call = api_client.ApiCall(self.config.timeout_sec, load_key=self._load_key)
+        key = partial(self._load_key, provider.vault_entry)  # read on the worker, never kept in the Job
+        if provider.kind == ANTHROPIC:
+            call = api_client.ApiCall(self.config.timeout_sec, load_key=key)
+        elif provider.kind == OPENAI_COMPATIBLE:
+            call = openai_client.OpenAICompatCall(provider, self.config.timeout_sec, load_key=key)
+        elif provider.kind == CODEX_CLI:
+            call = codex_client.CodexCall(self.config.timeout_sec, cwd=str(cwd))
         else:
             call = claude_client.ClaudeCall(self.config.timeout_sec, cwd=str(cwd))
         job = Job(
             generation=self.generation, force=force, user_message=user_message,
             may_capture=not self.config.paused, hwnd=self.last_external_hwnd,
             blocklist=list(self.config.blocklist), last_fingerprint=self.last_fingerprint,
-            need_auth=time.monotonic() >= self.auth_ok_until, claude=self.claude, model=self.config.model,
+            need_auth=time.monotonic() >= self.auth_ok_until, claude=self.claude,
+            model=providers.model_for(provider, self.config.model, self.config.custom_models.get(provider.id, "")),
             recent=list(self.recent), call=call,
             quiet_check=None if force or not self.config.quiet_fullscreen else partial(full_screen_now, self.last_external_hwnd),
             allowlist=self._allowlist(),
             memory_context=self._memory_context(),
-            backend=self.config.backend,
+            backend=provider.id, kind=provider.kind, codex=self.codex or "", tier=self.config.model,
         )
         self.current_call = call
         self.busy = True
@@ -374,6 +404,38 @@ class PetController(QObject):
                 self.window.say("think", "等一下下，我还在想上一句……")
                 return
             self.tick(force=True, user_message=text.strip()[:300])
+
+    def _find_codex(self, then: tuple) -> None:
+        """PATH may hold a slow or offline network share: the search never runs on the UI thread.
+        Only the latest request waits for it (a message from the user is never replaced by an automatic
+        look), and it is dropped if the pet is paused, switched or quit meanwhile."""
+        old = self._codex_request
+        user_waiting = old is not None and old[0] == "tick" and old[2] and then[0] == "tick" and not then[2]
+        if not user_waiting:
+            self._codex_request = (*then, self.generation, self.config.backend)
+        if self._codex_searching:
+            return
+        self._codex_searching = True
+        self._spawn(lambda: self.codex_found.emit(codex_client.find_codex(), None))
+
+    def _on_codex_found(self, path, _unused=None) -> None:
+        self._codex_searching = False
+        self.codex = path or None
+        request, self._codex_request = self._codex_request, None
+        if request is None or self.quit_pending:
+            return
+        *then, generation, backend = request
+        if generation != self.generation or backend != self.config.backend:
+            return  # paused, switched or cancelled meanwhile: never sent late
+        if then[0] == "switch":
+            if self.codex:
+                self.set_backend("codex")
+            else:
+                self.window.say(*self._reply_tuple(persona.fallback("no_codex")))
+        elif self.codex:
+            self.tick(then[1], then[2])
+        elif then[1]:
+            self.window.say(*self._reply_tuple(persona.fallback("no_codex")))
 
     @staticmethod
     def _spawn(fn) -> None:
@@ -406,6 +468,8 @@ class PetController(QObject):
 
     # ---- heartbeat (1 s, UI thread, cheap Win32 queries only) ----------------
     def _heartbeat(self) -> None:
+        if codex_client.has_pending():  # a Codex screenshot that was still locked: try again (in the background)
+            codex_client.schedule_cleanup()
         self._track_foreground()
         self._update_quiet()
         self._update_sleep()
@@ -690,9 +754,13 @@ class PetController(QObject):
         self.thinking.emit(job.generation)
         started = time.monotonic()
         auth_ok = None
-        if job.backend == "subscription" and job.need_auth:
-            # Nothing is sent unless the CLI would use a claude.ai subscription login.
-            auth_ok, reason = job.call.check_subscription(job.claude)
+        # Codex: checked before every call (the login can change any time; a cached "yes" could bill an API key).
+        if (job.kind == CLAUDE_CLI and job.need_auth) or job.kind == CODEX_CLI:
+            # Nothing is sent unless the CLI would use the subscription login (claude.ai / ChatGPT), never an API key.
+            if job.kind == CLAUDE_CLI:
+                auth_ok, reason = job.call.check_subscription(job.claude)
+            else:
+                auth_ok, reason = job.call.check_login(job.codex)
             if job.call.cancelled:
                 return claude_client.ClaudeResult(False, error="cancelled", cancelled=True), None
             if reason == claude_client.LAUNCH_PENDING:
@@ -709,12 +777,15 @@ class PetController(QObject):
             window.title if window else "", window.process_name if window else "", time.strftime("%H:%M"),
             job.recent, job.user_message, has_image=snapshot.jpeg is not None, memory=job.memory_context,
         )
-        if job.backend == "api":
-            result = job.call.ask(job.model, persona.SYSTEM_PROMPT, text, snapshot.jpeg)
-        else:
+        if job.kind == CLAUDE_CLI:
             args = claude_client.build_args(job.claude, job.model, persona.SYSTEM_PROMPT)
             result = job.call.run(args, claude_client.build_message(text, snapshot.jpeg))
-        source = "api" if job.backend == "api" else "claude"
+        elif job.kind == CODEX_CLI:
+            result = job.call.ask(job.codex, job.model, persona.SYSTEM_PROMPT, text, snapshot.jpeg,
+                                  effort=codex_client.EFFORTS.get(job.tier, "low"))
+        else:
+            result = job.call.ask(job.model, persona.SYSTEM_PROMPT, text, snapshot.jpeg)
+        source = "claude" if job.kind == CLAUDE_CLI else job.backend
         log.info("%s call ok=%s in %.1fs", source, result.ok, time.monotonic() - started)
         if not result.ok:
             log.warning("%s error: %s", source, result.error[:300])
@@ -777,7 +848,7 @@ class PetController(QObject):
         elif result.bad_api_key:
             reply = persona.fallback("bad_api_key")
         elif result.not_subscription:
-            reply = persona.fallback("not_subscription")
+            reply = persona.fallback("not_chatgpt" if self._provider().kind == CODEX_CLI else "not_subscription")
         elif result.ok:
             parsed = persona.parse_reply(result.text)
             if parsed:
@@ -824,6 +895,7 @@ class PetController(QObject):
         menu = QMenu()
         menu.addAction("戳她一下（立即评论）", self.poke)
         menu.addAction("和她说话…", self.chat)
+        menu.addAction("设置…", self.open_settings)
         self.pause_action = QAction("暂停观察 (Ctrl+Alt+P)", menu, checkable=True, checked=self.config.paused)
         self.pause_action.triggered.connect(lambda _checked: self.toggle_pause())
         menu.addAction(self.pause_action)
@@ -866,7 +938,8 @@ class PetController(QObject):
         backend_menu = menu.addMenu("调用方式")
         backend_group = QActionGroup(backend_menu)
         self.backend_actions: dict[str, QAction] = {}
-        for backend, label in (("subscription", "Claude Code 订阅（默认）"), ("api", "Anthropic API Key（按量付费）")):
+        for backend, provider in PROVIDERS.items():
+            label = provider.label + ("（按量付费）" if provider.paid else "")
             action = QAction(label, backend_menu, checkable=True, checked=backend == self.config.backend)
             action.triggered.connect(partial(self.set_backend, backend))
             backend_group.addAction(action)
@@ -878,12 +951,14 @@ class PetController(QObject):
 
         model_menu = menu.addMenu("模型")
         model_group = QActionGroup(model_menu)
-        for model in MODEL_CHOICES:
-            label = {"haiku": "Haiku（快，省额度）", "sonnet": "Sonnet（更聪明，较慢）"}[model]
+        self.model_actions: dict[str, QAction] = {}
+        for model in MODEL_CHOICES:  # labelled with the current provider's models
+            label = providers.model_label(self._provider(), model)
             action = QAction(label, model_menu, checkable=True, checked=model == self.config.model)
             action.triggered.connect(partial(self.set_model, model))
             model_group.addAction(action)
             model_menu.addAction(action)
+            self.model_actions[model] = action
 
         self.autostart_action = QAction(AUTOSTART_LABEL, menu, checkable=True)
         self.autostart_action.setEnabled(False)  # until the first (background) state read finishes
@@ -931,6 +1006,7 @@ class PetController(QObject):
         self.autostart_action.setChecked(state == AUTOSTART_ON)
         self.autostart_action.setEnabled(not foreign)
         self.autostart_action.setText(AUTOSTART_LABEL + ("（同名快捷方式属于其他程序）" if foreign else ""))
+        self._sync_settings()  # last: the window copies checked, enabled and the text
 
     def set_autostart(self, enabled: bool) -> None:
         if self.autostart is None or self.autostart_busy:
@@ -959,6 +1035,7 @@ class PetController(QObject):
     def _on_autostart_done(self, ok: bool, message: str) -> None:
         self.autostart_busy = False
         self.autostart_action.setEnabled(True)
+        self._sync_settings()
         self.window.say("happy" if ok else "sad", message)
         if self.quit_pending:
             self._quit()
@@ -1126,47 +1203,98 @@ class PetController(QObject):
     def _ask_secret_dialog(title: str, label: str) -> tuple[str, bool]:
         return QInputDialog.getText(None, title, label, QLineEdit.EchoMode.Password)
 
+    def _provider(self, provider_id: str | None = None) -> providers.Provider:
+        return PROVIDERS.get(provider_id or self.config.backend, PROVIDERS["subscription"])
+
     def _sync_backend_actions(self) -> None:
         for backend, action in self.backend_actions.items():
             action.setChecked(backend == self.config.backend)
+        provider = self._provider()
+        for tier, action in self.model_actions.items():
+            action.setText(providers.model_label(provider, tier))
 
-    def _has_key(self) -> bool:
+    def _has_key(self, provider_id: str | None = None) -> bool:
+        provider = self._provider(provider_id)
+        if not provider.needs_key:
+            return False
         try:
-            return bool(self._load_key())
+            return bool(self._load_key(provider.vault_entry))
         except OSError:
             return False
 
     def set_backend(self, backend: str, _checked: bool = True) -> None:
-        if backend == self.config.backend:
+        if backend == self.config.backend or backend not in PROVIDERS:
             self._sync_backend_actions()
             return
-        if backend == "api":
-            text = ("要改用你自己的 Anthropic API Key 吗？\n\n"
-                    "API 按用量收费，费用记在这个 Key 所属的账户上（不是 Claude 订阅）。"
-                    "她每次看屏幕或回答都会调用一次 API；评论间隔越短、选 Sonnet，花费越多。\n\n"
+        provider = PROVIDERS[backend]
+        if provider.paid:
+            text = (f"要改用你自己的 {provider.company} API Key 吗？\n\n"
+                    f"API 按用量收费，费用记在这个 Key 所属的 {provider.company} 账户上。"
+                    "她每次看屏幕或回答都会调用一次 API，截图会发给这家公司；评论间隔越短、选「更聪明」的模型，花费越多。\n\n"
                     "Key 只保存在本机的 Windows 凭据管理器里，不会写进配置文件或日志。")
-            if not self._confirm("切换到 API Key 模式", text):
+            if not self._confirm(f"切换到 {provider.label}", text):
                 self._sync_backend_actions()
                 return
-            if not self._has_key() and not self.set_api_key():
+            if not self._has_key(backend) and not self.set_api_key(backend):
+                self._sync_backend_actions()
+                return
+        elif provider.kind == CODEX_CLI:
+            if not self.codex:
+                self._sync_backend_actions()
+                self._find_codex(("switch",))  # searched off the UI thread; asks again once found
+                return
+            text = ("要改用 Codex（你自己的 ChatGPT 订阅）吗？\n\n"
+                    "她会通过本机已登录的 Codex CLI 思考，只接受 ChatGPT 订阅登录，不会改用 API Key 计费。"
+                    "Codex 的命令、浏览器、电脑操作等工具都会被关闭。\n\n"
+                    "注意：Codex CLI 只能从文件读取图片，所以每次看屏幕时，截图会短暂写入你自己的临时文件夹，"
+                    "调用结束（包括失败或取消）后删除；若文件正被别的程序占用，会保留到能删时为止，桌宠每秒、退出和启动时都会重试。其他调用方式的截图只在内存里。\n\n"
+                    "用订阅额度运行第三方程序以 OpenAI 现行条款为准。")
+            if not self._confirm("切换到 Codex（ChatGPT 订阅）", text):
                 self._sync_backend_actions()
                 return
         self._cancel_inflight()  # a request of the old kind must not come back
         self.config.backend = backend
+        self.auth_ok_until = 0.0  # the next call checks the new login
         self.last_error = ""
         self.consecutive_failures = 0
         self.auto_paused_until = 0.0
         self._save()
         self._sync_backend_actions()
         self._refresh_status()
-        if backend == "api":
-            self.window.say("happy", "好的，之后我用主人的 API Key 来思考～（按量计费，记得留意用量哦）")
+        if provider.paid:
+            self.window.say("happy", f"好的，之后我用主人的 {provider.company} API Key 来思考～（按量计费，记得留意用量哦）")
+        elif provider.kind == CODEX_CLI:
+            self.window.say("happy", "好的，之后我借 Codex 的 ChatGPT 订阅来思考～")
         else:
             self.window.say("happy", "好的，之后我用 Claude Code 的订阅登录来思考～")
 
-    def set_api_key(self) -> bool:
+    def set_custom_model(self, provider_id: str, model_id: str) -> bool:
+        """A model ID that overrides the tier for one provider ("" goes back to the presets)."""
+        model_id = model_id.strip()
+        if provider_id not in PROVIDERS or (model_id and not providers.MODEL_ID.match(model_id)):
+            self.window.say("think", "这个模型名看起来不对呢……（只能有字母、数字和 . _ - : / @）我没有改。")
+            return False
+        models = dict(self.config.custom_models)
+        if model_id:
+            models[provider_id] = model_id
+        else:
+            models.pop(provider_id, None)
+        if models == self.config.custom_models:
+            return True
+        if provider_id == self.config.backend:
+            self._cancel_inflight()
+        self.config.custom_models = models
+        self._save()
+        return True
+
+    def set_api_key(self, provider_id: str | None = None) -> bool:
         """Ask for a key and keep it in Windows Credential Manager. True when one was saved."""
-        key, ok = self._ask_secret("设置 API Key", "粘贴你的 Anthropic API Key（只保存在本机 Windows 凭据管理器）：")
+        provider = self._provider(provider_id)
+        if not provider.needs_key:
+            self.window.say("think", "现在的调用方式用的是订阅登录，不需要 API Key 哦。")
+            return False
+        key, ok = self._ask_secret(f"设置 {provider.company} API Key",
+                                   f"粘贴你的 {provider.company} API Key（只保存在本机 Windows 凭据管理器）：")
         key = (key or "").strip()
         if not ok or not key:
             return False
@@ -1174,29 +1302,38 @@ class PetController(QObject):
             self.window.say("think", "这串看起来不像 API Key 呢……（不能有空格或中文）我没有保存。")
             return False
         try:
-            self._save_key(key)
+            self._save_key(key, provider.vault_entry)
         except OSError as exc:
             log.warning("could not save the API key: %s", exc)
             self.window.say("sad", f"没能保存 API Key：{exc}")
             return False
         self.last_error = ""
         self._refresh_status()
+        self._sync_settings()  # the key lives outside config.json, so no save announces it
         self.window.say("happy", "API Key 收好啦，锁在 Windows 凭据管理器里～")
         return True
 
-    def clear_api_key(self) -> None:
+    def clear_api_key(self, provider_id: str | None = None) -> None:
+        provider = self._provider(provider_id)
+        if not provider.needs_key:
+            self.window.say("think", "现在的调用方式用的是订阅登录，没有保存 API Key。")
+            return
         try:
-            removed = self._delete_key()
+            removed = self._delete_key(provider.vault_entry)
         except OSError as exc:
             self.window.say("sad", f"没能清除 API Key：{exc}")
             return
-        if self.config.backend == "api":
+        current = provider.id == self.config.backend
+        if current:
             self._cancel_inflight()
-        tail = "（现在是 API Key 模式，要再设置一个 Key 才能继续看屏幕）" if self.config.backend == "api" else ""
+        self._sync_settings()
+        tail = "（现在正用它，要再设置一个 Key 才能继续看屏幕）" if current else ""
         self.window.say("happy", ("已经清除保存的 API Key。" if removed else "本来就没有保存 API Key 哦。") + tail)
 
     def set_model(self, model: str, _checked: bool = True) -> None:
         self.config.model = model
+        if model in getattr(self, "model_actions", {}):
+            self.model_actions[model].setChecked(True)  # the menu follows a change from the settings window
         self._save()
 
     def _remember_position(self, x: int, y: int) -> None:
@@ -1238,6 +1375,63 @@ class PetController(QObject):
             save_config(self.config, self.config_file)
         except OSError:
             log.exception("could not save config")
+        self._sync_settings()
+
+    # ---- settings window ---------------------------------------------------
+    def open_settings(self) -> None:
+        if self.settings_window is None:
+            from .settings_window import SettingsWindow  # Qt widgets only when first needed
+
+            self.settings_window = SettingsWindow(self)
+        self.settings_window.refresh()
+        self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
+
+    def _sync_settings(self) -> None:
+        """A change from the menu (or anywhere) shows up in an open settings window too."""
+        if self.settings_window is not None and self.settings_window.isVisible():
+            self.settings_window.refresh()
+
+    def set_rules(self, kind: str, rules: list[str]) -> None:
+        """Replace the blocklist or allowlist (settings window). Empty and duplicate entries are dropped."""
+        if kind not in ("blocklist", "allowlist"):
+            raise ValueError(kind)
+        cleaned: list[str] = []
+        for rule in rules:
+            rule = rule.strip()
+            if rule and rule.casefold() not in {r.casefold() for r in cleaned}:
+                cleaned.append(rule)
+        if cleaned == getattr(self.config, kind):
+            return
+        self._cancel_inflight()  # a job started under the old rules must not upload anything
+        setattr(self.config, kind, cleaned)
+        self._save()
+
+    def set_quiet_fullscreen(self, enabled: bool) -> None:
+        self.config.quiet_fullscreen = bool(enabled)
+        self._update_quiet()
+        self._save()
+
+    def set_dwell(self, seconds: int) -> None:
+        self.config.dwell_sec = min(max(int(seconds), 0), 600)
+        self._save()
+
+    def set_self_talk_range(self, min_sec: int, max_sec: int) -> None:
+        low = min(max(int(min_sec), 30), 3600)
+        self.config.self_talk_min_sec = low
+        self.config.self_talk_max_sec = min(max(int(max_sec), low), 7200)
+        self._schedule_self_talk()
+        self._save()
+
+    def set_sleep_after(self, seconds: int) -> None:
+        self.config.sleep_after_sec = min(max(int(seconds), 60), 86400)
+        self._save()
+
+    def set_sprite_height(self, height: int) -> None:
+        self.config.sprite_height = min(max(int(height), 100), 600)
+        self.window.set_sprite_height(self.config.sprite_height)
+        self._remember_position(self.window.x(), self.window.y())  # saves too
 
     # ---- hotkey ------------------------------------------------------
     def _register_hotkey(self) -> None:

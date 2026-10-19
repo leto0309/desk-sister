@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from claude_pet import api_client, claude_client, persona  # noqa: E402
+from claude_pet import api_client, claude_client, codex_client, openai_client, persona, providers  # noqa: E402
 from claude_pet.config import app_data_dir, load_config  # noqa: E402
 
 
@@ -26,6 +26,11 @@ def self_test() -> int:
     # API Key mode: the SDK must be importable here too (in the exe this proves it was bundled).
     assert api_client.API_MODELS["haiku"] and api_client.build_content("hi", b"x")[0]["type"] == "image"
     assert api_client.anthropic.Anthropic is not None
+    # Other providers: the OpenAI SDK must be bundled as well; the Codex helpers must import.
+    messages = openai_client.build_messages("s", "hi", b"x")
+    assert messages[1]["content"][0]["type"] == "image_url" and openai_client.openai.OpenAI is not None
+    assert codex_client.parse_features("shell_tool  stable  true\n") == {"shell_tool"}
+    assert set(providers.BACKENDS) >= {"subscription", "api", "openai", "deepseek", "gemini", "codex"}
     # The embedded art must decode here too: in a one-file exe this proves Pillow's WebP support was bundled.
     from claude_pet import sprite_data
     from claude_pet.sprites import decode_embedded

@@ -15,6 +15,7 @@ from claude_pet import controller as controller_module  # noqa: E402
 from claude_pet.controller import Outcome, error_summary  # noqa: E402
 
 SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
+ANTHROPIC_ENTRY = "Desk Sister: Anthropic"
 FAKE_KEY = "sk-ant-api03-" + "x" * 40  # not a real key: shaped like one
 REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
 
@@ -199,9 +200,9 @@ def pet(app, tmp_path, monkeypatch):
     monkeypatch.setattr(controller_module, "save_config", lambda *_a, **_k: None)
     ctrl = controller_module.PetController(app, Config(dwell_sec=0), SPRITES, tmp_path / "config.json")
     vault = {}
-    ctrl._load_key = lambda: vault.get("key")
-    ctrl._save_key = lambda key: vault.__setitem__("key", key)
-    ctrl._delete_key = lambda: vault.pop("key", None) is not None
+    ctrl._load_key = lambda entry: vault.get(entry)
+    ctrl._save_key = lambda key, entry: vault.__setitem__(entry, key)
+    ctrl._delete_key = lambda entry: vault.pop(entry, None) is not None
     asked = []
     ctrl._confirm = lambda title, text: asked.append(text) or True
     ctrl._spawn = lambda fn: fn()
@@ -220,24 +221,24 @@ def test_switching_to_api_asks_first_and_wants_a_key(pet):
     assert ctrl.config.backend == "subscription" and not vault
     ctrl._ask_secret = lambda title, label: (f"  {FAKE_KEY}  ", True)
     ctrl.set_backend("api")
-    assert ctrl.config.backend == "api" and vault["key"] == FAKE_KEY and ctrl.backend_actions["api"].isChecked()
+    assert ctrl.config.backend == "api" and vault[ANTHROPIC_ENTRY] == FAKE_KEY and ctrl.backend_actions["api"].isChecked()
     ctrl.set_backend("subscription")
-    assert ctrl.config.backend == "subscription" and vault["key"] == FAKE_KEY  # the key stays saved
+    assert ctrl.config.backend == "subscription" and vault[ANTHROPIC_ENTRY] == FAKE_KEY  # the key stays saved
 
 
 def test_a_bad_key_is_never_saved_and_clearing_works(pet):
     ctrl, vault, _asked = pet
     ctrl._ask_secret = lambda title, label: ("not a key", True)
-    assert not ctrl.set_api_key() and not vault and "不像 API Key" in ctrl.window.full_text
+    assert not ctrl.set_api_key("api") and not vault and "不像 API Key" in ctrl.window.full_text
     ctrl._ask_secret = lambda title, label: (FAKE_KEY, True)
-    assert ctrl.set_api_key() and vault["key"] == FAKE_KEY
-    ctrl.clear_api_key()
+    assert ctrl.set_api_key("api") and vault[ANTHROPIC_ENTRY] == FAKE_KEY
+    ctrl.clear_api_key("api")
     assert not vault and "已经清除" in ctrl.window.full_text
 
 
 def test_api_mode_works_without_claude_code(pet, monkeypatch):
     ctrl, vault, _asked = pet
-    vault["key"] = FAKE_KEY
+    vault[ANTHROPIC_ENTRY] = FAKE_KEY
     ctrl.config.backend = "api"
     ctrl.config.paused = True  # no screenshot: answer the chat message only
     sent = []
@@ -250,7 +251,7 @@ def test_api_mode_works_without_claude_code(pet, monkeypatch):
     assert ctrl.claude is None
     ctrl.tick(force=True, user_message="你好")
     [(model, system, text, jpeg, key)] = sent
-    assert model == "haiku" and system == controller_module.persona.SYSTEM_PROMPT and "你好" in text and jpeg is None
+    assert model == "claude-haiku-5-5" and system == controller_module.persona.SYSTEM_PROMPT and "你好" in text and jpeg is None
     assert key == FAKE_KEY and "用 API 回答你" in ctrl.window.full_text
 
 

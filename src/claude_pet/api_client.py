@@ -39,7 +39,8 @@ def build_content(text: str, jpeg: bytes | None = None) -> list[dict]:
     return content
 
 
-_KEY_LIKE = re.compile(r"sk-ant-[A-Za-z0-9_-]+")
+# Anthropic / OpenAI / DeepSeek keys start with sk-, Google keys with AIza.
+_KEY_LIKE = re.compile(r"sk-[A-Za-z0-9_-]{8,}|AIza[A-Za-z0-9_-]{20,}")
 
 
 def _short(message: object, key: str = "", limit: int = 120) -> str:
@@ -106,7 +107,7 @@ class ApiCall:
 
     def _request(self, client: anthropic.Anthropic, key: str, model: str, system: str, text: str,
                  jpeg: bytes | None) -> ClaudeResult:
-        model_id = API_MODELS.get(model, API_MODELS["haiku"])
+        model_id = API_MODELS.get(model, model or API_MODELS["haiku"])  # a tier, or a full (custom) model ID
         params = {
             "model": model_id,
             "max_tokens": MAX_TOKENS,

@@ -11,6 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .claude_client import environ_snapshot
+
 SHORTCUT_NAME = "Desk Sister.lnk"
 LEGACY_NAMES = ("Claude 桌宠.lnk",)  # older versions; adopted when they point at this program
 _APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder"
@@ -63,7 +65,7 @@ def _powershell(script: str, env: dict[str, str], timeout: float = 30) -> subpro
     return subprocess.run(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
-        env={**os.environ, **env}, creationflags=_NO_WINDOW,
+        env={**environ_snapshot(), **env}, creationflags=_NO_WINDOW,
     )
 
 

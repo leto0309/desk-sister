@@ -18,8 +18,8 @@ from pathlib import Path
 
 # Anything that could route the CLI to a paid backend (API keys, Bedrock/Vertex/Foundry, custom endpoints)
 # is removed from the child environment; only the subscription login remains usable.
-_STRIP_PREFIXES = ("ANTHROPIC_", "CLAUDE_CODE_USE_", "CLAUDE_CODE_SKIP_")
-_STRIP_NAMES = ("AWS_BEARER_TOKEN_BEDROCK",)
+_STRIP_PREFIXES = ("ANTHROPIC_", "CLAUDE_CODE_USE_", "CLAUDE_CODE_SKIP_", "OPENAI_", "AZURE_OPENAI_")
+_STRIP_NAMES = ("AWS_BEARER_TOKEN_BEDROCK", "CODEX_API_KEY")  # the Codex CLI must use the ChatGPT login too
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
@@ -114,9 +114,17 @@ def parse_stream(stdout: str) -> ClaudeResult:
     return ClaudeResult(False, error="no result in CLI output")
 
 
+ENV_LOCK = threading.Lock()  # held by anything that changes os.environ for a moment or copies it
+
+
+def environ_snapshot() -> dict[str, str]:
+    with ENV_LOCK:  # never a half-changed environment (an API client may hide OPENAI_* meanwhile)
+        return dict(os.environ)
+
+
 def child_env() -> dict[str, str]:
     env = {
-        k: v for k, v in os.environ.items()
+        k: v for k, v in environ_snapshot().items()
         if not k.upper().startswith(_STRIP_PREFIXES) and k.upper() not in _STRIP_NAMES
     }
     env["DISABLE_AUTOUPDATER"] = "1"

@@ -6,9 +6,10 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
+from .providers import BACKENDS, clean_custom_models  # every way she can think
+
 INTERVAL_CHOICES = (30, 60, 90, 120, 300, 600)
-MODEL_CHOICES = ("haiku", "sonnet")
-BACKENDS = ("subscription", "api")  # the user's Claude Code login, or their own Anthropic API key
+MODEL_CHOICES = ("haiku", "sonnet")  # tiers: fast and cheap / smarter (each provider maps them to its models)
 WATCH_MODES = ("blocklist", "allowlist")
 
 # Matched case-insensitively against the foreground window title and process name.
@@ -36,6 +37,7 @@ class Config:
     interval_sec: int = 90
     model: str = "haiku"
     backend: str = "subscription"
+    custom_models: dict[str, str] = field(default_factory=dict)  # provider -> model ID overriding the tier
     paused: bool = False
     claude_path: str = ""
     blocklist: list[str] = field(default_factory=lambda: list(DEFAULT_BLOCKLIST))
@@ -65,6 +67,7 @@ class Config:
             self.model = MODEL_CHOICES[0]
         if self.backend not in BACKENDS:
             self.backend = BACKENDS[0]
+        self.custom_models = clean_custom_models(self.custom_models)
         self.paused = bool(self.paused)
         self.claude_path = str(self.claude_path or "")
         # A wrong type must never silently become an empty blocklist: fall back to the defaults instead.

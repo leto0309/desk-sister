@@ -49,7 +49,10 @@ FALLBACK = {
     "not_allowed": ("happy", "这个窗口不在白名单里，我先不看啦～（右键可以把它加进来）"),
     "not_subscription": ("sad", "主人，我只用 Claude 订阅登录来工作……现在好像不是订阅登录，我先不看了，以免花掉 API 额度。"
                                 "（想用自己的 API Key 的话，右键「调用方式」可以切换）"),
-    "no_api_key": ("think", "主人，API Key 模式还没有 Key 呢……右键「调用方式 → 设置 API Key…」告诉我吧～"),
+    "not_chatgpt": ("sad", "主人，Codex 现在不是用 ChatGPT 订阅登录的……我先不看了，以免花掉 API 额度。"
+                            "（在终端运行 codex login 用 ChatGPT 账号登录就好）"),
+    "no_codex": ("sad", "主人…我找不到 codex 命令了。装好 Codex CLI 并登录后再叫我吧～"),
+    "no_api_key": ("think", "主人，这个调用方式还没有 API Key 呢……右键「设置…」的「调用方式」页里填一个吧～"),
     "bad_api_key": ("sad", "这个 API Key 被拒绝了……主人检查一下 Key 对不对、有没有余额吧？"),
 }
 

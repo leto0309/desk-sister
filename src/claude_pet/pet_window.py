@@ -113,6 +113,7 @@ class PetWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setWindowTitle("Desk Sister")
+        self.sprite_folder = sprite_folder
         self.sprite_height = sprite_height
         self.sprites = load_sprites(sprite_folder, sprite_height)
         self.mood = "idle"
@@ -126,6 +127,7 @@ class PetWindow(QWidget):
         self._press_pos: QPoint | None = None
         self._dragging = False
         self._phase = 0.0
+        self._feet: tuple[float, QPoint] | None = None  # exact centre x after the last resize, and where it put us
         sprite_width = max(p.width() for p in self.sprites.values())
         self.bubble_area = 150
         self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + sprite_height + 8)
@@ -134,6 +136,23 @@ class PetWindow(QWidget):
         self._hide_bubble = QTimer(self, singleShot=True, timeout=self.clear_bubble)
         self._bob = QTimer(self, interval=60, timeout=self._animate)
         self._bob.start()
+
+    def set_sprite_height(self, height: int) -> None:
+        """Resize her live; her feet stay where they were (bottom centre of the window)."""
+        if height == self.sprite_height:
+            return
+        old = self.geometry()
+        # The centre is kept as a float between resizes, so back-and-forth resizing never drifts;
+        # once she has been moved, her new place is the reference.
+        centre = self._feet[0] if self._feet and self._feet[1] == old.topLeft() else old.x() + old.width() / 2
+        self.sprite_height = height
+        self.sprites = load_sprites(self.sprite_folder, height)
+        sprite_width = max(p.width() for p in self.sprites.values())
+        self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + height + 8)
+        place = QPoint(round(centre - self.width() / 2), old.y() + old.height() - self.height())
+        self.move(place)
+        self._feet = (centre, place)
+        self.update()
 
     # ---- state -------------------------------------------------------
     def set_mood(self, mood: str) -> None:
