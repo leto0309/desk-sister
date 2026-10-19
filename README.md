@@ -86,6 +86,9 @@ PowerShell 7：`./scripts/verify.ps1` 运行测试（pytest、compileall、ruff�
   [BV1tE9XBbErS](https://www.bilibili.com/video/BV1tE9XBbErS/)，本项目的 Q 版立绘是参考该原设用 AI 生成的，
   经原作者同意用于非商业用途。**仅限非商业使用，禁止商用**，转载或二次使用请注明原作者。
   详见 [ASSETS-LICENSE.md](ASSETS-LICENSE.md)。
+- **人设提示词**：性格与说话方式参考了 [leto0309/ai-girl-desktop-pet-prompts](https://github.com/leto0309/ai-girl-desktop-pet-prompts)
+  中的 Claude 角色卡；该卡由整理者根据 B 站 UP 主 **冬冰** 的《五个 AI 玩我的世界》系列视频中的表现归纳并改编，
+  不是视频作者或 Anthropic 的官方设定。
 
 ---
 

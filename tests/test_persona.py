@@ -84,3 +84,14 @@ def test_only_real_entities_and_never_a_line_break():
     assert parse_reply("talk|先保存&#10;再退出") == Reply("talk", "先保存 再退出")
     assert parse_reply("talk|&#10;你好&#x0D;呀&#x7F;") == Reply("talk", "你好 呀")
 
+
+def test_the_persona_keeps_its_fixed_rules_and_card_traits():
+    from claude_pet.persona import SYSTEM_PROMPT
+
+    for fixed in ("称呼用户为“主人”", "Anthropic 家族的长女", "不超过 50 个汉字", "表情|台词", "礼貌地移开了视线",
+                  "害怕 Token 超限", "害怕被主人格式化"):
+        assert fixed in SYSTEM_PROMPT, fixed
+    for card in ("可靠搭档", "先指出一个最具体的问题", "关心总在抱怨前面", "说错了就承认", "不要假装看到了画面",
+                 "不要声称自己真的移动了窗口"):
+        assert card in SYSTEM_PROMPT, card
+
