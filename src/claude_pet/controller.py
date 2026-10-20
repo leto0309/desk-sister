@@ -17,7 +17,7 @@ from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import agent_link, api_client, capture, claude_client, codex_client, credstore, openai_client, persona, providers
+from . import agent_link, api_client, bedtime, capture, claude_client, codex_client, credstore, openai_client, persona, providers
 from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
@@ -25,6 +25,7 @@ from .autostart import Autostart, AutostartError
 from .memory import CompanionMemory, classify_activity
 from .config import INTERVAL_CHOICES, MODEL_CHOICES, Config, app_data_dir, save_config
 from .pet_window import PetWindow
+from .walker import Walker
 
 log = logging.getLogger("claude_pet")
 
@@ -73,6 +74,7 @@ class Job:
     kind: str = CLAUDE_CLI  # how that provider is called; decides which call object `call` is
     codex: str = ""  # the Codex CLI, for CODEX_CLI
     tier: str = "haiku"  # fast / smarter; Codex turns it into a reasoning effort
+    bedtime: str = ""  # at night: "ok" (may remind 主人 to rest) or "no"; "" during the day
 
 
 @dataclass
@@ -220,6 +222,7 @@ class PetController(QObject):
         # Local self-talk: no Claude call, so no quota and no screenshot.
         self._rng = random.Random()
         self._hour = lambda: time.localtime().tm_hour
+        self._now = time.time  # wall clock, for the bedtime reminder that survives restarts
         self.self_talk_recent: deque[str] = deque(maxlen=8)
         self.self_talk_timer = QTimer(self, singleShot=True, timeout=self._self_talk_tick)
         # Companion memory: in-memory only unless the app hands in a file-backed one.
@@ -272,7 +275,8 @@ class PetController(QObject):
         self.autostart_state.connect(self._on_autostart_state)
         self.window.poked.connect(self.poke)
         self.window.context_menu_requested.connect(self._show_menu)
-        self.window.moved.connect(self._remember_position)
+        self.window.moved.connect(self._on_dropped)
+        self.walker = Walker(self.window, self._can_walk, self._remember_position, self._rng)
         self.window.hotkey_pressed.connect(self.toggle_pause)
 
         self.timer = QTimer(self, timeout=self.tick)
@@ -287,11 +291,14 @@ class PetController(QObject):
     def start(self) -> None:
         self._place_window()
         self.window.show()
+        if self.config.walking and self.walker.snap_to_floor():  # started close to the bottom: stand on it
+            self._remember_position(self.window.x(), self.window.y())
         self.tray.show()
         self._register_hotkey()
         self.timer.start(self.config.interval_sec * 1000)
         self.focus_tracker.start()
         self._schedule_self_talk()
+        self.walker.set_enabled(self.config.walking)
         self._refresh_status()
         if self.config.backend == "subscription" and not self.claude:
             self.window.say(*self._reply_tuple(persona.fallback("no_claude")))
@@ -306,6 +313,7 @@ class PetController(QObject):
 
     def shutdown(self) -> None:
         self._cancel_inflight()
+        self.walker.set_enabled(False)
         if codex_client.has_pending():
             codex_client.schedule_cleanup()
         codex_client.wait_cleanup(1.0)  # quitting never hangs; leftovers are swept at the next start
@@ -373,7 +381,7 @@ class PetController(QObject):
         else:
             call = claude_client.ClaudeCall(self.config.timeout_sec, cwd=str(cwd))
         job = Job(
-            generation=self.generation, force=force, user_message=user_message,
+            bedtime=self._bedtime(), generation=self.generation, force=force, user_message=user_message,
             may_capture=not self.config.paused, hwnd=self.last_external_hwnd,
             blocklist=list(self.config.blocklist), last_fingerprint=self.last_fingerprint,
             need_auth=time.monotonic() >= self.auth_ok_until, claude=self.claude,
@@ -685,6 +693,7 @@ class PetController(QObject):
         if self.config.paused or self.quit_pending:
             return
         self.window.say(*self._reply_tuple(reply))
+        self._note_bedtime(reply.text)  # only what she really said counts
 
     def _update_sleep(self) -> None:
         try:
@@ -776,6 +785,7 @@ class PetController(QObject):
         text = persona.build_user_text(
             window.title if window else "", window.process_name if window else "", time.strftime("%H:%M"),
             job.recent, job.user_message, has_image=snapshot.jpeg is not None, memory=job.memory_context,
+            bedtime=job.bedtime,
         )
         if job.kind == CLAUDE_CLI:
             args = claude_client.build_args(job.claude, job.model, persona.SYSTEM_PROMPT)
@@ -871,6 +881,7 @@ class PetController(QObject):
             return
         self._refresh_status()
         self.window.say(*self._reply_tuple(reply))
+        self._note_bedtime(reply.text)  # only what she really said counts
 
     def _count_result(self, ok: bool) -> None:
         """Failure breaker: after N failures in a row, automatic looks pause; pokes still work."""
@@ -926,6 +937,9 @@ class PetController(QObject):
         self.self_talk_action = QAction("自言自语", menu, checkable=True, checked=self.config.self_talk)
         self.self_talk_action.triggered.connect(self.set_self_talk)
         menu.addAction(self.self_talk_action)
+        self.walking_action = QAction("沿屏幕底部溜达", menu, checkable=True, checked=self.config.walking)
+        self.walking_action.triggered.connect(self.set_walking)
+        menu.addAction(self.walking_action)
 
         interval_menu = menu.addMenu("评论间隔")
         group = QActionGroup(interval_menu)
@@ -1153,6 +1167,49 @@ class PetController(QObject):
         self._save()
         self._refresh_allowlist_action()
 
+    def set_walking(self, enabled: bool) -> None:
+        self.config.walking = bool(enabled)
+        self.walking_action.setChecked(self.config.walking)
+        self.walker.set_enabled(self.config.walking)
+        self._save()
+        if self.config.walking and not self.walker.on_floor():
+            self.window.say("happy", "把我拖到屏幕最下面，我就能在那儿走来走去啦～")
+
+    def _can_walk(self) -> bool:
+        """She sets off (and keeps walking) only when nothing else is going on with her."""
+        return (self.config.walking and not self.config.paused and not self.quiet and not self.asleep
+                and not self.quit_pending and not self.window.full_text and self.window.mood != "sleep"
+                and not self.window.grabbed)
+
+    def _on_dropped(self, x: int, y: int) -> None:
+        if self.config.walking:
+            self.walker.snap_to_floor()  # dropped near the bottom: she lands on it
+        self._remember_position(self.window.x(), self.window.y())
+
+    # ---- bedtime reminders ------------------------------------------------
+    def _bedtime(self) -> str:
+        """"" during the day; at night "ok" when one more reminder to rest is due, else "no"."""
+        if not bedtime.is_night(self._hour(), self.config.night_start_hour):
+            return ""
+        due = bedtime.may_remind(self.config.bedtime_reminder, self._now(), self.config.bedtime_reminded_at)
+        return "ok" if due else "no"
+
+    def _note_bedtime(self, text: str) -> None:
+        """Whatever she said at night about sleep or rest was the reminder: the next one waits."""
+        if self._bedtime() and bedtime.mentions(text):
+            self.config.bedtime_reminded_at = self._now()
+            self._save()
+
+    def set_bedtime_reminder(self, mode: str) -> None:
+        if mode in bedtime.MODES:
+            self.config.bedtime_reminder = mode
+            self._save()
+
+    def set_night_start(self, hour: int) -> None:
+        if hour in bedtime.NIGHT_STARTS:
+            self.config.night_start_hour = hour
+            self._save()
+
     def set_self_talk(self, enabled: bool) -> None:
         self.config.self_talk = bool(enabled)
         self.self_talk_action.setChecked(self.config.self_talk)
@@ -1193,8 +1250,10 @@ class PetController(QObject):
                 if line.text in self.self_talk_recent:
                     line = None  # same figure as a recent line: say something else
         if line is None:
-            line = persona.self_talk_line(self._hour(), self.asleep, list(self.self_talk_recent), self._rng)
+            line = persona.self_talk_line(self._hour(), self.asleep, list(self.self_talk_recent), self._rng,
+                                          bedtime=self._bedtime())
         self.self_talk_recent.append(line.text)
+        self._note_bedtime(line.text)
         self.window.say(line.mood, line.text)
         return True
 
@@ -1429,6 +1488,7 @@ class PetController(QObject):
         self._save()
 
     def set_sprite_height(self, height: int) -> None:
+        self.walker.stop()  # a new size changes the window's width: she stands still for it
         self.config.sprite_height = min(max(int(height), 100), 600)
         self.window.set_sprite_height(self.config.sprite_height)
         self._remember_position(self.window.x(), self.window.y())  # saves too

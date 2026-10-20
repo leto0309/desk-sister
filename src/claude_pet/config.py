@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
+from .bedtime import MODES as BEDTIME_MODES
+from .bedtime import NIGHT_STARTS
 from .providers import BACKENDS, clean_custom_models  # every way she can think
 
 INTERVAL_CHOICES = (30, 60, 90, 120, 300, 600)
@@ -57,6 +60,10 @@ class Config:
     self_talk_max_sec: int = 600
     timeout_sec: int = 120
     sprite_height: int = 220
+    walking: bool = True  # strolls along the bottom of the screen now and then
+    bedtime_reminder: str = "nightly"  # off | nightly | every_2h (see bedtime.py)
+    night_start_hour: int = 23
+    bedtime_reminded_at: float = 0.0  # wall-clock time of the last reminder, shared by comments and self-talk
     x: int | None = None
     y: int | None = None
 
@@ -93,6 +100,17 @@ class Config:
         self.self_talk_max_sec = min(max(int(self.self_talk_max_sec), self.self_talk_min_sec), 7200)
         self.timeout_sec = min(max(int(self.timeout_sec), 20), 600)
         self.sprite_height = min(max(int(self.sprite_height), 100), 600)
+        self.walking = bool(self.walking)
+        if self.bedtime_reminder not in BEDTIME_MODES:
+            self.bedtime_reminder = "nightly"
+        if self.night_start_hour not in NIGHT_STARTS:
+            self.night_start_hour = 23
+        try:
+            reminded = float(self.bedtime_reminded_at)
+        except (TypeError, ValueError):  # a broken value only forgets the last reminder
+            reminded = 0.0
+        # A real reminder time lies between 2001 and 2286; anything else (1, true, 1e12) means none.
+        self.bedtime_reminded_at = reminded if math.isfinite(reminded) and 1e9 <= reminded <= 1e10 else 0.0
         for name in ("x", "y"):
             value = getattr(self, name)
             setattr(self, name, None if value is None else int(value))

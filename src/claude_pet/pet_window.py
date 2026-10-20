@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import QWidget
 
 from .persona import MOODS
@@ -128,6 +128,8 @@ class PetWindow(QWidget):
         self._dragging = False
         self._phase = 0.0
         self._feet: tuple[float, QPoint] | None = None  # exact centre x after the last resize, and where it put us
+        self.walking = 0  # -1 walking left, 1 walking right, 0 standing
+        self._mirrored: dict[str, QPixmap] = {}
         sprite_width = max(p.width() for p in self.sprites.values())
         self.bubble_area = 150
         self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + sprite_height + 8)
@@ -147,6 +149,7 @@ class PetWindow(QWidget):
         centre = self._feet[0] if self._feet and self._feet[1] == old.topLeft() else old.x() + old.width() / 2
         self.sprite_height = height
         self.sprites = load_sprites(self.sprite_folder, height)
+        self._mirrored = {}
         sprite_width = max(p.width() for p in self.sprites.values())
         self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + height + 8)
         place = QPoint(round(centre - self.width() / 2), old.y() + old.height() - self.height())
@@ -155,6 +158,22 @@ class PetWindow(QWidget):
         self.update()
 
     # ---- state -------------------------------------------------------
+    def set_walking(self, direction: int) -> None:
+        self.walking = direction
+        self.update()
+
+    @property
+    def grabbed(self) -> bool:
+        return self._press_pos is not None
+
+    def _sprite(self) -> QPixmap:
+        sprite = self.sprites[self.mood]
+        if self.walking <= 0:
+            return sprite
+        if self.mood not in self._mirrored:  # walking right: she turns that way
+            self._mirrored[self.mood] = sprite.transformed(QTransform().scale(-1, 1))
+        return self._mirrored[self.mood]
+
     def set_mood(self, mood: str) -> None:
         self.mood = mood if mood in self.sprites else "talk"
         self.update()
@@ -207,11 +226,23 @@ class PetWindow(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        sprite = self.sprites[self.mood]
-        bob = 0 if self.mood == "sleep" else round(2 * math.sin(self._phase))
+        sprite = self._sprite()
         x = (self.width() - sprite.width()) // 2
-        y = self.height() - sprite.height() - 4 + bob
-        p.drawPixmap(x, y, sprite)
+        if self.walking:
+            # A little hop per step, leaning into each one: two steps a second.
+            beat = self.clock() * 2 * math.pi * 2
+            hop = round(5 * abs(math.sin(beat)))
+            y = self.height() - sprite.height() - 4 - hop
+            p.save()
+            p.translate(self.width() / 2, self.height() - 4)
+            p.rotate(3 * math.sin(beat / 2))
+            p.translate(-self.width() / 2, -(self.height() - 4))
+            p.drawPixmap(x, y, sprite)
+            p.restore()
+        else:
+            bob = 0 if self.mood == "sleep" else round(2 * math.sin(self._phase))
+            y = self.height() - sprite.height() - 4 + bob
+            p.drawPixmap(x, y, sprite)
         if self.full_text:
             self._paint_bubble(p, self.full_text, self.visible_text)
         if self.status:

@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from claude_pet import claude_client, persona
+from claude_pet import bedtime, claude_client, persona
 from claude_pet.config import Config, load_config
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
 from claude_pet import controller as controller_module  # noqa: E402
 
 SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
-LATE_NIGHT = {text for first, last, lines in persona.TIME_TALK if first == 23 for _mood, text in lines}
+LATE_NIGHT = {text for _mood, text in persona.NIGHT_TALK}
 LUNCH = {text for first, last, lines in persona.TIME_TALK if first == 11 for _mood, text in lines}
 
 
@@ -38,10 +38,12 @@ def ctrl(app, tmp_path, monkeypatch):
 
 def test_lines_follow_the_hour_and_sleep():
     rng = random.Random(1)
-    night = {persona.self_talk_line(1, False, [], rng).text for _ in range(300)}
+    night = {persona.self_talk_line(1, False, [], rng, bedtime="ok").text for _ in range(300)}
+    quiet_night = {persona.self_talk_line(1, False, [], rng, bedtime="no").text for _ in range(300)}
     afternoon = {persona.self_talk_line(15, False, [], rng).text for _ in range(300)}
     noon = {persona.self_talk_line(12, False, [], rng).text for _ in range(300)}
-    assert night & LATE_NIGHT and not afternoon & LATE_NIGHT  # late-night lines wrap past midnight
+    assert night & LATE_NIGHT and not afternoon & LATE_NIGHT  # go-to-bed lines only when a reminder is due
+    assert not quiet_night & LATE_NIGHT and not any(bedtime.mentions(text) for text in quiet_night)
     assert noon & LUNCH and not afternoon & LUNCH
     dreams = {persona.self_talk_line(15, True, [], rng) for _ in range(50)}
     assert {r.text for r in dreams} <= {text for _m, text in persona.SLEEP_TALK}

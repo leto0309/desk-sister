@@ -17,6 +17,9 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .bedtime import MODE_LABELS as BEDTIME_LABELS
+from .bedtime import MODES as BEDTIME_MODES
+from .bedtime import NIGHT_STARTS
 from .config import INTERVAL_CHOICES, MODEL_CHOICES
 from .providers import CLAUDE_CLI, CODEX_CLI, PROVIDERS, model_label
 
@@ -465,6 +468,22 @@ class SettingsWindow(QDialog):
         sleep.addWidget(QLabel("主人离开键盘鼠标多久后她会睡着"))
         sleep.addWidget(self.sleep_spin)
         sleep.addStretch(1)
+        night = QHBoxLayout()
+        self.bedtime_combo = QComboBox()
+        for mode in BEDTIME_MODES:
+            self.bedtime_combo.addItem(BEDTIME_LABELS[mode], mode)
+        self.bedtime_combo.currentIndexChanged.connect(
+            lambda _i: self._apply(lambda: self.ctrl.set_bedtime_reminder(self.bedtime_combo.currentData())))
+        self.night_combo = QComboBox()
+        for hour in NIGHT_STARTS:
+            self.night_combo.addItem(f"{hour}:00", hour)
+        self.night_combo.currentIndexChanged.connect(
+            lambda _i: self._apply(lambda: self.ctrl.set_night_start(self.night_combo.currentData())))
+        night.addWidget(QLabel("深夜提醒休息"))
+        night.addWidget(self.bedtime_combo)
+        night.addWidget(QLabel("几点算深夜"))
+        night.addWidget(self.night_combo)
+        night.addStretch(1)
         memory_row = QHBoxLayout()
         memory_row.addWidget(self.memory_box, 1)
         memory_row.addWidget(forget)
@@ -473,6 +492,8 @@ class SettingsWindow(QDialog):
         layout.addLayout(memory_row)
         layout.addWidget(self.link_box)
         layout.addLayout(sleep)
+        layout.addLayout(night)
+        layout.addWidget(_hint("深夜指从这个时间到早上 5 点。看屏幕的评论和自言自语共用这个次数，提过一次就等下一晚（或 2 小时后）。"))
         layout.addStretch(1)
         return page
 
@@ -492,7 +513,12 @@ class SettingsWindow(QDialog):
         size.addWidget(self.size_slider, 1)
         size.addWidget(self.size_value)
         layout.addLayout(size)
-        layout.addWidget(_hint("调整后立即生效，她的脚站在原来的位置。溜达和动画会在之后的版本加入这里。"))
+        layout.addWidget(_hint("调整后立即生效，她的脚站在原来的位置。"))
+        self.walking_box = QCheckBox("沿屏幕底部溜达")
+        self.walking_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_walking(on)))
+        layout.addWidget(self.walking_box)
+        layout.addWidget(_hint("站在屏幕最下面（任务栏上方）时，她隔一会儿会左右走几步。说话、睡觉、全屏免打扰或暂停时不走；"
+                               "把她拖到离底部不远处松手，她会落到底部；拖到别处就留在原地。"))
         layout.addStretch(1)
         return page
 
@@ -604,7 +630,10 @@ class SettingsWindow(QDialog):
                 spin.setEnabled(cfg.self_talk)
             self.memory_box.setChecked(cfg.companion_memory)
             self.link_box.setChecked(cfg.claude_link)
+            self.bedtime_combo.setCurrentIndex(max(0, self.bedtime_combo.findData(cfg.bedtime_reminder)))
+            self.night_combo.setCurrentIndex(max(0, self.night_combo.findData(cfg.night_start_hour)))
             self._show_value(self.sleep_spin, max(1, round(cfg.sleep_after_sec / 60)))
+            self.walking_box.setChecked(cfg.walking)
             if not self.size_slider.isSliderDown():  # a drag in progress is the user's, not the config's
                 self.size_slider.setValue(cfg.sprite_height)
                 self.size_value.setText(f"{cfg.sprite_height} 像素")

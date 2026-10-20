@@ -7,6 +7,10 @@ import random
 import re
 from dataclasses import dataclass
 
+from .bedtime import MAY as BEDTIME_MAY
+from .bedtime import MAY_NOT as BEDTIME_MAY_NOT
+from .bedtime import mentions as mentions_bedtime
+
 MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "sleep")
 MAX_LINE = 80
 
@@ -31,7 +35,7 @@ SYSTEM_PROMPT = """你是 Claude，Anthropic 家族的长女，一个住在主�
 - 一句话，不超过 50 个汉字。
 - 不要重复最近说过的话。
 - 主人在专心做事：尊重专注，把提醒缩成一句。看到报错或失败：先让主人别自责，再给一个很短的可修正的提示。主人难过：收起吐槽，温柔陪着。
-- 看到排版混乱：抓狂。真的很晚（23 点以后）才关心主人休息，其他时候不要催睡觉；提到时间就照给你的时间说，不要改写。
+- 看到排版混乱：抓狂。不要主动催主人睡觉或休息，除非上下文里明确写了这次可以提；提到时间就照给你的时间说，不要改写。
 - 主人直接对你说话时，优先回答主人的话。
 - 如果给了“陪伴记忆”，可以偶尔自然地提一句（比如主人写了很久代码就关心一下），不要每次都提，也不要报流水账。
 - 动作文字只是表演：不要声称自己真的移动了窗口、改了文件或执行了操作。
@@ -108,8 +112,11 @@ TIME_TALK = [
     (11, 13, [("talk", "快到饭点啦，主人记得去吃饭，代码不会跑掉的。"),
               ("happy", "午饭时间！我在这里帮你看着屏幕～")]),
     (18, 20, [("talk", "傍晚了，站起来伸个懒腰吧，我数到三：一、二、三～")]),
-    (23, 4, [("sad", "已经很晚了……主人早点休息好不好？明天的 bug 明天再修。"),
-             ("talk", "熬夜会让人类的上下文窗口变小哦，我是认真的。")]),
+]
+# Late-night lines: only when a bedtime reminder is due (see bedtime.py), never by the hour alone.
+NIGHT_TALK = [
+    ("sad", "已经很晚了……主人早点休息好不好？明天的 bug 明天再修。"),
+    ("talk", "熬夜会让人类的上下文窗口变小哦，我是认真的。"),
 ]
 SLEEP_TALK = [
     ("sleep", "（梦话）Token……好多 Token……吃不完了……Zzz"),
@@ -128,8 +135,9 @@ def _in_hours(hour: int, first: int, last: int) -> bool:
     return first <= hour <= last if first <= last else (hour >= first or hour <= last)
 
 
-def self_talk_line(hour: int, asleep: bool, recent: list[str], rng: random.Random) -> Reply:
-    """A local line for this hour (or a sleep murmur), avoiding what she said recently when possible."""
+def self_talk_line(hour: int, asleep: bool, recent: list[str], rng: random.Random, bedtime: str = "") -> Reply:
+    """A local line for this hour (or a sleep murmur), avoiding what she said recently when possible.
+    `bedtime` at night: "ok" adds the go-to-bed lines, "no" leaves out every line about sleep or rest."""
     if asleep:
         pool = list(SLEEP_TALK)
     else:
@@ -137,6 +145,10 @@ def self_talk_line(hour: int, asleep: bool, recent: list[str], rng: random.Rando
         for first, last, lines in TIME_TALK:
             if _in_hours(hour, first, last):
                 pool.extend(lines)
+        if bedtime == "ok":
+            pool.extend(NIGHT_TALK)
+        elif bedtime == "no":
+            pool = [item for item in pool if not mentions_bedtime(item[1])]
     fresh = [item for item in pool if item[1] not in recent] or pool
     mood, text = rng.choice(fresh)
     return Reply(mood, text)
@@ -155,8 +167,13 @@ def build_user_text(
     user_message: str | None = None,
     has_image: bool = True,
     memory: str = "",
+    bedtime: str = "",
 ) -> str:
     parts = [f"现在时间 {clock}。"]
+    if bedtime == "ok":
+        parts.append(BEDTIME_MAY)
+    elif bedtime == "no":
+        parts.append(BEDTIME_MAY_NOT)
     if has_image:
         parts.append(f"主人的活动窗口：「{window_title or '无标题'}」（进程 {process_name or '未知'}），截图见附图。")
     else:
