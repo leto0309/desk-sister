@@ -513,12 +513,12 @@ class SettingsWindow(QDialog):
         size.addWidget(self.size_slider, 1)
         size.addWidget(self.size_value)
         layout.addLayout(size)
-        layout.addWidget(_hint("调整后立即生效，她的脚站在原来的位置。"))
+        layout.addWidget(_hint("调整后立即生效，她的脚站在原来的位置。也可以把鼠标放在她身上，按住 Ctrl 滚动滚轮来调。"))
         self.walking_box = QCheckBox("沿屏幕底部溜达")
         self.walking_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_walking(on)))
         layout.addWidget(self.walking_box)
         layout.addWidget(_hint("站在屏幕最下面（任务栏上方）时，她隔一会儿会左右走几步。说话、睡觉、全屏免打扰或暂停时不走；"
-                               "把她拖到离底部不远处松手，她会落到底部；拖到别处就留在原地。"))
+                               "开着时从任何高度松手她都会掉到底部；想把她放在屏幕别处，先关掉溜达。"))
         layout.addStretch(1)
         return page
 

@@ -99,11 +99,19 @@ def load_sprites(folder: Path, height: int) -> dict[str, QPixmap]:
     return sprites
 
 
+HEAD_SHARE = 0.35  # the top part of the sprite that counts as her head
+PAT_TURNS = 4  # direction changes ...
+PAT_WINDOW = 1.5  # ... within this many seconds ...
+PAT_STROKE = 12  # ... each after a stroke of at least this many pixels
+
+
 class PetWindow(QWidget):
     poked = Signal()
     context_menu_requested = Signal(QPoint)
     moved = Signal(int, int)
     hotkey_pressed = Signal()
+    resize_wheel = Signal(int)  # Ctrl + wheel over her: whole notches, + is bigger
+    patted = Signal()  # the mouse rubbed back and forth over her head (no button held)
 
     def __init__(self, sprite_folder: Path, sprite_height: int = 220) -> None:
         # DoesNotAcceptFocus: clicking the pet must not steal the foreground from the window it comments on.
@@ -129,6 +137,11 @@ class PetWindow(QWidget):
         self._phase = 0.0
         self._feet: tuple[float, QPoint] | None = None  # exact centre x after the last resize, and where it put us
         self.walking = 0  # -1 walking left, 1 walking right, 0 standing
+        self._wheel = 0  # Ctrl + wheel: what a touchpad scrolled short of a whole notch
+        self._lift_mood: str | None = None  # her mood before she was picked up
+        self._rub: tuple[int, int, int] | None = None  # head pat: last x, direction, x where it last turned
+        self._turns: list[float] = []  # when the rubbing changed direction
+        self.setMouseTracking(True)  # hover moves too, for the head pat
         self._mirrored: dict[str, QPixmap] = {}
         sprite_width = max(p.width() for p in self.sprites.values())
         self.bubble_area = 150
@@ -300,23 +313,73 @@ class PetWindow(QWidget):
         elif event.button() == Qt.MouseButton.RightButton:
             self.context_menu_requested.emit(event.globalPosition().toPoint())
 
+    def head_rect(self) -> QRect:
+        sprite = self.sprites[self.mood]
+        top = self.height() - sprite.height() - 4
+        return QRect((self.width() - sprite.width()) // 2, top, sprite.width(), round(sprite.height() * HEAD_SHARE))
+
     def mouseMoveEvent(self, event) -> None:
         if self._press_pos is None:
+            self._track_rub(event.position().toPoint())
             return
         delta = event.globalPosition().toPoint() - self._press_pos
         if self._dragging or delta.manhattanLength() > DRAG_THRESHOLD:
+            if not self._dragging and not self.full_text:
+                self._lift_mood = self.mood
+                self.set_mood("panic")  # picked up: legs dangling
             self._dragging = True
             self.move(self._origin + delta)
+
+    def _track_rub(self, pos: QPoint) -> None:
+        """A pat is the mouse rubbing back and forth over her head: enough turns, each a real stroke."""
+        if not self.head_rect().contains(pos):
+            self._rub, self._turns = None, []
+            return
+        now = self.clock()
+        if self._rub is None:
+            self._rub = (pos.x(), 0, pos.x())
+            return
+        last_x, direction, turned_at = self._rub
+        step = (pos.x() > last_x) - (pos.x() < last_x)
+        if step == 0:
+            return
+        if direction and step != direction:
+            if abs(last_x - turned_at) >= PAT_STROKE:
+                self._turns = [t for t in self._turns if now - t <= PAT_WINDOW] + [now]
+            turned_at = last_x
+        self._rub = (pos.x(), step, turned_at)
+        if len(self._turns) >= PAT_TURNS:
+            self._turns = []
+            self.patted.emit()
+
+    def leaveEvent(self, _event) -> None:
+        self._rub, self._turns = None, []
 
     def mouseReleaseEvent(self, event) -> None:
         if event.button() != Qt.MouseButton.LeftButton or self._press_pos is None:
             return
+        if self._lift_mood is not None:
+            if self.mood == "panic" and not self.full_text:
+                self.set_mood(self._lift_mood)  # put down again
+            self._lift_mood = None
         if self._dragging:
             self.moved.emit(self.x(), self.y())
         else:
             self.poked.emit()
         self._press_pos = None
         self._dragging = False
+
+    def wheelEvent(self, event) -> None:
+        if not event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._wheel = 0
+            event.ignore()
+            return
+        self._wheel += event.angleDelta().y()
+        notches = int(self._wheel / 120)  # toward zero, so the rest keeps its sign
+        if notches:
+            self._wheel -= notches * 120
+            self.resize_wheel.emit(notches)
+        event.accept()
 
     # ---- global hotkey (WM_HOTKEY arrives at this window) -------------
     def nativeEvent(self, event_type, message):

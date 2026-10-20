@@ -55,6 +55,9 @@ Claude 桌面版自带的 claude-code。
 ## 使用
 
 - 左键单击她：立即评论一次；拖动可移动位置（会记住）。
+- 鼠标放在她身上按住 Ctrl 滚动滚轮：调整她的身高（每格 10 像素，100～600），脚站在原地。
+- 不按鼠标键、在她头上来回晃动鼠标就是摸头；拖着她时她会一脸慌张；调完大小、走到屏幕边缘或落地时她会说一句
+  （都是本地台词，不调用模型）。
 - 右键「设置…」：打开设置窗口，分「常规、调用方式、观察范围、陪伴、外观、关于」六页，改动立即生效；
   黑名单、白名单可以直接在窗口里增删，她的身高也能在「外观」里调整。
 - 右键她或托盘图标：和她说话、暂停观察、评论间隔（30 秒～10 分钟）、模型（Haiku 更快更省 / Sonnet 更聪明）、
@@ -66,8 +69,8 @@ Claude 桌面版自带的 claude-code。
 - 「观察范围」：「除黑名单外都看」（默认）或「只看白名单」，可一键把当前程序加入/移出白名单。
 - 「自言自语」：每隔 3～10 分钟说一句本地台词，不调用模型、不花钱。
 - 「沿屏幕底部溜达」（默认开）：她站在屏幕最下面（任务栏上方）时，每隔半分钟到一分多钟会左右走几步，不会走出
-  当前屏幕。说话、睡觉、被拖动、全屏免打扰或暂停观察时不走。把她拖到离底部不远处松手会落到底部；拖到别处就
-  留在原地，不溜达。在「外观」页或右键菜单开关。
+  当前屏幕。说话、睡觉、被拖动、全屏免打扰或暂停观察时不走。开着时从任何高度松手她都会掉到底部；想把她放在
+  屏幕别处，先在「外观」页或右键菜单关掉溜达。
 - 「深夜提醒休息」：默认一晚只提醒一次（凌晨仍算同一晚），看屏幕的评论和自言自语共用这一次；可以在「陪伴」页
   改成每 2 小时一次或关闭，也可以设置几点算深夜（20:00～2:00，默认 23:00，到早上 5 点结束）。
 - 「陪伴记忆」：记住你最近在用的程序和活动类别（写代码、看视频……）以及今天各类活动的时长，只存程序名和类别。
@@ -119,6 +122,7 @@ Gemini API key (stored in Windows Credential Manager). Screenshots stay in
 memory, except in Codex mode: the Codex CLI only reads images from files, so the screenshot is written to a private
 temporary folder and deleted in the background when the call ends (retried later if Windows still holds the file).
 Private windows are skipped by a blocklist. She strolls along the bottom of the screen now and then, and reminds you
-to go to bed at most once a night by default (configurable). Code is MIT-licensed; the character art is **not** — it is
+to go to bed at most once a night by default (configurable). Ctrl + mouse wheel over her changes her size; rub her head
+with the mouse for a pat. Code is MIT-licensed; the character art is **not** — it is
 AI-generated from an original design by ZipZipPipe and may be used for non-commercial purposes only
 (see ASSETS-LICENSE.md). Not affiliated with Anthropic.

@@ -18,8 +18,9 @@ SPEED = 60.0  # pixels per second
 FRAME_MS = 33  # about 30 frames per second, only while walking
 REST_SEC = (25.0, 70.0)  # pause between two strolls
 DISTANCE = (80.0, 350.0)  # length of one stroll
-SNAP = 80  # dropped this close above the floor, she lands on it
 ON_FLOOR = 2  # pixels of slack for "standing on the floor"
+GRAVITY = 3000.0  # pixels per second squared: a drop of 80 px takes about 0.23 s
+TOP_SPEED = 1800.0  # pixels per second: a fall from the top of the screen still reads as a fall
 
 
 def plan_stroll(x: float, left: float, right: float, rng: random.Random) -> float | None:
@@ -37,15 +38,21 @@ def plan_stroll(x: float, left: float, right: float, rng: random.Random) -> floa
 
 class Walker(QObject):
     def __init__(self, window, can_walk: Callable[[], bool], arrived: Callable[[int, int], None],
-                 rng: random.Random | None = None, clock: Callable[[], float] = time.monotonic) -> None:
+                 rng: random.Random | None = None, clock: Callable[[], float] = time.monotonic,
+                 edge: Callable[[], None] | None = None, landed: Callable[[], None] | None = None) -> None:
         super().__init__(window)
         self.window = window
         self.can_walk = can_walk
         self.arrived = arrived
         self.rng = rng or random.Random()
         self.clock = clock
+        self.edge = edge  # a stroll ended at the edge of the screen
+        self.landed = landed  # a drop above the floor has landed
         self.enabled = False
         self.target: float | None = None
+        self.falling = False
+        self._y = 0.0
+        self._vy = 0.0
         self._x = 0.0  # exact position between frames, so slow speeds do not round away
         self._last = 0.0
         self._rest = QTimer(self, singleShot=True, timeout=self.start_stroll)
@@ -83,15 +90,25 @@ class Walker(QObject):
     def on_floor(self) -> bool:
         return abs(self.window.y() - self.floor_y()) <= ON_FLOOR
 
-    def snap_to_floor(self) -> bool:
-        """After a drop: close above (or a little below) the floor means standing on it."""
-        floor = self.floor_y()
-        if self.window.y() == floor:
-            return True
-        if abs(floor - self.window.y()) <= SNAP:
-            self.window.move(QPoint(self._clamped_x(self.window.x()), floor))
-            return True
-        return False
+    def fall_to_floor(self) -> None:
+        """After a drop she falls onto the floor from any height (from below it: straight up onto it).
+        `arrived` is called once she stands; `falling` tells whether she is still on her way down."""
+        self.falling = False  # a new drop replaces a fall she was caught in
+        self._frame.stop()
+        if self.floor_y() - self.window.y() <= 0:
+            self.land_now()
+            return
+        self.stop()
+        self.window.move(QPoint(self._clamped_x(self.window.x()), self.window.y()))
+        self.falling = True
+        self._y = float(self.window.y())
+        self._vy = 0.0
+        self._last = self.clock()
+        self._frame.start()
+
+    def land_now(self) -> None:
+        """Stand on the floor at once (at start-up), wherever she was."""
+        self.window.move(QPoint(self._clamped_x(self.window.x()), self.floor_y()))
 
     def _bounds(self) -> tuple[int, int]:
         area = self.work_area()
@@ -103,7 +120,7 @@ class Walker(QObject):
 
     # ---- walking --------------------------------------------------------
     def start_stroll(self) -> None:
-        if not self.enabled or self.walking:
+        if not self.enabled or self.walking or self.falling:
             return
         if not self.can_walk() or not self.on_floor():
             self.rest()  # try again later
@@ -119,7 +136,33 @@ class Walker(QObject):
         self.window.set_walking(1 if target > self._x else -1)
         self._frame.start()
 
+    def _fall(self) -> None:
+        if getattr(self.window, "grabbed", False):
+            # Held on the way down: she hangs there. A click lets go and she falls on; a drag ends in a
+            # new drop, which starts over from wherever she is put.
+            self._last = self.clock()
+            self._vy = 0.0
+            return
+        now = self.clock()
+        dt, self._last = min(now - self._last, 0.05), now
+        self._vy = min(self._vy + GRAVITY * dt, TOP_SPEED)
+        self._y += self._vy * dt
+        floor = self.floor_y()
+        if self._y >= floor:
+            self._y = floor
+        self.window.move(QPoint(self.window.x(), round(self._y)))
+        if self._y >= floor:
+            self.falling = False
+            self._frame.stop()
+            self.arrived(self.window.x(), self.window.y())
+            if self.landed:
+                self.landed()
+            self.rest()
+
     def step(self) -> None:
+        if self.falling:
+            self._fall()
+            return
         if not self.walking:
             self._frame.stop()
             return
@@ -142,11 +185,15 @@ class Walker(QObject):
             self._x = self.target
         self.window.move(QPoint(round(self._x), self.window.y()))
         if done:
+            at_edge = min(abs(self.target - left), abs(self.target - right)) < 0.5
             self.stop()
+            if at_edge and self.edge:
+                self.edge()
 
     def stop(self) -> None:
         """Stand still where she is (and remember that place); the next stroll comes after a rest."""
-        self._frame.stop()
+        if not self.falling:  # a fall always lands
+            self._frame.stop()
         if not self.walking:
             return
         self.target = None

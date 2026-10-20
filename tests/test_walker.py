@@ -9,7 +9,7 @@ from PySide6.QtCore import QObject, QPoint, QRect
 from claude_pet import controller as controller_module
 from claude_pet import walker as walker_module
 from claude_pet.config import Config, load_config
-from claude_pet.walker import DISTANCE, SNAP, Walker, plan_stroll
+from claude_pet.walker import DISTANCE, Walker, plan_stroll
 
 SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
 AREA = QRect(0, 0, 1600, 860)  # a work area above a 40 px taskbar
@@ -148,13 +148,28 @@ def test_switching_off_stops_her_and_every_timer(app, monkeypatch):
     assert len(arrived) == 1  # where she stopped is remembered
 
 
-def test_a_drop_near_the_floor_lands_on_it(app, monkeypatch):
-    walker, window, _clock, _arrived, _ = make(app, monkeypatch, y=FLOOR - SNAP + 5)
-    assert walker.snap_to_floor() and window.y() == FLOOR
-    walker, window, _clock, _arrived, _ = make(app, monkeypatch, y=FLOOR - SNAP - 50)
-    assert not walker.snap_to_floor() and window.y() == FLOOR - SNAP - 50  # left where she was put
-    walker, window, _clock, _arrived, _ = make(app, monkeypatch, x=1500, y=FLOOR + 10)
-    assert walker.snap_to_floor() and window.y() == FLOOR and window.x() == AREA.width() - 300  # kept on screen
+def test_landing_puts_her_on_the_floor_and_on_the_screen(app, monkeypatch):
+    for y in (FLOOR - 5, 0, FLOOR + 10):
+        walker, window, _clock, _arrived, _ = make(app, monkeypatch, x=1500, y=y)
+        walker.land_now()
+        assert window.y() == FLOOR and window.x() == AREA.width() - 300  # kept on screen
+    walker, window, _clock, arrived, _ = make(app, monkeypatch, x=1500, y=FLOOR + 10)
+    walker.fall_to_floor()  # from below the floor: straight onto it, no fall
+    assert not walker.falling and window.y() == FLOOR
+
+
+def test_a_long_fall_reaches_its_top_speed_and_never_goes_faster(app, monkeypatch):
+    tall = QRect(0, 0, 1600, 3000)
+    floor = tall.height() - 380
+    walker, window, clock, arrived, _ = make(app, monkeypatch, y=0, area=tall)
+    walker.fall_to_floor()
+    speeds = []
+    while walker.falling and len(speeds) < 500:
+        clock.now += 0.033
+        walker.step()
+        speeds.append(walker._vy)
+    assert max(speeds) == walker_module.TOP_SPEED  # 2620 px is far enough to hit the cap
+    assert window.y() == floor and arrived == [(window.x(), floor)]
 
 
 def test_a_stalled_ui_never_makes_her_jump(app, monkeypatch):
@@ -216,23 +231,70 @@ def test_the_menu_and_the_settings_switch_walking(pet):
     window.close()
 
 
-def test_switching_it_on_away_from_the_floor_says_how_to_start(pet):
+def test_switching_it_on_up_the_screen_brings_her_down(pet):
     ctrl, _saved = pet
+    clock = Clock()
+    ctrl.walker.clock = clock
     ctrl.set_walking(False)
     ctrl.window.move(QPoint(600, 100))
     ctrl.set_walking(True)
-    assert "最下面" in ctrl.window.full_text
+    assert ctrl.walker.falling
+    _fall_steps(ctrl, clock)
+    floor = AREA.height() - ctrl.window.height()
+    assert ctrl.window.y() == floor and (ctrl.config.x, ctrl.config.y) == (600, floor)
 
 
 def test_a_drop_near_the_floor_lands_her_on_it_and_is_remembered(pet):
     ctrl, _saved = pet
     floor = AREA.height() - ctrl.window.height()
+    clock = Clock()
+    ctrl.walker.clock = clock
     ctrl.window.move(QPoint(400, floor - 40))
     ctrl.window.moved.emit(400, floor - 40)
+    assert ctrl.walker.falling and ctrl.config.y != floor  # on her way down, not yet remembered
+    heights = []
+    for _ in range(40):
+        clock.now += 0.033
+        ctrl.walker.step()
+        heights.append(ctrl.window.y())
+        if not ctrl.walker.falling:
+            break
+    assert heights == sorted(heights) and len(heights) > 2  # falls, faster and faster, never back up
     assert ctrl.window.y() == floor and (ctrl.config.x, ctrl.config.y) == (400, floor)
+
+
+def test_a_drop_from_high_up_falls_all_the_way_down(pet):
+    ctrl, _saved = pet
+    floor = AREA.height() - ctrl.window.height()
+    clock = Clock()
+    ctrl.walker.clock = clock
+    ctrl.window.move(QPoint(400, -50))  # from the very top (a little above it, even)
+    ctrl.window.moved.emit(400, -50)
+    assert ctrl.walker.falling and ctrl.config.y != floor
+    heights = []
+    while ctrl.walker.falling and len(heights) < 200:
+        clock.now += 0.033
+        ctrl.walker.step()
+        heights.append(ctrl.window.y())
+    steps = [b - a for a, b in zip(heights, heights[1:])]
+    assert steps and min(steps) >= 0 and max(steps) <= walker_module.TOP_SPEED * 0.033 + 1
+    assert ctrl.window.y() == floor and (ctrl.config.x, ctrl.config.y) == (400, floor)
+
+
+def test_without_walking_she_stays_where_she_is_put(pet):
+    ctrl, _saved = pet
+    ctrl.set_walking(False)
     ctrl.window.move(QPoint(400, 100))
     ctrl.window.moved.emit(400, 100)
-    assert (ctrl.config.x, ctrl.config.y) == (400, 100)
+    assert not ctrl.walker.falling and (ctrl.config.x, ctrl.config.y) == (400, 100)
+
+
+def test_a_drop_below_the_floor_puts_her_straight_on_it(pet):
+    ctrl, _saved = pet
+    floor = AREA.height() - ctrl.window.height()
+    ctrl.window.move(QPoint(400, floor + 30))  # over the taskbar
+    ctrl.window.moved.emit(400, floor + 30)
+    assert not ctrl.walker.falling and ctrl.window.y() == floor and ctrl.config.y == floor
 
 
 def test_resizing_keeps_her_on_the_floor(pet):
@@ -283,7 +345,8 @@ def test_a_second_monitor_or_left_taskbar_keeps_her_on_that_work_area(app, monke
         walk_to_the_end(walker, clock)
         assert area.x() <= window.x() <= area.x() + area.width() - window.width() and window.y() == floor
     walker, window, _clock, _arrived, _ = make(app, monkeypatch, x=100, y=floor + 20, area=area)
-    assert walker.snap_to_floor() and window.x() == area.x() and window.y() == floor
+    walker.land_now()
+    assert window.x() == area.x() and window.y() == floor
 
 
 def test_a_wider_window_mid_walk_never_jumps_or_leaves_the_screen(app, monkeypatch):
@@ -333,12 +396,67 @@ def test_resizing_to_a_wider_window_keeps_her_on_the_floor(pet):
     assert ctrl.window.width() > width and ctrl.walker.on_floor()
 
 
-def test_starting_just_off_the_floor_puts_her_on_it(pet, monkeypatch):
+@pytest.mark.parametrize("offset", [4, -300])
+def test_starting_with_walking_on_puts_her_on_the_floor(pet, monkeypatch, offset):
     ctrl, _saved = pet
     floor = AREA.height() - ctrl.window.height()
-    monkeypatch.setattr(ctrl, "_place_window", lambda: ctrl.window.move(QPoint(500, floor + 4)))
+    monkeypatch.setattr(ctrl, "_place_window", lambda: ctrl.window.move(QPoint(500, floor + offset)))
     monkeypatch.setattr(ctrl, "_register_hotkey", lambda: None)
     ctrl.start()
     assert ctrl.window.y() == floor and (ctrl.config.x, ctrl.config.y) == (500, floor)
     ctrl.shutdown()
+
+
+def test_starting_with_walking_off_keeps_her_place(pet, monkeypatch):
+    ctrl, _saved = pet
+    ctrl.config.walking = False
+    monkeypatch.setattr(ctrl, "_place_window", lambda: ctrl.window.move(QPoint(500, 120)))
+    monkeypatch.setattr(ctrl, "_register_hotkey", lambda: None)
+    ctrl.start()
+    assert ctrl.window.y() == 120
+    ctrl.shutdown()
+
+
+def _fall_steps(ctrl, clock, limit=60):
+    for _ in range(limit):
+        if not ctrl.walker.falling:
+            return
+        clock.now += 0.033
+        ctrl.walker.step()
+
+
+def test_a_click_on_the_way_down_only_holds_her_for_a_moment(pet):
+    ctrl, _saved = pet
+    clock = Clock()
+    ctrl.walker.clock = clock
+    floor = AREA.height() - ctrl.window.height()
+    ctrl.window.move(QPoint(400, floor - 70))
+    ctrl.window.moved.emit(400, floor - 70)
+    clock.now += 0.033
+    ctrl.walker.step()
+    ctrl.window._press_pos = QPoint(1, 1)  # pressed: she hangs there
+    held = ctrl.window.y()
+    for _ in range(5):
+        clock.now += 0.033
+        ctrl.walker.step()
+    assert ctrl.window.y() == held and ctrl.walker.falling
+    ctrl.window._press_pos = None  # a click, not a drag: she falls on and lands
+    _fall_steps(ctrl, clock)
+    assert ctrl.window.y() == floor and (ctrl.config.x, ctrl.config.y) == (400, floor)
+
+
+def test_dragged_away_on_the_way_down_she_falls_from_the_new_place(pet):
+    ctrl, _saved = pet
+    clock = Clock()
+    ctrl.walker.clock = clock
+    floor = AREA.height() - ctrl.window.height()
+    ctrl.window.move(QPoint(400, floor - 70))
+    ctrl.window.moved.emit(400, floor - 70)
+    clock.now += 0.033
+    ctrl.walker.step()
+    ctrl.window.move(QPoint(300, 100))  # caught and carried up the screen
+    ctrl.window.moved.emit(300, 100)
+    assert ctrl.walker.falling and ctrl.window.y() == 100  # a new fall, from where she was let go
+    _fall_steps(ctrl, clock, 200)
+    assert ctrl.window.y() == floor and (ctrl.config.x, ctrl.config.y) == (300, floor)
 

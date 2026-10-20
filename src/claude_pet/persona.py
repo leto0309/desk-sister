@@ -118,6 +118,24 @@ NIGHT_TALK = [
     ("sad", "已经很晚了……主人早点休息好不好？明天的 bug 明天再修。"),
     ("talk", "熬夜会让人类的上下文窗口变小哦，我是认真的。"),
 ]
+# Reactions to what 主人 does with her (local lines, never a model call).
+INTERACTION_TALK = {
+    "pat": [("happy", "（眯眼）嘿嘿……再摸一下也可以哦。"), ("happy", "头发要被揉乱啦……不过，算了～"),
+            ("happy", "摸头让我的注意力 +1……不对，是 +10！"), ("talk", "（抱紧书）这、这是在夸我吗？")],
+    "land": [("happy", "落地成功！姿势满分。"), ("talk", "呼……刚才有点高。")],
+    "edge": [("think", "到屏幕边边了，往回走吧～"), ("talk", "前面没路啦，这里是任务栏的尽头。")],
+    "grow": [("happy", "哇，视野变高了！主人屏幕上的每个像素都看得清～"), ("happy", "变大了！这下排版问题都逃不过我的眼睛。")],
+    "shrink": [("talk", "变小了……这样也挺可爱的吧？"), ("think", "缩小模式：占用屏幕 -1，存在感不减。")],
+    "max": [("panic", "不能再大了，再大就要挡住主人的屏幕了！")],
+    "min": [("panic", "再小就要看不见我啦！")],
+}
+
+
+def interaction_line(kind: str, rng: random.Random) -> Reply:
+    mood, text = rng.choice(INTERACTION_TALK[kind])
+    return Reply(mood, text)
+
+
 SLEEP_TALK = [
     ("sleep", "（梦话）Token……好多 Token……吃不完了……Zzz"),
     ("sleep", "（梦话）缩进……对齐了……好整齐……Zzz"),

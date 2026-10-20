@@ -31,6 +31,9 @@ log = logging.getLogger("claude_pet")
 
 CHANGE_THRESHOLD = 0.02
 HOTKEY_ID = 0xC1A0
+PAT_COOLDOWN_SEC = 5.0  # one reaction per head pat, however long the rubbing goes on
+RESIZE_SETTLE_MS = 1200  # resizing has stopped when nothing changed for this long
+SIZE_SHOWN_SEC = 2.5  # how long her height stays under her feet after Ctrl + wheel
 AUTH_CHECK_TTL = 1800
 AUTOSTART_LABEL = "开机自启"
 MEMORY_TALK_CHANCE = 0.25  # share of self-talk turns that mention today's main activity (if >= 1 h)
@@ -276,8 +279,15 @@ class PetController(QObject):
         self.window.poked.connect(self.poke)
         self.window.context_menu_requested.connect(self._show_menu)
         self.window.moved.connect(self._on_dropped)
-        self.walker = Walker(self.window, self._can_walk, self._remember_position, self._rng)
+        self.walker = Walker(self.window, self._can_walk, self._remember_position, self._rng,
+                             edge=self._on_edge, landed=self._on_landed)
+        self.window.patted.connect(self._on_patted)
+        self._last_pat = float("-inf")
+        self._resize_from: int | None = None  # her height before the current burst of resizing
+        self._resize_done = QTimer(self, singleShot=True, interval=RESIZE_SETTLE_MS, timeout=self._on_resized)
         self.window.hotkey_pressed.connect(self.toggle_pause)
+        self.window.resize_wheel.connect(self.resize_by_wheel)
+        self._size_shown_until = float("-inf")  # her height under her feet, briefly, after Ctrl + wheel
 
         self.timer = QTimer(self, timeout=self.tick)
         # Remembers the user's window, so menus or dialogs of the pet never become the thing it looks at.
@@ -291,7 +301,8 @@ class PetController(QObject):
     def start(self) -> None:
         self._place_window()
         self.window.show()
-        if self.config.walking and self.walker.snap_to_floor():  # started close to the bottom: stand on it
+        if self.config.walking:  # walking: she lives on the bottom of the screen
+            self.walker.land_now()
             self._remember_position(self.window.x(), self.window.y())
         self.tray.show()
         self._register_hotkey()
@@ -1172,8 +1183,8 @@ class PetController(QObject):
         self.walking_action.setChecked(self.config.walking)
         self.walker.set_enabled(self.config.walking)
         self._save()
-        if self.config.walking and not self.walker.on_floor():
-            self.window.say("happy", "把我拖到屏幕最下面，我就能在那儿走来走去啦～")
+        if self.config.walking and not self.walker.on_floor() and not self.walker.falling:
+            self._on_dropped(self.window.x(), self.window.y())  # down she goes, to walk on the bottom
 
     def _can_walk(self) -> bool:
         """She sets off (and keeps walking) only when nothing else is going on with her."""
@@ -1183,8 +1194,40 @@ class PetController(QObject):
 
     def _on_dropped(self, x: int, y: int) -> None:
         if self.config.walking:
-            self.walker.snap_to_floor()  # dropped near the bottom: she lands on it
+            self.walker.fall_to_floor()
+            if self.walker.falling:
+                return  # on her way down: remembered once she lands
         self._remember_position(self.window.x(), self.window.y())
+
+    # ---- reactions to what 主人 does with her ------------------------------
+    def _react(self, kind: str, chance: float = 1.0) -> None:
+        if self.quit_pending or self.quiet or self._rng.random() >= chance:
+            return
+        self.window.say(*self._reply_tuple(persona.interaction_line(kind, self._rng)))
+
+    def _on_patted(self) -> None:
+        if self._clock() - self._last_pat < PAT_COOLDOWN_SEC:
+            return
+        self._last_pat = self._clock()
+        self._react("pat")
+
+    def _on_landed(self) -> None:
+        if not self.window.full_text:
+            self._react("land", 0.5)
+
+    def _on_edge(self) -> None:
+        if not self.window.full_text:
+            self._react("edge", 0.25)
+
+    def _on_resized(self) -> None:
+        before, self._resize_from = self._resize_from, None
+        height = self.config.sprite_height
+        if before is None or height == before:
+            return
+        if height > before:
+            self._react("max" if height >= 600 else "grow")
+        else:
+            self._react("min" if height <= 100 else "shrink")
 
     # ---- bedtime reminders ------------------------------------------------
     def _bedtime(self) -> str:
@@ -1400,7 +1443,10 @@ class PetController(QObject):
         self._save()
 
     def _refresh_status(self) -> None:
-        if self.config.paused:
+        if self._clock() < self._size_shown_until and not self.last_error and not self.auto_paused_until:
+            # Just resized with Ctrl + wheel: show the height for a moment over any state but an error.
+            self.window.set_status(f"身高 {self.config.sprite_height} 像素")
+        elif self.config.paused:
             self.window.set_status("已暂停")
         elif self.busy:
             self.window.set_status("思考中…")
@@ -1487,8 +1533,20 @@ class PetController(QObject):
         self.config.sleep_after_sec = min(max(int(seconds), 60), 86400)
         self._save()
 
+    def resize_by_wheel(self, notches: int) -> None:
+        """Ctrl + wheel over her: 10 px a notch, the same path as the settings slider."""
+        height = min(max(self.config.sprite_height + 10 * notches, 100), 600)
+        if height != self.config.sprite_height:
+            self.set_sprite_height(height)
+        self._size_shown_until = self._clock() + SIZE_SHOWN_SEC
+        self._refresh_status()
+        QTimer.singleShot(int(SIZE_SHOWN_SEC * 1000) + 100, self._refresh_status)
+
     def set_sprite_height(self, height: int) -> None:
         self.walker.stop()  # a new size changes the window's width: she stands still for it
+        if self._resize_from is None:
+            self._resize_from = self.config.sprite_height
+        self._resize_done.start()  # she says something once the resizing has settled
         self.config.sprite_height = min(max(int(height), 100), 600)
         self.window.set_sprite_height(self.config.sprite_height)
         self._remember_position(self.window.x(), self.window.y())  # saves too
