@@ -64,12 +64,20 @@ def test_she_blinks_now_and_then(window):
     assert start + 0.3 + BLINK_EVERY[0] <= window._blink_at <= start + 0.3 + BLINK_EVERY[1]
 
 
-@pytest.mark.parametrize("mood", ["happy", "sleep", "sad", "think"])
-def test_other_faces_keep_their_own_eyes(window, mood):
+@pytest.mark.parametrize("mood", ["happy", "panic", "sleep"])
+def test_some_faces_keep_their_own_eyes(window, mood):
+    window.mood = mood  # happy's eyes are already closed, panic's are swirls, sleep is asleep
+    window._blink(window._blink_at + 0.1)
+    assert len(window._layers()) == 1
+
+
+@pytest.mark.parametrize("mood", ["think", "angry", "sad"])
+def test_other_faces_blink_with_their_own_eyes(window, mood):
     window.mood = mood
     window._blink(window._blink_at + 0.1)
-    assert window.eyes is None
-    assert len(window._layers()) == 1
+    assert window.eyes == "eyes_closed"
+    layers = window._layers()
+    assert len(layers) == 2 and layers[1].cacheKey() == window.parts[f"{mood}_eyes_closed"].cacheKey()
 
 
 def _typing(window, mood, text):
@@ -109,9 +117,9 @@ def test_each_mouth_shape_is_held_long_enough(window):
 def test_an_idle_face_pauses_with_its_own_mouth(window):
     mouths = _typing(window, "idle", "嗯，好")
     assert mouths[1] is None and window.mouth is None
-    window.say("happy", "开心！")
+    window.say("sleep", "（梦话）……")
     window._type_next()
-    assert window.mouth is None  # parts are only for the faces they were made for
+    assert window.mouth is None  # no parts for a sleeping face
 
 
 def test_the_talk_sprite_covers_its_own_mouth_before_another_shape(window):
@@ -147,7 +155,7 @@ def test_missing_or_damaged_parts_only_leave_the_sprite(app, tmp_path, monkeypat
 
 def test_no_extra_timer_runs_for_the_face(window):
     assert len(window.findChildren(QTimer)) == 3  # typing, bubble and the existing gentle bob
-    assert pet_window.FACE_MOODS == ("idle", "talk")
+    assert set(pet_window.FACE_MOODS) == {"idle", "talk", "happy", "think", "panic", "angry", "sad"}
 
 
 @pytest.mark.parametrize("missing", ["mouth_open", "mouth_closed"])
@@ -155,7 +163,7 @@ def test_a_talk_mouth_needs_both_its_cover_and_its_shape(window, missing):
     del window.parts[missing]
     window.mood, window.eyes, window.mouth = "talk", "eyes_half", "mouth_open"
     layers = window._layers()
-    assert len(layers) == 2 and layers[1].cacheKey() == window.parts["eyes_half"].cacheKey()  # the eyes still blink
+    assert len(layers) == 2 and layers[1].cacheKey() == window.parts["talk_eyes_half"].cacheKey()  # still blinks
     window.grab()
 
 
@@ -174,4 +182,153 @@ def test_no_shape_is_cut_short_after_a_pause(window):
     mouths = _typing(window, "talk", "嗯嗯嗯，好的好的好的好的好的好的")[:-1]
     after = _runs(mouths[7:])  # once the pause after the comma is over
     assert after[0][0] == "mouth_half" and all(count * 0.035 >= 0.1 for _mouth, count in after[:-1])
+
+
+@pytest.mark.parametrize("mood", ["happy", "think", "panic", "angry", "sad"])
+def test_every_expression_moves_its_own_mouth(window, mood):
+    mouths = _typing(window, mood, "主人今天写了好多好多代码呢真的很厉害")
+    assert {"mouth_half", "mouth_open"} <= set(mouths)
+    window.say(mood, "嗯")
+    window.mouth = "mouth_open"
+    layers = window._layers()
+    assert layers[1].cacheKey() == window.parts[f"{mood}_mouth_open"].cacheKey()  # made from this expression
+
+
+def test_the_talk_face_blinks_with_its_own_cover(window):
+    window.mood, window.eyes, window.mouth = "talk", "eyes_closed", None
+    assert window._layers()[1].cacheKey() == window.parts["talk_eyes_closed"].cacheKey()
+
+
+def test_the_mouth_is_drawn_under_the_eyes(window):
+    window.mood, window.eyes, window.mouth = "idle", "eyes_closed", "mouth_open"
+    layers = window._layers()
+    assert [layer.cacheKey() for layer in layers[1:]] == [
+        window.parts["mouth_open"].cacheKey(), window.parts["eyes_closed"].cacheKey()]
+
+
+def test_a_missing_expression_part_leaves_that_expression_as_drawn(window):
+    del window.parts["angry_mouth_open"]
+    window.mood, window.eyes, window.mouth = "angry", None, "mouth_open"
+    assert len(window._layers()) == 1
+
+
+
+def _pixels(window, eyes, mouth, rect):
+    window.mood, window.eyes, window.mouth = "talk", eyes, mouth
+    image = window.grab().toImage()
+    return [image.pixel(x, y) for x in range(rect.left(), rect.right()) for y in range(rect.top(), rect.bottom())]
+
+
+def test_blinking_while_talking_never_changes_her_mouth(window):
+    window.set_sprite_height(400)
+    sprite = window.sprites["talk"]
+    mouth = window.parts["mouth_open"].toImage()
+    left = (window.width() - sprite.width()) // 2
+    top = window.height() - sprite.height() - 4
+    xs = [x for x in range(mouth.width()) for y in range(0, mouth.height(), 2) if mouth.pixelColor(x, y).alpha() > 200]
+    ys = [y for x in range(0, mouth.width(), 2) for y in range(mouth.height()) if mouth.pixelColor(x, y).alpha() > 200]
+    from PySide6.QtCore import QRect
+
+    w, h = max(xs) - min(xs), max(ys) - min(ys)
+    rect = QRect(left + min(xs) + w // 4, top + min(ys) + h // 4, w // 2, h // 2)  # the mouth itself, not the cheeks
+    window._phase = 0.0  # the gentle bob: the same for both pictures
+    window._animate = lambda: None
+    assert _pixels(window, "eyes_closed", "mouth_open", rect) == _pixels(window, None, "mouth_open", rect)
+
+
+@pytest.mark.parametrize(("mood", "missing", "eyes", "mouth"), [
+    ("angry", "angry_mouth_open", None, "mouth_half"),  # the other mouth frame is dropped too
+    ("talk", "talk_eyes_closed", "eyes_half", None),  # and the other blink frame
+    ("talk", "mouth_closed", None, "mouth_half"),
+])
+def test_one_missing_frame_drops_the_whole_set(window, mood, missing, eyes, mouth):
+    del window.parts[missing]
+    window.mood, window.eyes, window.mouth = mood, eyes, mouth
+    assert len(window._layers()) == 1
+
+
+def _part_script():
+    import importlib.util
+
+    script = Path(__file__).resolve().parents[1] / "devtools" / "make_face_parts.py"
+    spec = importlib.util.spec_from_file_location("make_face_parts", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_part_script_writes_nothing_when_any_original_is_missing(tmp_path):
+    from PIL import Image
+
+    module = _part_script()
+    raw = tmp_path / "raw"
+    (raw / "parts").mkdir(parents=True)
+    image = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    image.paste((240, 200, 180, 255), (300, 100, 720, 950))
+    for mood in module.MOODS:
+        image.save(raw / f"{mood}.png")
+    image.save(raw / "parts" / "idle.png")
+    for name in module.EDITS:
+        image.save(raw / "parts" / f"{name}.png")
+    for mood, names in module.MOOD_EDITS.items():
+        for name in names:
+            image.save(raw / "parts" / f"{mood}_{name}.png")
+    sources = sorted(raw.rglob("*.png"))
+    assert module.missing_sources(raw) == []
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "angry_mouth_open.png").write_bytes(b"old part")
+    for source in sources:  # each original on its own
+        data = source.read_bytes()
+        source.unlink()
+        assert module.main(raw, out) == 1, source.name
+        assert [p.name for p in out.iterdir()] == ["angry_mouth_open.png"]
+        assert (out / "angry_mouth_open.png").read_bytes() == b"old part"
+        source.write_bytes(data)
+
+
+def test_an_eye_part_is_empty_over_the_whole_mouth(tmp_path):
+    from PIL import Image
+
+    module = _part_script()
+    base = Image.new("RGBA", (1024, 1024), (240, 200, 180, 255))
+    edit = Image.new("RGBA", (1024, 1024), (20, 20, 20, 255))  # different everywhere
+    mask = module.changed_mask(base, edit, module.EYES)
+    assert mask.crop(module.MOUTH_KEEP).getextrema() == (0, 0)
+    assert mask.crop(module.EYES).getextrema()[1] == 255  # the eyes themselves are still covered
+
+
+def test_no_shipped_eye_part_reaches_the_mouth():
+    from PIL import Image
+
+    mouth = Image.open(ASSETS / "parts" / "mouth_open.png").getchannel("A")
+    core = mouth.point(lambda a: 255 if a > 200 else 0).getbbox()
+    w, h = core[2] - core[0], core[3] - core[1]
+    centre = (core[0] + w // 4, core[1] + h // 4, core[2] - w // 4, core[3] - h // 4)
+    for name in PARTS:
+        if "eyes" in name:
+            assert Image.open(ASSETS / "parts" / f"{name}.png").getchannel("A").crop(centre).getextrema()[1] <= 8, name
+
+
+def test_embedding_refuses_an_incomplete_set_of_parts(tmp_path):
+    import importlib.util
+    import shutil
+
+    script = Path(__file__).resolve().parents[1] / "devtools" / "embed_sprites.py"
+    spec = importlib.util.spec_from_file_location("embed_sprites", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sprites = tmp_path / "sprites"
+    shutil.copytree(ASSETS, sprites)
+    output = tmp_path / "sprite_data.py"
+    output.write_text("OLD = 1", encoding="utf-8")
+    assert module.missing(sprites) == []
+    for name in ("angry_mouth_open", "talk_eyes_closed"):
+        part = sprites / "parts" / f"{name}.png"
+        data = part.read_bytes()
+        part.unlink()
+        assert module.main(sprites, output) == 1 and output.read_text(encoding="utf-8") == "OLD = 1"
+        part.write_bytes(data)
+    shutil.rmtree(sprites / "parts")
+    assert module.main(sprites, output) == 1 and output.read_text(encoding="utf-8") == "OLD = 1"
 

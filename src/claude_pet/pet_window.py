@@ -116,11 +116,13 @@ def load_parts(folder: Path, height: int) -> dict[str, QPixmap]:
     return parts
 
 
-PARTS = ("eyes_half", "eyes_closed", "mouth_half", "mouth_open", "mouth_o", "mouth_closed")
-FACE_MOODS = ("idle", "talk")  # the sprites whose face the parts were made for
+from .sprites import IDLE_PARTS, MOOD_PARTS, PARTS, TALK_EYES  # noqa: E402,F401  (shared with devtools)
+FACE_MOODS = ("idle", "talk", *MOOD_PARTS)  # the sprites that have face parts
 BLINK_EVERY = (3.0, 7.0)  # seconds between blinks
 BLINK = ((0.07, "eyes_half"), (0.16, "eyes_closed"), (0.23, "eyes_half"))  # until this many seconds: this part
 MOUTH_CYCLE = ("mouth_half", "mouth_open", "mouth_half", None)  # None: her mouth at rest
+MOUTH_SET = ("mouth_half", "mouth_open")  # every shape the talking cycle uses
+BLINK_SET = ("eyes_half", "eyes_closed")
 MOUTH_FRAME = 0.15  # seconds each shape is held, however fast the words appear
 PAUSE_HOLD = 4  # characters her mouth stays closed after a comma or full stop
 PAUSES = set("，。！？、…～,.!?;；：:（）()「」『』—\n ")
@@ -228,13 +230,29 @@ class PetWindow(QWidget):
         layers = [self._sprite()]
         if self.mood not in FACE_MOODS:
             return layers
-        groups = [[self.eyes], [self.mouth]]
+        # The mouth first, then the eyes: a mouth part's soft edge may reach just under an eye.
+        groups = [[self._part(self.mouth)], [self._part(self.eyes)]]
         if self.mood == "talk" and self.mouth and self.mouth != "mouth_closed":
-            groups[1] = ["mouth_closed", self.mouth]  # cover the talk sprite's own open mouth first
-        for names in groups:
-            if all(name in self.parts for name in names):  # a mouth without its cover (or vice versa): none
+            groups[0] = ["mouth_closed", self.mouth]  # cover the talk sprite's own open mouth first
+        for names, whole in zip(groups, (self._set_ready(MOUTH_SET), self._set_ready(BLINK_SET))):
+            if whole and all(name in self.parts for name in names):
                 layers.extend(self._facing(name, self.parts[name]) for name in names)
         return layers
+
+    def _set_ready(self, names: tuple[str, ...]) -> bool:
+        """An animation is played whole or not at all: one missing frame drops the set for this face."""
+        wanted = [self._part(name) for name in names]
+        if self.mood == "talk" and names == MOUTH_SET:
+            wanted.append("mouth_closed")
+        return all(name in self.parts for name in wanted)
+
+    def _part(self, name: str | None) -> str | None:
+        """The part made for the current expression (talk shares idle's mouths and has its own blink)."""
+        if name is None or self.mood == "idle":
+            return name
+        if self.mood == "talk":
+            return f"talk_{name}" if name.startswith("eyes") else name
+        return f"{self.mood}_{name}"
 
     def set_mood(self, mood: str) -> None:
         self.mood = mood if mood in self.sprites else "talk"
