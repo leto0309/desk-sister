@@ -65,6 +65,11 @@ Claude 桌面版自带的 claude-code。
 - 连续失败 3 次会暂停自动观察 30 分钟，脚下显示原因；戳她仍会回答。
 - 「观察范围」：「除黑名单外都看」（默认）或「只看白名单」，可一键把当前程序加入/移出白名单。
 - 「自言自语」：每隔 3～10 分钟说一句本地台词，不调用模型、不花钱。
+- 「沿屏幕底部溜达」（默认开）：她站在屏幕最下面（任务栏上方）时，每隔半分钟到一分多钟会左右走几步，不会走出
+  当前屏幕。说话、睡觉、被拖动、全屏免打扰或暂停观察时不走。把她拖到离底部不远处松手会落到底部；拖到别处就
+  留在原地，不溜达。在「外观」页或右键菜单开关。
+- 「深夜提醒休息」：默认一晚只提醒一次（凌晨仍算同一晚），看屏幕的评论和自言自语共用这一次；可以在「陪伴」页
+  改成每 2 小时一次或关闭，也可以设置几点算深夜（20:00～2:00，默认 23:00，到早上 5 点结束）。
 - 「陪伴记忆」：记住你最近在用的程序和活动类别（写代码、看视频……）以及今天各类活动的时长，只存程序名和类别。
 - 「Claude Code 联动」（默认关）：开启时会征得同意，在 ~/.claude/settings.json 加几条 hook
   （文件已存在时先备份为 settings.json.claude-pet-backup-<时间戳>，保留最近 5 份）。之后 Claude Code 在思考、
@@ -112,7 +117,8 @@ comments on it in one line. It thinks through **your own** logged-in Claude Code
 (ChatGPT subscription, with all its agent tools switched off), or through **your own** Anthropic, OpenAI, DeepSeek or
 Gemini API key (stored in Windows Credential Manager). Screenshots stay in
 memory, except in Codex mode: the Codex CLI only reads images from files, so the screenshot is written to a private
-temporary folder and deleted when the call ends (retried later if Windows still holds the file). Private windows are
-skipped by a blocklist. Code is MIT-licensed; the character art is **not** — it is
+temporary folder and deleted in the background when the call ends (retried later if Windows still holds the file).
+Private windows are skipped by a blocklist. She strolls along the bottom of the screen now and then, and reminds you
+to go to bed at most once a night by default (configurable). Code is MIT-licensed; the character art is **not** — it is
 AI-generated from an original design by ZipZipPipe and may be used for non-commercial purposes only
 (see ASSETS-LICENSE.md). Not affiliated with Anthropic.
