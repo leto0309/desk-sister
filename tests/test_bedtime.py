@@ -218,3 +218,14 @@ def test_a_reply_dropped_for_a_claude_code_notice_is_no_reminder(pet):
     ctrl.notice_generation = -1
     _arrive(ctrl, "sad|主人早点休息吧")
     assert ctrl.window.full_text == "主人早点休息吧" and ctrl.config.bedtime_reminded_at == clock["now"]
+
+
+def test_a_huge_reminder_time_never_resets_the_other_settings(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text('{"paused": true, "watch_mode": "allowlist", "allowlist": ["code.exe"], "blocklist": ["mine"],'
+                    ' "bedtime_reminded_at": 1' + "0" * 400 + '}', encoding="utf-8")
+    config = load_config(path)
+    assert config.bedtime_reminded_at == 0.0
+    assert config.paused and config.watch_mode == "allowlist" and config.allowlist == ["code.exe"]
+    assert config.blocklist == ["mine"]
+

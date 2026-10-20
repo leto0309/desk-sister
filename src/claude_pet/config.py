@@ -107,7 +107,7 @@ class Config:
             self.night_start_hour = 23
         try:
             reminded = float(self.bedtime_reminded_at)
-        except (TypeError, ValueError):  # a broken value only forgets the last reminder
+        except (TypeError, ValueError, OverflowError):  # a broken value (say 10**400) only forgets the last reminder
             reminded = 0.0
         # A real reminder time lies between 2001 and 2286; anything else (1, true, 1e12) means none.
         self.bedtime_reminded_at = reminded if math.isfinite(reminded) and 1e9 <= reminded <= 1e10 else 0.0

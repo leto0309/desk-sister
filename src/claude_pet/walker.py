@@ -66,6 +66,7 @@ class Walker(QObject):
                 self.rest()
         else:
             self.stop()
+            self._cancel_fall()
             self._rest.stop()
 
     def rest(self) -> None:
@@ -95,16 +96,27 @@ class Walker(QObject):
         `arrived` is called once she stands; `falling` tells whether she is still on her way down."""
         self.falling = False  # a new drop replaces a fall she was caught in
         self._frame.stop()
+        if self.walking:
+            self.stop()  # grabbed and dropped before the next frame: the stroll ends here
         if self.floor_y() - self.window.y() <= 0:
             self.land_now()
+            self.rest()
             return
-        self.stop()
         self.window.move(QPoint(self._clamped_x(self.window.x()), self.window.y()))
         self.falling = True
         self._y = float(self.window.y())
         self._vy = 0.0
         self._last = self.clock()
         self._frame.start()
+
+    def _cancel_fall(self) -> None:
+        """Walking switched off on the way down: she stays where she is (and that place is remembered)."""
+        if not self.falling:
+            return
+        self.falling = False
+        self._vy = 0.0
+        self._frame.stop()
+        self.arrived(self.window.x(), self.window.y())
 
     def land_now(self) -> None:
         """Stand on the floor at once (at start-up), wherever she was."""
@@ -143,6 +155,8 @@ class Walker(QObject):
             self._last = self.clock()
             self._vy = 0.0
             return
+        if abs(self.window.y() - round(self._y)) > 1:
+            self._y = float(self.window.y())  # moved from outside (say, resized): fall on from where she is
         now = self.clock()
         dt, self._last = min(now - self._last, 0.05), now
         self._vy = min(self._vy + GRAVITY * dt, TOP_SPEED)

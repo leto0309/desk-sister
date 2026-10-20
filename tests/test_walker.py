@@ -460,3 +460,63 @@ def test_dragged_away_on_the_way_down_she_falls_from_the_new_place(pet):
     _fall_steps(ctrl, clock, 200)
     assert ctrl.window.y() == floor and (ctrl.config.x, ctrl.config.y) == (300, floor)
 
+
+def _drop_from(ctrl, clock, x, y):
+    ctrl.walker.clock = clock
+    ctrl.window.move(QPoint(x, y))
+    ctrl.window.moved.emit(x, y)
+    clock.now += 0.033
+    ctrl.walker.step()
+
+
+def test_switching_walking_off_on_the_way_down_leaves_her_there(pet):
+    ctrl, _saved = pet
+    clock = Clock()
+    _drop_from(ctrl, clock, 400, 100)
+    assert ctrl.walker.falling
+    ctrl.set_walking(False)
+    here = ctrl.window.y()
+    assert not ctrl.walker.falling and not ctrl.walker._frame.isActive() and ctrl.config.y == here
+    ctrl.window.move(QPoint(500, 200))  # put somewhere else afterwards
+    ctrl.window.moved.emit(500, 200)
+    for _ in range(5):
+        clock.now += 0.033
+        ctrl.walker.step()
+    assert ctrl.window.y() == 200 and (ctrl.config.x, ctrl.config.y) == (500, 200)
+
+
+def test_a_quick_drop_below_the_floor_mid_stroll_ends_the_stroll(pet):
+    ctrl, _saved = pet
+    clock = Clock()
+    ctrl.walker.clock = clock
+    ctrl.window.clear_bubble()
+    ctrl.walker.set_enabled(True)
+    ctrl.walker.rng = random.Random(0)
+    for _ in range(50):
+        ctrl.walker.start_stroll()
+        if ctrl.walker.walking:
+            break
+    assert ctrl.walker.walking
+    floor = AREA.height() - ctrl.window.height()
+    ctrl.window.move(QPoint(300, floor + 30))  # pressed, dragged below the floor, released: no frame in between
+    ctrl.window.moved.emit(300, floor + 30)
+    assert not ctrl.walker.walking and ctrl.window.walking == 0 and ctrl.window.y() == floor
+    assert ctrl.walker._rest.isActive()  # the next stroll will come
+    ctrl.walker.start_stroll()
+    assert ctrl.walker.walking or ctrl.walker._rest.isActive()
+
+
+@pytest.mark.parametrize("height", [320, 120])
+def test_resizing_on_the_way_down_never_jumps(pet, height):
+    ctrl, _saved = pet
+    clock = Clock()
+    _drop_from(ctrl, clock, 400, 50)
+    ctrl.set_sprite_height(height)  # her feet stay; the window's top moves
+    after = ctrl.window.y()
+    clock.now += 0.033
+    ctrl.walker.step()
+    assert 0 <= ctrl.window.y() - after <= walker_module.TOP_SPEED * 0.05 + 1  # on down from there, no jump back
+    _fall_steps(ctrl, clock, 200)
+    floor = AREA.height() - ctrl.window.height()
+    assert ctrl.window.y() == floor and ctrl.config.y == floor
+
