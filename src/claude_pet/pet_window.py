@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 import time
 from pathlib import Path
 
@@ -40,19 +41,21 @@ def placeholder_sprite(mood: str, height: int) -> QPixmap:
     return pixmap
 
 
-def embedded_sprite(mood: str) -> QPixmap:
-    """Sprite from the generated module (a one-file exe has no assets folder). Decoded with Pillow,
-    so it does not depend on Qt image-format plugins being bundled."""
+def embedded_sprite(mood: str, part: bool = False) -> QPixmap:
+    """Sprite (or face part) from the generated module (a one-file exe has no assets folder). Decoded
+    with Pillow, so it does not depend on Qt image-format plugins being bundled."""
     from . import sprite_data
     from .sprites import decode_embedded
 
-    data = sprite_data.SPRITES.get(mood)
+    images = getattr(sprite_data, "PART_IMAGES", {}) if part else sprite_data.SPRITES
+    checksums = getattr(sprite_data, "PART_CHECKSUMS", {}) if part else sprite_data.CHECKSUMS
+    data = images.get(mood)
     if not data:
         return QPixmap()
     try:
-        image = decode_embedded(data, sprite_data.CHECKSUMS.get(mood, ""))
+        image = decode_embedded(data, checksums.get(mood, ""))
     except (OSError, ValueError, SyntaxError):
-        log.exception("embedded sprite %s is corrupt", mood)
+        log.exception("embedded %s %s is corrupt", "part" if part else "sprite", mood)
         return QPixmap()
     qimage = QImage(image.tobytes("raw", "RGBA"), image.width, image.height, QImage.Format.Format_RGBA8888)
     return QPixmap.fromImage(qimage.copy())  # copy: the QImage must not outlive the bytes it wraps
@@ -99,6 +102,29 @@ def load_sprites(folder: Path, height: int) -> dict[str, QPixmap]:
     return sprites
 
 
+def load_parts(folder: Path, height: int) -> dict[str, QPixmap]:
+    """Face overlay parts (assets/sprites/parts, else embedded). A missing part is simply not drawn."""
+    parts: dict[str, QPixmap] = {}
+    for name in PARTS:
+        pixmap = QPixmap(str(folder / "parts" / f"{name}.png"))
+        if pixmap.isNull():
+            pixmap = embedded_sprite(name, part=True)
+        if pixmap.isNull():
+            log.warning("face part %s missing; she will not use it", name)
+            continue
+        parts[name] = pixmap.scaledToHeight(height, Qt.TransformationMode.SmoothTransformation)
+    return parts
+
+
+PARTS = ("eyes_half", "eyes_closed", "mouth_half", "mouth_open", "mouth_o", "mouth_closed")
+FACE_MOODS = ("idle", "talk")  # the sprites whose face the parts were made for
+BLINK_EVERY = (3.0, 7.0)  # seconds between blinks
+BLINK = ((0.07, "eyes_half"), (0.16, "eyes_closed"), (0.23, "eyes_half"))  # until this many seconds: this part
+MOUTH_CYCLE = ("mouth_half", "mouth_open", "mouth_half", None)  # None: her mouth at rest
+MOUTH_FRAME = 0.15  # seconds each shape is held, however fast the words appear
+PAUSE_HOLD = 4  # characters her mouth stays closed after a comma or full stop
+PAUSES = set("，。！？、…～,.!?;；：:（）()「」『』—\n ")
+STOPS = PAUSES - {" "}  # punctuation and line breaks pause her mouth; a space between words does not
 HEAD_SHARE = 0.35  # the top part of the sprite that counts as her head
 PAT_TURNS = 4  # direction changes ...
 PAT_WINDOW = 1.5  # ... within this many seconds ...
@@ -124,6 +150,12 @@ class PetWindow(QWidget):
         self.sprite_folder = sprite_folder
         self.sprite_height = sprite_height
         self.sprites = load_sprites(sprite_folder, sprite_height)
+        self.parts = load_parts(sprite_folder, sprite_height)
+        self._rng = random.Random()
+        self._talk_started = 0.0
+        self._paused_mouth = False
+        self.eyes: str | None = None  # face parts drawn over the sprite right now
+        self.mouth: str | None = None
         self.mood = "idle"
         self.full_text = ""
         self.shown_chars = 0
@@ -143,6 +175,7 @@ class PetWindow(QWidget):
         self._turns: list[float] = []  # when the rubbing changed direction
         self.setMouseTracking(True)  # hover moves too, for the head pat
         self._mirrored: dict[str, QPixmap] = {}
+        self._blink_at = self.clock() + self._rng.uniform(*BLINK_EVERY)
         sprite_width = max(p.width() for p in self.sprites.values())
         self.bubble_area = 150
         self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + sprite_height + 8)
@@ -162,6 +195,7 @@ class PetWindow(QWidget):
         centre = self._feet[0] if self._feet and self._feet[1] == old.topLeft() else old.x() + old.width() / 2
         self.sprite_height = height
         self.sprites = load_sprites(self.sprite_folder, height)
+        self.parts = load_parts(self.sprite_folder, height)
         self._mirrored = {}
         sprite_width = max(p.width() for p in self.sprites.values())
         self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + height + 8)
@@ -180,12 +214,27 @@ class PetWindow(QWidget):
         return self._press_pos is not None
 
     def _sprite(self) -> QPixmap:
-        sprite = self.sprites[self.mood]
+        return self._facing(self.mood, self.sprites[self.mood])
+
+    def _facing(self, key: str, pixmap: QPixmap) -> QPixmap:
         if self.walking <= 0:
-            return sprite
-        if self.mood not in self._mirrored:  # walking right: she turns that way
-            self._mirrored[self.mood] = sprite.transformed(QTransform().scale(-1, 1))
-        return self._mirrored[self.mood]
+            return pixmap
+        if key not in self._mirrored:  # walking right: she turns that way
+            self._mirrored[key] = pixmap.transformed(QTransform().scale(-1, 1))
+        return self._mirrored[key]
+
+    def _layers(self) -> list[QPixmap]:
+        """The sprite and the face parts over it, all the same size and drawn at the same place."""
+        layers = [self._sprite()]
+        if self.mood not in FACE_MOODS:
+            return layers
+        groups = [[self.eyes], [self.mouth]]
+        if self.mood == "talk" and self.mouth and self.mouth != "mouth_closed":
+            groups[1] = ["mouth_closed", self.mouth]  # cover the talk sprite's own open mouth first
+        for names in groups:
+            if all(name in self.parts for name in names):  # a mouth without its cover (or vice versa): none
+                layers.extend(self._facing(name, self.parts[name]) for name in names)
+        return layers
 
     def set_mood(self, mood: str) -> None:
         self.mood = mood if mood in self.sprites else "talk"
@@ -196,11 +245,14 @@ class PetWindow(QWidget):
         self.set_mood(mood)
         self.full_text = text
         self.shown_chars = 0
+        self._talk_started = self.clock()
+        self._paused_mouth = False
         self._typer.start()
         self._hide_bubble.start(hold_ms if hold_ms is not None else 6000 + 180 * len(text))
 
     def clear_bubble(self) -> None:
         self._typer.stop()
+        self.mouth = None
         self.full_text = ""
         self.shown_chars = 0
         if self.mood not in ("sleep",):
@@ -220,10 +272,41 @@ class PetWindow(QWidget):
         if self.shown_chars >= len(self.full_text):
             self.shown_chars = len(self.full_text)
             self._typer.stop()
+        self.mouth = self._mouth_now()
         self.update()
+
+    def _mouth_now(self) -> str | None:
+        """While the words appear her mouth moves; at a pause and once done it rests as drawn."""
+        if self.mood not in FACE_MOODS or not self._typer.isActive() or not self.shown_chars:
+            return None
+        rest = "mouth_closed" if self.mood == "talk" else None
+        recent = self.full_text[max(0, self.shown_chars - PAUSE_HOLD):self.shown_chars]
+        if any(ch in STOPS for ch in recent):
+            self._paused_mouth = True  # a real pause after punctuation, not a flicker
+            return rest
+        if self._paused_mouth:
+            self._paused_mouth = False
+            self._talk_started = self.clock()  # start the rhythm afresh, so no shape is cut short
+        frame = int((self.clock() - self._talk_started) / MOUTH_FRAME)
+        return MOUTH_CYCLE[frame % len(MOUTH_CYCLE)] or rest
+
+    def _blink(self, now: float) -> None:
+        if self.mood not in FACE_MOODS:
+            self.eyes = None
+            return
+        elapsed = now - self._blink_at
+        self.eyes = None
+        if elapsed < 0:
+            return
+        for until, part in BLINK:
+            if elapsed < until:
+                self.eyes = part
+                return
+        self._blink_at = now + self._rng.uniform(*BLINK_EVERY)  # this blink is over: the next one
 
     def _animate(self) -> None:
         self._phase = (self._phase + 0.12) % (2 * math.pi)
+        self._blink(self.clock())
         self.update()
 
     # ---- painting ----------------------------------------------------
@@ -239,7 +322,8 @@ class PetWindow(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        sprite = self._sprite()
+        layers = self._layers()
+        sprite = layers[0]
         x = (self.width() - sprite.width()) // 2
         if self.walking:
             # A little hop per step, leaning into each one: two steps a second.
@@ -250,12 +334,14 @@ class PetWindow(QWidget):
             p.translate(self.width() / 2, self.height() - 4)
             p.rotate(3 * math.sin(beat / 2))
             p.translate(-self.width() / 2, -(self.height() - 4))
-            p.drawPixmap(x, y, sprite)
+            for layer in layers:
+                p.drawPixmap(x, y, layer)
             p.restore()
         else:
             bob = 0 if self.mood == "sleep" else round(2 * math.sin(self._phase))
             y = self.height() - sprite.height() - 4 + bob
-            p.drawPixmap(x, y, sprite)
+            for layer in layers:
+                p.drawPixmap(x, y, layer)
         if self.full_text:
             self._paint_bubble(p, self.full_text, self.visible_text)
         if self.status:

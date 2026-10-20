@@ -46,7 +46,7 @@ def has_transparency(image: Image.Image) -> bool:
     return image.mode == "RGBA" and image.getchannel("A").getextrema()[0] < 16
 
 
-def main(raw_dir: Path, out_dir: Path, height: int = 512) -> int:
+def load_raw(raw_dir: Path) -> dict[str, Image.Image]:
     images: dict[str, Image.Image] = {}
     for mood in MOODS:
         path = raw_dir / f"{mood}.png"
@@ -58,24 +58,37 @@ def main(raw_dir: Path, out_dir: Path, height: int = 512) -> int:
             print(f"[white bg -> alpha] {mood}")
             image = remove_border_white(image)
         images[mood] = image
-    if not images:
-        print("no sprites found")
-        return 1
+    return images
+
+
+def union_box(images: dict[str, Image.Image], margin: int = 8) -> tuple[int, int, int, int]:
+    """One crop box for every mood, so switching expression (or a face part) never shifts her."""
     sizes = {img.size for img in images.values()}
     if len(sizes) != 1:
         print(f"[warn] differing canvas sizes {sizes}; union box uses each image's own coordinates")
     boxes = [img.getchannel("A").point(lambda a: 255 if a > 16 else 0).getbbox() for img in images.values()]
     boxes = [b for b in boxes if b]
-    margin = 8
-    union = (
+    return (
         max(min(b[0] for b in boxes) - margin, 0), max(min(b[1] for b in boxes) - margin, 0),
         max(b[2] for b in boxes) + margin, max(b[3] for b in boxes) + margin,
     )
+
+
+def crop_scale(image: Image.Image, union: tuple[int, int, int, int], height: int) -> Image.Image:
+    cropped = image.crop(union)
+    scale = height / cropped.height
+    return cropped.resize((round(cropped.width * scale), height), Image.Resampling.LANCZOS)
+
+
+def main(raw_dir: Path, out_dir: Path, height: int = 512) -> int:
+    images = load_raw(raw_dir)
+    if not images:
+        print("no sprites found")
+        return 1
+    union = union_box(images)
     out_dir.mkdir(parents=True, exist_ok=True)
     for mood, image in images.items():
-        cropped = image.crop(union)
-        scale = height / cropped.height
-        cropped = cropped.resize((round(cropped.width * scale), height), Image.Resampling.LANCZOS)
+        cropped = crop_scale(image, union, height)
         cropped.save(out_dir / f"{mood}.png", optimize=True)
         print(f"[ok] {mood} {cropped.size}")
     return 0
