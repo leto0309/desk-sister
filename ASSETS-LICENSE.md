@@ -2,15 +2,15 @@
 
 本仓库的 **MIT 许可只适用于源代码**，不适用于以下角色形象：
 
-- `assets/sprites/` 中的 8 张立绘；
-- `src/claude_pet/sprite_data.py` 中内嵌的同一套立绘；
+- `assets/sprites/` 中的 8 张立绘，以及 `assets/sprites/parts/` 中的眼睛、嘴巴等脸部动画部件；
+- `src/claude_pet/sprite_data.py` 中内嵌的同一套立绘和部件；
 - `docs/images/` 中的效果图；
 - `assets/icon.ico` 程序图标（从立绘裁出的头像）。
 
 ## 来源
 
 - 角色原设：B 站 UP 主 **ZipZipPipe**，视频 [BV1tE9XBbErS](https://www.bilibili.com/video/BV1tE9XBbErS/)。
-- 本项目的 Q 版立绘由 AI 绘图工具参考该原设生成，并非原作者亲手绘制。
+- 本项目的 Q 版立绘和脸部部件由 AI 绘图工具参考该原设生成，并非原作者亲手绘制。
 - 原作者已于 2026-10-15 通过 B 站私信同意：**非商业用途可以随意使用**。
 
 ## 你可以 / 不可以
@@ -22,7 +22,7 @@
 
 ## English
 
-The MIT license covers the source code only. The character art (assets/sprites/, the embedded copy in
+The MIT license covers the source code only. The character art (assets/sprites/ including the face parts in assets/sprites/parts/, the embedded copy in
 src/claude_pet/sprite_data.py, and docs/images/) is AI-generated from an original character design by
 ZipZipPipe (Bilibili video BV1tE9XBbErS), used with the original author's permission for **non-commercial use only**.
 Credit the original design to ZipZipPipe. Any commercial use is not permitted.
