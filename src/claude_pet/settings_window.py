@@ -5,6 +5,7 @@ use), and `refresh()` reads everything back from the config, so the window and t
 """
 from __future__ import annotations
 
+import calendar
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -471,6 +472,22 @@ class SettingsWindow(QDialog):
         sleep.addWidget(QLabel("主人离开键盘鼠标多久后她会睡着"))
         sleep.addWidget(self.sleep_spin)
         sleep.addStretch(1)
+        birth = QHBoxLayout()
+        self.birthday_box = QCheckBox("生日祝福")
+        self.birth_month = QSpinBox()
+        self.birth_month.setRange(1, 12)
+        self.birth_month.setSuffix(" 月")
+        self.birth_day = QSpinBox()
+        self.birth_day.setRange(1, 31)
+        self.birth_day.setSuffix(" 日")
+        for spin in (self.birth_month, self.birth_day):
+            spin.setKeyboardTracking(False)
+            spin.valueChanged.connect(lambda _v: self._apply_birthday())
+        self.birthday_box.toggled.connect(lambda _on: self._apply_birthday())
+        birth.addWidget(self.birthday_box)
+        birth.addWidget(self.birth_month)
+        birth.addWidget(self.birth_day)
+        birth.addStretch(1)
         night = QHBoxLayout()
         self.bedtime_combo = QComboBox()
         for mode in BEDTIME_MODES:
@@ -496,6 +513,8 @@ class SettingsWindow(QDialog):
         layout.addWidget(self.link_box)
         layout.addLayout(sleep)
         layout.addLayout(night)
+        layout.addLayout(birth)
+        layout.addWidget(_hint("每天第一次见到主人时她会打个招呼；节日和主人生日那天会换成祝福。"))
         layout.addWidget(_hint("深夜指从这个时间到早上 5 点。看屏幕的评论和自言自语共用这个次数，提过一次就等下一晚（或 2 小时后）。"))
         layout.addStretch(1)
         return page
@@ -567,6 +586,11 @@ class SettingsWindow(QDialog):
         layout.addLayout(row)
         layout.addStretch(1)
         return page
+
+    def _apply_birthday(self) -> None:
+        month = self.birth_month.value()
+        day = min(self.birth_day.value(), calendar.monthrange(2028, month)[1])  # 2 月 31 日 → 29 日 (leap year)
+        self._apply(lambda: self.ctrl.set_birthday(month, day, self.birthday_box.isChecked()))
 
     # ---- sync ------------------------------------------------------------
     def _apply(self, action) -> None:
@@ -651,6 +675,13 @@ class SettingsWindow(QDialog):
             self.memory_box.setChecked(cfg.companion_memory)
             self.link_box.setChecked(cfg.claude_link)
             self.link_box.setText(LINK_LABEL + ("（hook 未找到或 settings.json 异常）" if self.ctrl.claude_link_broken() else ""))
+            birthday = cfg.birthday
+            self.birthday_box.setChecked(bool(birthday))
+            if birthday:
+                self._show_value(self.birth_month, int(birthday[:2]))
+                self._show_value(self.birth_day, int(birthday[3:]))
+            for spin in (self.birth_month, self.birth_day):
+                spin.setEnabled(bool(birthday))
             self.bedtime_combo.setCurrentIndex(max(0, self.bedtime_combo.findData(cfg.bedtime_reminder)))
             self.night_combo.setCurrentIndex(max(0, self.night_combo.findData(cfg.night_start_hour)))
             self._show_value(self.sleep_spin, max(1, round(cfg.sleep_after_sec / 60)))

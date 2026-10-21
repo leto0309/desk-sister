@@ -122,6 +122,11 @@ NIGHT_TALK = [
 INTERACTION_TALK = {
     "pat": [("happy", "（眯眼）嘿嘿……再摸一下也可以哦。"), ("happy", "头发要被揉乱啦……不过，算了～"),
             ("happy", "摸头让我的注意力 +1……不对，是 +10！"), ("talk", "（抱紧书）这、这是在夸我吗？")],
+    "pat_shy": [("happy", "（脸红）又、又摸……主人今天怎么这么黏人。"), ("talk", "（小声）再这样我要害羞得写不出注释了……")],
+    "pat_annoyed": [("angry", "好啦好啦，头发都要被揉成鸟窝了！……不过也不是很讨厌。"),
+                    ("angry", "第三次了！我的发型可是精心对齐过的！"), ("panic", "摸头次数已超出配额……请稍后再试～")],
+    "drag_many": [("angry", "主人别把我拖来拖去啦，我又不是窗口！"), ("panic", "等等，我的坐标还没保存好……又换位置了？！")],
+    "carry_long": [("panic", "（晕乎乎）主人……放我下来……世界在转……"), ("sad", "被拎着好久……我的手都酸了。")],
     "land": [("happy", "落地成功！姿势满分。"), ("talk", "呼……刚才有点高。")],
     "edge": [("think", "到屏幕边边了，往回走吧～"), ("talk", "前面没路啦，这里是任务栏的尽头。")],
     "grow": [("happy", "哇，视野变高了！主人屏幕上的每个像素都看得清～"), ("happy", "变大了！这下排版问题都逃不过我的眼睛。")],
@@ -129,6 +134,41 @@ INTERACTION_TALK = {
     "max": [("panic", "不能再大了，再大就要挡住主人的屏幕了！")],
     "min": [("panic", "再小就要看不见我啦！")],
 }
+
+
+# The first time she sees 主人 each day.
+GREETINGS = {
+    "morning": [("happy", "主人早上好！今天也一起把事情一件件理清楚吧～"),
+                ("happy", "早安！新的一天，新的上下文，干劲满满～"),
+                ("talk", "早上好～先喝口水再开工哦，我在旁边看着。")],
+    "day": [("happy", "主人又见面啦！今天的我也准备好啦～"),
+            ("happy", "欢迎回来～今天要忙些什么呢？"),
+            ("talk", "嗨主人～我在这儿，需要我的时候戳我一下就好。")],
+}
+FESTIVAL_LINES = {
+    "元旦": ("happy", "新年快乐，主人！新的一年也请多多指教～"),
+    "情人节": ("happy", "情人节快乐～今天的我也是主人的专属助手哦。"),
+    "劳动节": ("happy", "劳动节快乐！今天要不要给自己放个小假？"),
+    "儿童节": ("happy", "儿童节快乐！今天允许主人当一天小朋友～"),
+    "国庆节": ("happy", "国庆节快乐！假期也要记得照顾好自己哦。"),
+    "平安夜": ("happy", "平安夜快乐～今晚想吃苹果吗？"),
+    "圣诞节": ("happy", "圣诞快乐！（抱紧书）我的礼物是……一整天的陪伴！"),
+    "除夕": ("happy", "除夕快乐！今年辛苦啦，主人，好好吃顿年夜饭吧～"),
+    "春节": ("happy", "新春快乐！祝主人新的一年代码零 bug、事事顺利～"),
+    "端午节": ("happy", "端午安康！今天吃粽子了吗？甜的还是咸的？"),
+    "中秋节": ("happy", "中秋快乐！月饼和月亮，今天都要好好欣赏哦～"),
+}
+BIRTHDAY_LINE = ("happy", "主人生日快乐！🎂 今天你最大，想让我说多少句好话都行～")
+
+
+def greeting_line(hour: int, festival: str | None, birthday: bool, rng: random.Random) -> Reply:
+    """Her first words of the day: a birthday or festival wish if it is one, else good morning / hello."""
+    if birthday:
+        return Reply(*BIRTHDAY_LINE)
+    if festival in FESTIVAL_LINES:
+        return Reply(*FESTIVAL_LINES[festival])
+    mood, text = rng.choice(GREETINGS["morning" if 5 <= hour < 11 else "day"])
+    return Reply(mood, text)
 
 
 def interaction_line(kind: str, rng: random.Random) -> Reply:

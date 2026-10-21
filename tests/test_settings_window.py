@@ -318,3 +318,38 @@ def test_the_menu_keeps_only_what_is_wanted_at_hand(pet):
         assert not any(label.startswith(gone) for label in labels), gone
     assert all(not a.menu() for a in ctrl.tray.contextMenu().actions())  # no submenus left
 
+
+
+def test_birthday_row(pet):
+    ctrl, window, _vault, _saved = pet
+    assert not window.birthday_box.isChecked() and not window.birth_month.isEnabled()
+    window.birth_month.setValue(5)
+    window.birth_day.setValue(3)
+    assert ctrl.config.birthday == ""  # not until the box is ticked
+    window.birthday_box.setChecked(True)
+    assert ctrl.config.birthday == "05-03" and window.birth_month.isEnabled()
+    window.birth_day.setValue(31)
+    window.birth_month.setValue(2)
+    assert ctrl.config.birthday == "02-29" and window.birth_day.value() == 29  # the last day of that month
+    ctrl.config.birthday = "12-24"
+    window.refresh()
+    assert window.birthday_box.isChecked() and (window.birth_month.value(), window.birth_day.value()) == (12, 24)
+    window.birthday_box.setChecked(False)
+    assert ctrl.config.birthday == ""
+
+
+def test_a_half_typed_birthday_survives_a_sync(pet):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    ctrl, window, _vault, _saved = pet
+    window.nav.setCurrentRow(3)
+    window.birthday_box.setChecked(True)
+    spin = window.birth_day
+    spin.setFocus()
+    spin.lineEdit().selectAll()
+    QTest.keyClicks(spin.lineEdit(), "15")
+    ctrl.toggle_pause()  # another setting changes while 主人 is typing
+    assert spin.lineEdit().text().startswith("15")
+    QTest.keyClick(spin.lineEdit(), Qt.Key.Key_Return)
+    assert ctrl.config.birthday.endswith("-15")

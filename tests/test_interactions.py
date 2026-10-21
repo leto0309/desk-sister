@@ -1,5 +1,6 @@
 """Reactions to what 主人 does with her: head pats, being picked up and dropped, the screen edge, resizing."""
 import random
+import time
 from pathlib import Path
 
 import pytest
@@ -144,7 +145,7 @@ def test_a_pat_gets_one_happy_line_then_a_pause(pet):
     assert ctrl.window.full_text == ""  # still rubbing: no second line yet
     clock.now += controller_module.PAT_COOLDOWN_SEC
     ctrl.window.patted.emit()
-    assert ctrl.window.full_text in lines("pat")
+    assert ctrl.window.full_text in lines("pat_shy")  # the second pat in a row
 
 
 @pytest.mark.parametrize(("start", "heights", "kind"), [
@@ -210,3 +211,215 @@ def test_no_reaction_line_is_a_bedtime_reminder():
     for entries in persona.INTERACTION_TALK.values():
         for mood, text in entries:
             assert mood in persona.MOODS and not bedtime.mentions(text)
+
+
+# ---- more lines: pats in a row, dragging about, the day's first hello ------------------------------------
+def test_pats_in_a_row_get_shy_then_mock_annoyed_and_settle_after_a_minute(pet):
+    ctrl, clock = pet
+    for kind in ("pat", "pat_shy", "pat_annoyed", "pat_annoyed"):
+        ctrl.window.clear_bubble()
+        ctrl.window.patted.emit()
+        assert ctrl.window.full_text in lines(kind)
+        clock.now += controller_module.PAT_COOLDOWN_SEC + 1
+    clock.now += controller_module.PAT_MEMORY_SEC
+    ctrl.window.clear_bubble()
+    ctrl.window.patted.emit()
+    assert ctrl.window.full_text in lines("pat")
+
+
+def drop(ctrl, clock, held=0.5):
+    """Pick her up, carry her for `held` seconds and let go."""
+    win = ctrl.window
+    win.clock = clock
+    press = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(100, 300), QPointF(100, 300),
+                        Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+    win.mousePressEvent(press)
+    hover(win, 160, 300, Qt.MouseButton.LeftButton)
+    clock.now += held
+    release = QMouseEvent(QEvent.Type.MouseButtonRelease, QPointF(160, 300), QPointF(160, 300),
+                          Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+    win.mouseReleaseEvent(release)
+
+
+def test_dragged_about_three_times_she_complains(pet):
+    ctrl, clock = pet
+    ctrl.window.clear_bubble()
+    drop(ctrl, clock)
+    clock.now += 5
+    drop(ctrl, clock)
+    assert ctrl.window.full_text == ""
+    clock.now += 5
+    drop(ctrl, clock)
+    assert ctrl.window.full_text in lines("drag_many")
+    ctrl.window.clear_bubble()
+    clock.now += 5
+    drop(ctrl, clock)
+    assert ctrl.window.full_text == ""  # counted afresh after complaining
+    clock.now += controller_module.DROP_MEMORY_SEC + 1
+    drop(ctrl, clock)
+    drop(ctrl, clock)
+    assert ctrl.window.full_text == ""  # the earlier drop is forgotten
+
+
+def test_carried_for_long_she_is_dizzy(pet):
+    ctrl, clock = pet
+    ctrl.window.clear_bubble()
+    drop(ctrl, clock, held=controller_module.LONG_CARRY_SEC - 1)
+    assert ctrl.window.full_text == ""
+    clock.now += controller_module.DROP_MEMORY_SEC + 1
+    drop(ctrl, clock, held=controller_module.LONG_CARRY_SEC + 1)
+    assert ctrl.window.full_text in lines("carry_long")
+
+
+def test_moving_her_from_the_settings_does_not_count_as_a_drag(pet):
+    ctrl, clock = pet
+    ctrl.window.clear_bubble()
+    for _ in range(4):
+        ctrl._on_dropped(ctrl.window.x(), ctrl.window.y())
+    assert ctrl.window.full_text == "" and ctrl._drops == []
+
+
+def at(year, month, day, hour):
+    return lambda: time.mktime((year, month, day, hour, 0, 0, 0, 0, -1))
+
+
+def greetings(part):
+    return {text for _mood, text in persona.GREETINGS[part]}
+
+
+INTRO = "主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。"
+
+
+def test_first_start_of_the_day_greets_and_a_restart_does_not(pet):
+    ctrl, _clock = pet
+    ctrl._now = at(2026, 10, 21, 8)
+    ctrl.start()
+    assert ctrl.window.full_text in greetings("morning") and ctrl.config.greeted_on == "2026-10-21"
+    ctrl.window.clear_bubble()
+    ctrl.start()
+    assert ctrl.window.full_text == INTRO
+    ctrl._now = at(2026, 10, 22, 14)
+    ctrl.start()
+    assert ctrl.window.full_text in greetings("day")
+
+
+@pytest.mark.parametrize(("when", "birthday", "text"), [
+    ((2026, 10, 1, 9), "", persona.FESTIVAL_LINES["国庆节"][1]),
+    ((2027, 2, 6, 20), "", persona.FESTIVAL_LINES["春节"][1]),
+    ((2026, 10, 1, 9), "10-01", persona.BIRTHDAY_LINE[1]),  # her birthday wish wins over the festival
+    ((2026, 5, 3, 9), "05-03", persona.BIRTHDAY_LINE[1]),
+])
+def test_festivals_and_the_birthday_replace_the_greeting(pet, when, birthday, text):
+    ctrl, _clock = pet
+    ctrl.config.birthday = birthday
+    ctrl._now = at(*when)
+    ctrl.start()
+    assert ctrl.window.full_text == text
+
+
+def test_waking_up_on_a_new_day_greets_instead_of_the_wake_line(pet):
+    ctrl, _clock = pet
+    ctrl.config.greeted_on = "2026-10-20"
+    ctrl._now = at(2026, 10, 21, 7)
+    ctrl.asleep = True
+    ctrl._wake(announce=True)
+    assert ctrl.window.full_text in greetings("morning")
+    ctrl.asleep = True
+    ctrl._wake(announce=True)
+    assert ctrl.window.full_text in {text for _mood, text in persona.WAKE_LINES}
+
+
+def test_pats_keep_escalating_until_a_quiet_minute(pet):
+    ctrl, clock = pet
+    said = []
+    for gap in (0, 6, 6, 55, 59.9, 60, 6):
+        clock.now += gap
+        ctrl.window.clear_bubble()
+        ctrl.window.patted.emit()
+        said.append(next(kind for kind in ("pat", "pat_shy", "pat_annoyed") if ctrl.window.full_text in lines(kind)))
+    assert said == ["pat", "pat_shy", "pat_annoyed", "pat_annoyed", "pat_annoyed", "pat", "pat_shy"]
+
+
+@pytest.mark.parametrize("why", ["quiet", "quit_pending"])
+def test_a_greeting_that_has_to_wait_comes_once_she_may_talk(pet, why):
+    ctrl, _clock = pet
+    ctrl._now = at(2026, 10, 21, 15)
+    setattr(ctrl, why, True)
+    ctrl.window.clear_bubble()
+    ctrl.start()
+    assert ctrl.window.full_text == "" and ctrl.config.greeted_on == ""  # neither the hello nor the intro
+    ctrl.asleep = True
+    ctrl._wake(announce=True)
+    assert ctrl.window.full_text == ""  # nor the wake line
+    ctrl.window.clear_bubble()
+    setattr(ctrl, why, False)
+    ctrl._heartbeat()  # no longer full screen / quitting
+    assert ctrl.window.full_text in greetings("day") and ctrl.config.greeted_on == "2026-10-21"
+    ctrl.window.clear_bubble()
+    ctrl._heartbeat()
+    assert ctrl.window.full_text == ""
+
+
+def test_without_claude_code_the_hello_comes_after_the_notice(pet):
+    ctrl, _clock = pet
+    ctrl.claude = None
+    ctrl.config.birthday = "10-21"
+    ctrl._now = at(2026, 10, 21, 9)
+    ctrl.start()
+    assert ctrl.window.full_text == persona.fallback("no_claude").text
+    ctrl.window.clear_bubble()
+    ctrl._heartbeat()
+    assert ctrl.window.full_text == persona.BIRTHDAY_LINE[1]
+    ctrl.window.clear_bubble()
+    ctrl._heartbeat()
+    ctrl.start()
+    assert ctrl.window.full_text == persona.fallback("no_claude").text  # the hello only once
+
+
+def test_a_quiet_wake_owes_the_hello_only_for_that_day(pet):
+    ctrl, _clock = pet
+    ctrl.config.greeted_on = "2026-10-21"
+    ctrl._now = at(2026, 10, 21, 23)
+    ctrl.asleep = True
+    ctrl._wake(announce=False)  # already greeted today: nothing owed
+    ctrl._now = at(2026, 10, 22, 0)
+    ctrl.window.clear_bubble()
+    ctrl._heartbeat()
+    assert ctrl.window.full_text == ""
+    ctrl.config.greeted_on = "2026-10-20"
+    ctrl._now = at(2026, 10, 21, 23)
+    ctrl.asleep = True
+    ctrl._wake(announce=False)  # owed today, but the bubble outlasts midnight
+    ctrl.window.say("talk", "还没说完")
+    ctrl._heartbeat()
+    ctrl._now = at(2026, 10, 22, 0)
+    ctrl.window.clear_bubble()
+    ctrl._heartbeat()
+    assert ctrl.window.full_text == "" and ctrl._greeting_due == ""
+
+
+def test_a_new_day_while_she_is_awake_waits_for_the_next_meeting(pet):
+    ctrl, _clock = pet
+    ctrl.config.greeted_on = "2026-10-20"
+    ctrl._now = at(2026, 10, 21, 0)
+    ctrl.window.clear_bubble()
+    ctrl._heartbeat()
+    assert ctrl.window.full_text == ""
+
+
+def test_set_birthday(pet):
+    ctrl, _clock = pet
+    ctrl.set_birthday(2, 29, True)
+    assert ctrl.config.birthday == "02-29"
+    ctrl.set_birthday(2, 31, True)
+    assert ctrl.config.birthday == ""
+    ctrl.set_birthday(5, 3, False)
+    assert ctrl.config.birthday == ""
+
+
+def test_new_lines_never_mention_sleep():
+    texts = [text for kind in ("pat_shy", "pat_annoyed", "drag_many", "carry_long")
+             for _mood, text in persona.INTERACTION_TALK[kind]]
+    texts += [text for part in persona.GREETINGS.values() for _mood, text in part]
+    texts += [text for _mood, text in persona.FESTIVAL_LINES.values()] + [persona.BIRTHDAY_LINE[1]]
+    assert not [text for text in texts if bedtime.mentions(text)]

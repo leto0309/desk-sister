@@ -1,6 +1,7 @@
 """Glue: timer -> capture -> privacy/change checks -> background Claude call -> pet window."""
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import random
@@ -17,7 +18,7 @@ from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import agent_link, api_client, bedtime, capture, claude_client, codex_client, credstore, openai_client, persona, providers
+from . import agent_link, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers
 from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
@@ -31,6 +32,10 @@ log = logging.getLogger("claude_pet")
 
 CHANGE_THRESHOLD = 0.02
 HOTKEY_ID = 0xC1A0
+PAT_MEMORY_SEC = 60.0  # pats this close together count as one petting session
+DROP_MEMORY_SEC = 20.0  # drops this close together are being dragged about
+DROPS_TO_COMPLAIN = 3
+LONG_CARRY_SEC = 4.0  # carried at least this long: dizzy
 PAT_COOLDOWN_SEC = 5.0  # one reaction per head pat, however long the rubbing goes on
 RESIZE_SETTLE_MS = 1200  # resizing has stopped when nothing changed for this long
 SIZE_SHOWN_SEC = 2.5  # how long her height stays under her feet after Ctrl + wheel
@@ -281,11 +286,14 @@ class PetController(QObject):
         self.autostart_state.connect(self._on_autostart_state)
         self.window.poked.connect(self.poke)
         self.window.context_menu_requested.connect(self._show_menu)
-        self.window.moved.connect(self._on_dropped)
+        self.window.moved.connect(self._on_user_dropped)
         self.walker = Walker(self.window, self._can_walk, self._remember_position, self._rng,
                              edge=self._on_edge, landed=self._on_landed)
         self.window.patted.connect(self._on_patted)
         self._last_pat = float("-inf")
+        self._pat_count = 0  # pats in this petting session, for shy and then mock-annoyed replies
+        self._drops: list[float] = []  # recent drops after a drag
+        self._greeting_due = ""  # the day (YYYY-MM-DD) whose first hello had to wait
         self._resize_from: int | None = None  # her height before the current burst of resizing
         self._resize_done = QTimer(self, singleShot=True, interval=RESIZE_SETTLE_MS, timeout=self._on_resized)
         self.window.hotkey_pressed.connect(self.toggle_pause)
@@ -316,8 +324,12 @@ class PetController(QObject):
         self._refresh_status()
         if self.config.backend == "subscription" and not self.claude:
             self.window.say(*self._reply_tuple(persona.fallback("no_claude")))
+            today = self._today().isoformat()
+            if self.config.greeted_on != today:
+                self._greeting_due = today  # after the notice
         else:
-            self.window.say("happy", "主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。")
+            if not self._greet_if_new_day():  # the first hello of the day, or the usual one
+                self.window.say("happy", "主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。")
             # First look once the dwell gate can pass, so she does not wait a whole interval.
             QTimer.singleShot(max(8, self.config.dwell_sec + 1) * 1000, self.tick)
 
@@ -498,6 +510,11 @@ class PetController(QObject):
         self._update_claude_link()
         self._flush_deferred()
         self._update_memory()
+        if self._greeting_due and not self.asleep and not self.window.full_text:
+            if self._greeting_due == self._today().isoformat():
+                self._greet_if_new_day()  # one that had to wait (full screen, quitting) comes now
+            else:
+                self._greeting_due = ""  # owed for a day that is over: wait for the next meeting
         if self.auto_paused_until and self._clock() >= self.auto_paused_until:
             self.auto_paused_until = 0.0
             self.consecutive_failures = 0
@@ -724,10 +741,13 @@ class PetController(QObject):
             return
         self.asleep = False
         self.target_since = self._clock()  # fresh dwell after coming back
-        if announce:
-            self.window.say(*self._reply_tuple(persona.pick(persona.WAKE_LINES)))
-        else:
+        if not announce:
+            today = self._today().isoformat()
+            if self.config.greeted_on != today:
+                self._greeting_due = today  # said once she may talk
             self.window.set_mood("idle")
+        elif not self._greet_if_new_day():
+            self.window.say(*self._reply_tuple(persona.pick(persona.WAKE_LINES)))
 
     # ---- worker thread ---------------------------------------------------
     def _work(self, job: Job) -> None:
@@ -1153,10 +1173,53 @@ class PetController(QObject):
         self.window.say(*self._reply_tuple(persona.interaction_line(kind, self._rng)))
 
     def _on_patted(self) -> None:
-        if self._clock() - self._last_pat < PAT_COOLDOWN_SEC:
+        now = self._clock()
+        since = now - self._last_pat
+        if since < PAT_COOLDOWN_SEC:
             return
-        self._last_pat = self._clock()
-        self._react("pat")
+        self._last_pat = now
+        self._pat_count = 1 if since >= PAT_MEMORY_SEC else self._pat_count + 1
+        self._react(("pat", "pat_shy", "pat_annoyed")[min(self._pat_count, 3) - 1])
+
+    def _on_user_dropped(self, x: int, y: int) -> None:
+        """She was dragged and let go: dragged about a lot, or carried for long, she says so."""
+        now = self._clock()
+        self._drops = [t for t in self._drops if now - t <= DROP_MEMORY_SEC] + [now]
+        if len(self._drops) >= DROPS_TO_COMPLAIN:
+            self._drops = []
+            self._react("drag_many")
+        elif self.window.carried_for >= LONG_CARRY_SEC:
+            self._react("carry_long")
+        self._on_dropped(x, y)
+
+    def _today(self) -> datetime.date:
+        stamp = time.localtime(self._now())
+        return datetime.date(stamp.tm_year, stamp.tm_mon, stamp.tm_mday)
+
+    def _greet_if_new_day(self) -> bool:
+        """Her first words to 主人 today (a birthday or festival wish on those days); once a day.
+
+        True when it is said now or held back until she may talk (the caller then says nothing else);
+        False when today's hello is already done."""
+        stamp = time.localtime(self._now())
+        today = datetime.date(stamp.tm_year, stamp.tm_mon, stamp.tm_mday)
+        if self.config.greeted_on == today.isoformat():
+            self._greeting_due = ""
+            return False
+        if self.quit_pending or self.quiet:
+            self._greeting_due = today.isoformat()  # later today, when she may talk
+            return True
+        self._greeting_due = ""
+        line = persona.greeting_line(stamp.tm_hour, days.festival(today),
+                                     days.is_birthday(today, self.config.birthday), self._rng)
+        self.window.say(*self._reply_tuple(line))
+        self.config.greeted_on = today.isoformat()
+        self._save()
+        return True
+
+    def set_birthday(self, month: int, day: int, enabled: bool) -> None:
+        self.config.birthday = days.clean_birthday(f"{month:02d}-{day:02d}") if enabled else ""
+        self._save()
 
     def _on_landed(self) -> None:
         if not self.window.full_text:

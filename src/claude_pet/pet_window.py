@@ -175,6 +175,8 @@ class PetWindow(QWidget):
         self.walking = 0  # -1 walking left, 1 walking right, 0 standing
         self._wheel = 0  # Ctrl + wheel: what a touchpad scrolled short of a whole notch
         self._lift_mood: str | None = None  # her mood before she was picked up
+        self._carried_since = 0.0
+        self.carried_for = 0.0  # how long the last drag lasted (seconds)
         self._rub: tuple[int, int, int] | None = None  # head pat: last x, direction, x where it last turned
         self._turns: list[float] = []  # when the rubbing changed direction
         self.setMouseTracking(True)  # hover moves too, for the head pat
@@ -501,6 +503,8 @@ class PetWindow(QWidget):
             return
         delta = event.globalPosition().toPoint() - self._press_pos
         if self._dragging or delta.manhattanLength() > DRAG_THRESHOLD:
+            if not self._dragging:
+                self._carried_since = self.clock()
             if not self._dragging and not self.full_text:
                 self._lift_mood = self.mood
                 self.set_mood("panic")  # picked up: legs dangling
@@ -541,6 +545,7 @@ class PetWindow(QWidget):
                 self.set_mood(self._lift_mood)  # put down again
             self._lift_mood = None
         if self._dragging:
+            self.carried_for = self.clock() - self._carried_since  # read by whoever handles the drop
             self.moved.emit(self.x(), self.y())
         else:
             self.poked.emit()

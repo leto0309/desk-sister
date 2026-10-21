@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
+from .days import clean_birthday
 from .providers import BACKENDS, clean_custom_models  # every way she can think
 
 BLINK_CHOICES = ("off", "few", "normal", "often")
@@ -65,6 +66,8 @@ class Config:
     blink: str = "normal"  # off | few | normal | often
     talk_mouth: bool = True  # her mouth moves while her words appear
     head_motion: bool = False  # off unless chosen: a nod as she starts to talk, a tilt now and then, a duck when patted
+    birthday: str = ""  # "MM-DD" for a birthday wish, "" for none
+    greeted_on: str = ""  # the day (YYYY-MM-DD) she last said her first hello, so a restart does not repeat it
     bedtime_reminder: str = "nightly"  # off | nightly | every_2h (see bedtime.py)
     night_start_hour: int = 23
     bedtime_reminded_at: float = 0.0  # wall-clock time of the last reminder, shared by comments and self-talk
@@ -107,6 +110,9 @@ class Config:
         self.walking = bool(self.walking)
         if self.blink not in BLINK_CHOICES:
             self.blink = "normal"
+        self.birthday = clean_birthday(self.birthday)
+        if not isinstance(self.greeted_on, str) or len(self.greeted_on) != 10:
+            self.greeted_on = ""
         if not isinstance(self.head_motion, bool):
             self.head_motion = False
         if not isinstance(self.talk_mouth, bool):  # null, 0, ""... are not a choice: back to the default
