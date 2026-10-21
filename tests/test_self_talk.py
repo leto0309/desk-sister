@@ -91,16 +91,15 @@ def test_asleep_she_only_murmurs(ctrl):
     assert ctrl.window.mood == "sleep"  # still asleep after the murmur
 
 
-def test_schedule_uses_the_configured_range_and_the_menu_switch(ctrl):
+def test_schedule_uses_the_configured_range_and_the_switch(ctrl):
     ctrl.config.self_talk_min_sec, ctrl.config.self_talk_max_sec = 200, 400
     for _ in range(20):
         ctrl._schedule_self_talk()
         assert ctrl.self_talk_timer.isActive() and 200_000 <= ctrl.self_talk_timer.interval() <= 400_000
-    action = next(a for a in ctrl.tray.contextMenu().actions() if a.text() == "自言自语")
-    assert action.isChecked()
-    action.trigger()  # switch off
+    assert ctrl.config.self_talk
+    ctrl.set_self_talk(False)
     assert not ctrl.config.self_talk and not ctrl.self_talk_timer.isActive()
-    action.trigger()  # and back on
+    ctrl.set_self_talk(True)  # and back on
     assert ctrl.config.self_talk and ctrl.self_talk_timer.isActive()
     ctrl.shutdown()
     assert not ctrl.self_talk_timer.isActive()

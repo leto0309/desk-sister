@@ -26,7 +26,7 @@
   白名单规则默认只匹配进程名，匹配窗口标题须显式写 title: 前缀；白名单损坏时按空处理（不截任何窗口）。
 - 陪伴记忆（%APPDATA%/ClaudePet/memory.json）只保存进程名、活动类别、时间戳和今日各类时长；窗口标题只在本地
   分类时使用，不写入文件和日志；被黑名单或白名单拒绝的窗口不记录、不计时。记忆摘要会作为上下文随评论请求
-  发给 Claude；右键菜单可关闭或清空。
+  发给 Claude；在「设置… → 陪伴」可关闭或清空。
 - Claude Code 联动默认关闭；开启需在弹窗中确认。它修改用户的 Claude Code settings.json（先备份），添加的 hook
   只执行 powershell.exe：在内存中读取 hook 的事件 JSON，只解析出顶层的会话编号（字母数字，解析失败时仅认开头的 session_id），把“固定事件名 + 会话编号 + hook 进程启动时间”
   写入 %APPDATA%/ClaudePet/agent-events/claude.log；提示词、代码、命令和文件内容不写入任何地方；async 运行，不阻塞
@@ -68,7 +68,7 @@
 ## API Key 模式（可选，默认关）
 
 - 切换前弹窗说明按量计费；用户确认并输入 Key 后才生效。Key 只保存在当前用户的 Windows 凭据管理器
-  （通用凭据 “Desk Sister: Anthropic”），不写入 config.json、日志、错误信息或界面；右键可清除。
+  （通用凭据 “Desk Sister: Anthropic”），不写入 config.json、日志、错误信息或界面；在「设置… → 调用方式」可清除。
 - 输入的 Key 先做格式检查（长度、只含字母数字和 - _），不合格不保存。
 - SDK 客户端显式传入 Key 与 base_url=https://api.anthropic.com，不读取任何 ANTHROPIC_* 环境变量，
   环境变量既不能替换 Key，也不能把 Key 发到其他主机。最多重试 1 次，超时与订阅模式相同。

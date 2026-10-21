@@ -200,14 +200,12 @@ def test_memory_is_saved_periodically_and_on_shutdown(pet, tmp_path):
     assert json.loads(path.read_text(encoding="utf-8"))["looks"][-1]["process"] == "Code.exe"
 
 
-def test_menu_switch_and_clear(pet, tmp_path):
+def test_switch_and_clear(pet, tmp_path):
     ctrl, _front, _jobs, now, memory = pet
     memory.record_look("Code.exe", "写代码")
-    labels = [a.text() for a in ctrl.tray.contextMenu().actions()]
-    assert "陪伴记忆" in labels
-    ctrl.memory_action.trigger()
+    ctrl.set_companion_memory(False)
     assert not ctrl.config.companion_memory and ctrl._memory_context() == ""
-    ctrl.memory_action.trigger()
+    ctrl.set_companion_memory(True)
     ctrl.clear_companion_memory()
     assert memory.looks == [] and "清空" in ctrl.window.full_text
     assert json.loads((tmp_path / "memory.json").read_text(encoding="utf-8"))["looks"] == []

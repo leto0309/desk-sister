@@ -219,15 +219,15 @@ def test_she_only_walks_when_nothing_else_is_going_on(pet):
     assert not ctrl._can_walk()
 
 
-def test_the_menu_and_the_settings_switch_walking(pet):
+def test_the_settings_switch_walking(pet):
     ctrl, saved = pet
     ctrl.set_walking(False)
-    assert not ctrl.config.walking and not ctrl.walking_action.isChecked() and not ctrl.walker.enabled
+    assert not ctrl.config.walking and not ctrl.walker.enabled
     ctrl.open_settings()
     window = ctrl.settings_window
     assert not window.walking_box.isChecked()
     window.walking_box.setChecked(True)
-    assert ctrl.config.walking and ctrl.walking_action.isChecked() and ctrl.walker.enabled and saved[-1] is True
+    assert ctrl.config.walking and ctrl.walker.enabled and saved[-1] is True
     window.close()
 
 

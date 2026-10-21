@@ -114,23 +114,24 @@ def test_chat_is_answered_without_a_picture_when_the_window_is_refused(setup):
     assert captured == [] and calls2 == [(False, "你好")]
 
 
-def test_menu_switches_mode_and_adds_or_removes_the_current_program(setup):
+def test_menu_adds_or_removes_the_current_program(setup):
     make, front, _captured, saved = setup
     ctrl, _calls = make()
     ctrl.last_external_hwnd = 1
     menu = ctrl.tray.contextMenu()
     menu.aboutToShow.emit()
-    assert ctrl.allowlist_action.text() == "把「Code.exe」加入白名单" and ctrl.allowlist_action.isEnabled()
-    ctrl.allowlist_action.trigger()
+    assert not ctrl.allowlist_action.isVisible()  # only in "only the allowlist" mode
+    ctrl.toggle_current_in_allowlist()
     assert ctrl.config.allowlist == ["Code.exe"] and saved[-1] == ["Code.exe"]
     assert "切到「只看白名单」后生效" in ctrl.window.full_text
-    assert ctrl.allowlist_action.text() == "从白名单移除「Code.exe」"
-    ctrl.watch_mode_actions["allowlist"].trigger()
-    assert ctrl.config.watch_mode == "allowlist" and ctrl.watch_mode_actions["allowlist"].isChecked()
-    assert not ctrl.watch_mode_actions["blocklist"].isChecked()
+    ctrl.set_watch_mode("allowlist")
+    assert ctrl.config.watch_mode == "allowlist" and ctrl.allowlist_action.isVisible()
+    menu.aboutToShow.emit()
+    assert ctrl.allowlist_action.text() == "从白名单移除「Code.exe」" and ctrl.allowlist_action.isEnabled()
     ctrl.allowlist_action.trigger()  # remove again
     assert ctrl.config.allowlist == []
-    ctrl.watch_mode_actions["allowlist"].trigger()
+    assert ctrl.allowlist_action.text() == "把「Code.exe」加入白名单"
+    ctrl.set_watch_mode("allowlist")
     assert "白名单还是空的" in ctrl.window.full_text
     ctrl.config.allowlist = ["code*"]
     menu.aboutToShow.emit()
@@ -138,8 +139,8 @@ def test_menu_switches_mode_and_adds_or_removes_the_current_program(setup):
     ctrl.last_external_hwnd = 0
     menu.aboutToShow.emit()
     assert not ctrl.allowlist_action.isEnabled()
-    ctrl.watch_mode_actions["blocklist"].trigger()
-    assert ctrl.config.watch_mode == "blocklist"
+    ctrl.set_watch_mode("blocklist")
+    assert ctrl.config.watch_mode == "blocklist" and not ctrl.allowlist_action.isVisible()
 
 
 

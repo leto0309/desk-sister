@@ -99,7 +99,6 @@ def test_rule_lists_are_edited_safely(pet):
     allow_entry.returnPressed.emit()
     window.allowlist_radio.setChecked(True)
     assert ctrl.config.allowlist == ["code.exe"] and ctrl.config.watch_mode == "allowlist"
-    assert ctrl.watch_mode_actions["allowlist"].isChecked()
 
 
 def test_scope_and_companion_numbers_are_clamped(pet):
@@ -114,9 +113,9 @@ def test_scope_and_companion_numbers_are_clamped(pet):
     window.sleep_spin.setValue(30)
     assert ctrl.config.sleep_after_sec == 1800
     window.self_talk_box.setChecked(False)
-    assert not ctrl.config.self_talk and not ctrl.self_talk_action.isChecked() and not window.talk_min.isEnabled()
+    assert not ctrl.config.self_talk and not window.talk_min.isEnabled()
     window.memory_box.setChecked(False)
-    assert not ctrl.config.companion_memory and not ctrl.memory_action.isChecked()
+    assert not ctrl.config.companion_memory
 
 
 def test_the_claude_code_link_still_asks_first(pet):
@@ -308,4 +307,14 @@ def test_invalid_text_put_back_by_qt_changes_nothing(pet, typed):
         QTest.keyClicks(spin.lineEdit(), typed)
     QTest.keyClick(spin.lineEdit(), Qt.Key.Key_Return)  # finish editing: Qt puts the old number back
     assert ctrl.config.self_talk_min_sec == 90
+
+
+def test_the_menu_keeps_only_what_is_wanted_at_hand(pet):
+    ctrl, _window, _vault, _saved = pet
+    labels = [a.text() for a in ctrl.tray.contextMenu().actions() if not a.isSeparator()]
+    assert labels[:4] == ["戳她一下（立即评论）", "和她说话…", "设置…", "暂停观察 (Ctrl+Alt+P)"] and labels[-1] == "退出"
+    for gone in ("观察范围", "Claude Code 联动", "陪伴记忆", "自言自语", "沿屏幕底部溜达", "评论间隔", "调用方式", "模型",
+                 "开机自启", "打开日志文件夹"):
+        assert not any(label.startswith(gone) for label in labels), gone
+    assert all(not a.menu() for a in ctrl.tray.contextMenu().actions())  # no submenus left
 

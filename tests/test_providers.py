@@ -290,7 +290,9 @@ def test_switching_to_a_paid_provider_names_the_company_and_wants_its_key(pet):
     ctrl.set_backend("deepseek")
     assert ctrl.config.backend == "deepseek" and "DeepSeek" in asked[-1] and "按用量收费" in asked[-1]
     assert "DeepSeek" in prompts[-1] and vault == {"Desk Sister: DeepSeek": FAKE_SK}
-    assert ctrl.model_actions["haiku"].text() == "快速省钱（deepseek-flash）"
+    ctrl.open_settings()
+    assert ctrl.settings_window.model_combo.itemText(0) == "快速省钱（deepseek-flash）"
+    ctrl.settings_window.close()
     ctrl.set_backend("gemini")  # another key, kept apart
     assert set(vault) == {"Desk Sister: DeepSeek", "Desk Sister: Gemini"}
     ctrl.clear_api_key("deepseek")

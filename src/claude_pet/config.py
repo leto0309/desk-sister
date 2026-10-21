@@ -11,6 +11,7 @@ from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .providers import BACKENDS, clean_custom_models  # every way she can think
 
+BLINK_CHOICES = ("off", "few", "normal", "often")
 INTERVAL_CHOICES = (30, 60, 90, 120, 300, 600)
 MODEL_CHOICES = ("haiku", "sonnet")  # tiers: fast and cheap / smarter (each provider maps them to its models)
 WATCH_MODES = ("blocklist", "allowlist")
@@ -61,6 +62,9 @@ class Config:
     timeout_sec: int = 120
     sprite_height: int = 220
     walking: bool = True  # strolls along the bottom of the screen now and then
+    blink: str = "normal"  # off | few | normal | often
+    talk_mouth: bool = True  # her mouth moves while her words appear
+    head_motion: bool = False  # off unless chosen: a nod as she starts to talk, a tilt now and then, a duck when patted
     bedtime_reminder: str = "nightly"  # off | nightly | every_2h (see bedtime.py)
     night_start_hour: int = 23
     bedtime_reminded_at: float = 0.0  # wall-clock time of the last reminder, shared by comments and self-talk
@@ -101,6 +105,12 @@ class Config:
         self.timeout_sec = min(max(int(self.timeout_sec), 20), 600)
         self.sprite_height = min(max(int(self.sprite_height), 100), 600)
         self.walking = bool(self.walking)
+        if self.blink not in BLINK_CHOICES:
+            self.blink = "normal"
+        if not isinstance(self.head_motion, bool):
+            self.head_motion = False
+        if not isinstance(self.talk_mouth, bool):  # null, 0, ""... are not a choice: back to the default
+            self.talk_mouth = True
         if self.bedtime_reminder not in BEDTIME_MODES:
             self.bedtime_reminder = "nightly"
         if self.night_start_hour not in NIGHT_STARTS:

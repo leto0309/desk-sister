@@ -332,3 +332,82 @@ def test_embedding_refuses_an_incomplete_set_of_parts(tmp_path):
     shutil.rmtree(sprites / "parts")
     assert module.main(sprites, output) == 1 and output.read_text(encoding="utf-8") == "OLD = 1"
 
+
+@pytest.mark.parametrize(("rate", "low", "high"), [("few", 6.0, 12.0), ("normal", 3.0, 7.0), ("often", 1.5, 4.0)])
+def test_blink_rates(window, rate, low, high):
+    window.set_blink(rate)
+    start = window.clock()
+    assert start + low <= window._blink_at <= start + high
+    window.mood = "idle"
+    over = window._blink_at + 0.3
+    window._blink(over)  # one blink over: the next one at this rate
+    assert over + low <= window._blink_at <= over + high
+
+
+def test_blinking_can_be_switched_off_at_once(window):
+    window.mood = "idle"
+    window._blink(window._blink_at + 0.1)
+    assert window.eyes == "eyes_closed"
+    window.set_blink("off")
+    assert window.eyes is None
+    window._blink(window._blink_at + 0.1)
+    assert window.eyes is None and len(window._layers()) == 1
+
+
+def test_the_talking_mouth_can_be_switched_off_at_once(window):
+    window.say("talk", "主人今天辛苦啦")
+    window.clock.now += 0.2
+    window._type_next()
+    window._type_next()
+    assert window.mouth is not None
+    window.set_talk_mouth(False)
+    assert window.mouth is None
+    window.clock.now += 0.2
+    window._type_next()
+    assert window.mouth is None
+
+
+def test_face_settings_are_kept_and_broken_values_fall_back(tmp_path):
+    from claude_pet.config import Config, load_config
+
+    assert (Config().blink, Config().talk_mouth) == ("normal", True)
+    path = tmp_path / "config.json"
+    path.write_text('{"blink": "often", "talk_mouth": false}', encoding="utf-8")
+    assert (load_config(path).blink, load_config(path).talk_mouth) == ("often", False)
+    path.write_text('{"blink": "always", "interval_sec": 120}', encoding="utf-8")
+    config = load_config(path)
+    assert config.blink == "normal" and config.interval_sec == 120
+
+
+
+def test_the_settings_page_sets_blinking_and_the_talking_mouth(app, tmp_path, monkeypatch):
+    from claude_pet import claude_client
+    from claude_pet import controller as controller_module
+    from claude_pet.config import Config
+
+    monkeypatch.setattr(claude_client, "find_claude", lambda _configured="": "claude.exe")
+    saved = []
+    monkeypatch.setattr(controller_module, "save_config", lambda config, *_a, **_k: saved.append((config.blink, config.talk_mouth)))
+    ctrl = controller_module.PetController(app, Config(blink="few", talk_mouth=False), ASSETS, tmp_path / "config.json")
+    assert ctrl.window.blink_every == (6.0, 12.0) and ctrl.window.talk_mouth is False  # the saved choice at start
+    ctrl.open_settings()
+    page = ctrl.settings_window
+    assert page.blink_combo.currentData() == "few" and not page.mouth_box.isChecked()
+    page.blink_combo.setCurrentIndex(page.blink_combo.findData("off"))
+    page.mouth_box.setChecked(True)
+    assert (ctrl.config.blink, ctrl.config.talk_mouth) == ("off", True) and saved[-1] == ("off", True)
+    assert ctrl.window.blink_every is None and ctrl.window.talk_mouth is True
+    ctrl.set_blink("sometimes")  # unknown: ignored
+    assert ctrl.config.blink == "off"
+    page.close()
+
+
+@pytest.mark.parametrize("value", ["null", "0", "1", '""', "[]", "{}", '"false"'])
+def test_a_broken_talk_mouth_value_means_the_default(tmp_path, value):
+    from claude_pet.config import load_config
+
+    path = tmp_path / "config.json"
+    path.write_text('{"talk_mouth": %s, "interval_sec": 120}' % value, encoding="utf-8")
+    config = load_config(path)
+    assert config.talk_mouth is True and config.interval_sec == 120
+

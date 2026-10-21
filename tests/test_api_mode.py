@@ -213,7 +213,7 @@ def test_switching_to_api_asks_first_and_wants_a_key(pet):
     ctrl, vault, asked = pet
     ctrl._confirm = lambda title, text: asked.append(text) or False
     ctrl.set_backend("api")
-    assert ctrl.config.backend == "subscription" and ctrl.backend_actions["subscription"].isChecked()
+    assert ctrl.config.backend == "subscription"
     assert "按用量收费" in asked[0] and "凭据管理器" in asked[0]
     ctrl._confirm = lambda title, text: True
     ctrl._ask_secret = lambda title, label: ("", False)  # the user cancels the key dialog
@@ -221,7 +221,7 @@ def test_switching_to_api_asks_first_and_wants_a_key(pet):
     assert ctrl.config.backend == "subscription" and not vault
     ctrl._ask_secret = lambda title, label: (f"  {FAKE_KEY}  ", True)
     ctrl.set_backend("api")
-    assert ctrl.config.backend == "api" and vault[ANTHROPIC_ENTRY] == FAKE_KEY and ctrl.backend_actions["api"].isChecked()
+    assert ctrl.config.backend == "api" and vault[ANTHROPIC_ENTRY] == FAKE_KEY
     ctrl.set_backend("subscription")
     assert ctrl.config.backend == "subscription" and vault[ANTHROPIC_ENTRY] == FAKE_KEY  # the key stays saved
 

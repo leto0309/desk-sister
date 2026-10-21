@@ -11,6 +11,7 @@ from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import QWidget
 
+from . import head
 from .persona import MOODS
 
 log = logging.getLogger("claude_pet")
@@ -118,7 +119,8 @@ def load_parts(folder: Path, height: int) -> dict[str, QPixmap]:
 
 from .sprites import IDLE_PARTS, MOOD_PARTS, PARTS, TALK_EYES  # noqa: E402,F401  (shared with devtools)
 FACE_MOODS = ("idle", "talk", *MOOD_PARTS)  # the sprites that have face parts
-BLINK_EVERY = (3.0, 7.0)  # seconds between blinks
+BLINK_EVERY = (3.0, 7.0)  # seconds between blinks, normally
+BLINK_RATES = {"off": None, "few": (6.0, 12.0), "normal": BLINK_EVERY, "often": (1.5, 4.0)}
 BLINK = ((0.07, "eyes_half"), (0.16, "eyes_closed"), (0.23, "eyes_half"))  # until this many seconds: this part
 MOUTH_CYCLE = ("mouth_half", "mouth_open", "mouth_half", None)  # None: her mouth at rest
 MOUTH_SET = ("mouth_half", "mouth_open")  # every shape the talking cycle uses
@@ -177,6 +179,12 @@ class PetWindow(QWidget):
         self._turns: list[float] = []  # when the rubbing changed direction
         self.setMouseTracking(True)  # hover moves too, for the head pat
         self._mirrored: dict[str, QPixmap] = {}
+        self.blink_every: tuple[float, float] | None = BLINK_EVERY
+        self.talk_mouth = True
+        self.head_motion = False  # off until the settings switch it on
+        self._head: tuple[str, float, int] | None = None  # (movement, started, direction) while one plays
+        self._next_tilt = self.clock() + self._rng.uniform(*head.TILT_EVERY)
+        self._head_mask: QImage | None = None
         self._blink_at = self.clock() + self._rng.uniform(*BLINK_EVERY)
         sprite_width = max(p.width() for p in self.sprites.values())
         self.bubble_area = 150
@@ -199,6 +207,7 @@ class PetWindow(QWidget):
         self.sprites = load_sprites(self.sprite_folder, height)
         self.parts = load_parts(self.sprite_folder, height)
         self._mirrored = {}
+        self._head, self._head_mask = None, None  # a new size: a new mask, no movement
         sprite_width = max(p.width() for p in self.sprites.values())
         self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + height + 8)
         place = QPoint(round(centre - self.width() / 2), old.y() + old.height() - self.height())
@@ -209,6 +218,8 @@ class PetWindow(QWidget):
     # ---- state -------------------------------------------------------
     def set_walking(self, direction: int) -> None:
         self.walking = direction
+        if direction:
+            self._head = None  # walking hops already: a head movement under way ends here
         self.update()
 
     @property
@@ -267,6 +278,7 @@ class PetWindow(QWidget):
         self._paused_mouth = False
         self._typer.start()
         self._hide_bubble.start(hold_ms if hold_ms is not None else 6000 + 180 * len(text))
+        self.start_head("nod")  # a little nod as she starts to talk
 
     def clear_bubble(self) -> None:
         self._typer.stop()
@@ -293,9 +305,64 @@ class PetWindow(QWidget):
         self.mouth = self._mouth_now()
         self.update()
 
+    def set_blink(self, rate: str) -> None:
+        """How often she blinks: off, few, normal or often (the settings window)."""
+        self.blink_every = BLINK_RATES.get(rate, BLINK_EVERY)
+        self.eyes = None  # an eye half way through a blink opens again at once
+        if self.blink_every:
+            self._blink_at = self.clock() + self._rng.uniform(*self.blink_every)
+        self.update()
+
+    def set_head_motion(self, enabled: bool) -> None:
+        self.head_motion = bool(enabled)
+        if not self.head_motion:
+            self._head = None
+        self.update()
+
+    def start_head(self, kind: str) -> None:
+        """Nod, tilt or duck, unless she is walking (hopping already), asleep or held."""
+        if self._head_still():
+            return
+        self._head = (kind, self.clock(), self._rng.choice((-1, 1)))
+        self.update()
+
+    def _head_still(self) -> bool:
+        """Whatever she is doing now rules a head movement out (it may have started before)."""
+        return not self.head_motion or self.walking or self.mood == "sleep" or self._press_pos is not None
+
+    def head_pose(self) -> tuple[float, float, float] | None:
+        if self._head is not None and self._head_still():
+            self._head = None  # stopped for good: it does not come back when she is free again
+        if self._head is None:
+            return None
+        kind, started, sign = self._head
+        return head.pose(kind, self.clock() - started, self.sprite_height, sign)
+
+    def _mask(self) -> QImage:
+        size = self.sprites[self.mood].size()
+        if self._head_mask is None or self._head_mask.size() != size:  # one sprite may be wider than another
+            self._head_mask = head.head_mask(size.width(), size.height())
+        return self._head_mask
+
+    def _move_head(self, now: float) -> None:
+        if self._head is not None and self.head_pose() is None:
+            self._head = None  # that movement is over, or she fell asleep, was picked up...
+        if now < self._next_tilt:
+            return
+        self._next_tilt = now + self._rng.uniform(*head.TILT_EVERY)
+        if self._head is None and not self.full_text and self.mood in ("idle", "talk", "happy", "think"):
+            self.start_head("tilt")  # now and then, while she has nothing to say
+
+    def set_talk_mouth(self, enabled: bool) -> None:
+        self.talk_mouth = bool(enabled)
+        if not self.talk_mouth:
+            self.mouth = None
+        self.update()
+
     def _mouth_now(self) -> str | None:
         """While the words appear her mouth moves; at a pause and once done it rests as drawn."""
-        if self.mood not in FACE_MOODS or not self._typer.isActive() or not self.shown_chars:
+        if (not self.talk_mouth or self.mood not in FACE_MOODS or not self._typer.isActive()
+                or not self.shown_chars):
             return None
         rest = "mouth_closed" if self.mood == "talk" else None
         recent = self.full_text[max(0, self.shown_chars - PAUSE_HOLD):self.shown_chars]
@@ -309,7 +376,7 @@ class PetWindow(QWidget):
         return MOUTH_CYCLE[frame % len(MOUTH_CYCLE)] or rest
 
     def _blink(self, now: float) -> None:
-        if self.mood not in FACE_MOODS:
+        if self.mood not in FACE_MOODS or not self.blink_every:
             self.eyes = None
             return
         elapsed = now - self._blink_at
@@ -320,11 +387,12 @@ class PetWindow(QWidget):
             if elapsed < until:
                 self.eyes = part
                 return
-        self._blink_at = now + self._rng.uniform(*BLINK_EVERY)  # this blink is over: the next one
+        self._blink_at = now + self._rng.uniform(*self.blink_every)  # this blink is over: the next one
 
     def _animate(self) -> None:
         self._phase = (self._phase + 0.12) % (2 * math.pi)
         self._blink(self.clock())
+        self._move_head(self.clock())
         self.update()
 
     # ---- painting ----------------------------------------------------
@@ -358,8 +426,13 @@ class PetWindow(QWidget):
         else:
             bob = 0 if self.mood == "sleep" else round(2 * math.sin(self._phase))
             y = self.height() - sprite.height() - 4 + bob
-            for layer in layers:
-                p.drawPixmap(x, y, layer)
+            moved = self.head_pose()
+            if moved is None:
+                for layer in layers:
+                    p.drawPixmap(x, y, layer)
+            else:  # the head turns on its own: put the frame together off screen first
+                frame = head.compose(layers, self._mask(), head.transform(sprite.width(), sprite.height(), *moved))
+                p.drawImage(x, y, frame)
         if self.full_text:
             self._paint_bubble(p, self.full_text, self.visible_text)
         if self.status:
@@ -454,6 +527,7 @@ class PetWindow(QWidget):
         self._rub = (pos.x(), step, turned_at)
         if len(self._turns) >= PAT_TURNS:
             self._turns = []
+            self.start_head("duck")
             self.patted.emit()
 
     def leaveEvent(self, _event) -> None:

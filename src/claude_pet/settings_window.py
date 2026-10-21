@@ -1,7 +1,7 @@
 """The settings window: an elegant Baroque frame in Claude 娘's orange and white, with gold ornaments.
 
-Every control applies at once through the controller's own setters (the same ones the menu uses), and
-`refresh()` reads everything back from the config, so the window and the menu never disagree.
+Every control applies at once through the controller's own setters (the same ones the menu and the hotkey
+use), and `refresh()` reads everything back from the config, so the window and the pet never disagree.
 """
 from __future__ import annotations
 
@@ -20,11 +20,14 @@ from . import __version__
 from .bedtime import MODE_LABELS as BEDTIME_LABELS
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
-from .config import INTERVAL_CHOICES, MODEL_CHOICES
+from .config import BLINK_CHOICES, INTERVAL_CHOICES, MODEL_CHOICES
 from .providers import CLAUDE_CLI, CODEX_CLI, PROVIDERS, model_label
 
 if TYPE_CHECKING:
     from .controller import PetController
+
+LINK_LABEL = "Claude Code 联动（会先征得同意，再修改 ~/.claude/settings.json）"
+BLINK_LABELS = {"off": "关闭", "few": "少", "normal": "正常", "often": "多"}
 
 # Claude 娘: orange hair, white dress; Baroque: ivory, cream and gold.
 IVORY = "#FFF9F1"
@@ -457,7 +460,7 @@ class SettingsWindow(QDialog):
         forget = QPushButton("清空陪伴记忆")
         forget.setObjectName("quiet")
         forget.clicked.connect(lambda: self._apply(self.ctrl.clear_companion_memory))
-        self.link_box = QCheckBox("Claude Code 联动（会先征得同意，再修改 ~/.claude/settings.json）")
+        self.link_box = QCheckBox(LINK_LABEL)
         self.link_box.toggled.connect(lambda on: self._apply(lambda: on != self.ctrl.config.claude_link and self.ctrl.set_claude_link(on)))
         sleep = QHBoxLayout()
         self.sleep_spin = QSpinBox()
@@ -514,6 +517,24 @@ class SettingsWindow(QDialog):
         size.addWidget(self.size_value)
         layout.addLayout(size)
         layout.addWidget(_hint("调整后立即生效，她的脚站在原来的位置。也可以把鼠标放在她身上，按住 Ctrl 滚动滚轮来调。"))
+        face = QHBoxLayout()
+        self.blink_combo = QComboBox()
+        for rate in BLINK_CHOICES:
+            self.blink_combo.addItem(BLINK_LABELS[rate], rate)
+        self.blink_combo.currentIndexChanged.connect(
+            lambda _i: self._apply(lambda: self.ctrl.set_blink(self.blink_combo.currentData())))
+        self.mouth_box = QCheckBox("说话时动嘴")
+        self.mouth_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_talk_mouth(on)))
+        face.addWidget(QLabel("眨眼"))
+        face.addWidget(self.blink_combo)
+        face.addSpacing(16)
+        face.addWidget(self.mouth_box)
+        self.head_box = QCheckBox("头部小动作")
+        self.head_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_head_motion(on)))
+        face.addSpacing(16)
+        face.addWidget(self.head_box)
+        face.addStretch(1)
+        layout.addLayout(face)
         self.walking_box = QCheckBox("沿屏幕底部溜达")
         self.walking_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_walking(on)))
         layout.addWidget(self.walking_box)
@@ -595,10 +616,9 @@ class SettingsWindow(QDialog):
             for index in range(self.model_combo.count()):
                 self.model_combo.setItemText(index, model_label(provider, self.model_combo.itemData(index)))
             self.model_combo.setCurrentIndex(max(0, self.model_combo.findData(cfg.model)))
-            action = self.ctrl.autostart_action
-            self.autostart_box.setChecked(action.isChecked())
-            self.autostart_box.setEnabled(action.isEnabled())
-            self.autostart_box.setText(action.text())
+            self.autostart_box.setChecked(self.ctrl.autostart_on)
+            self.autostart_box.setEnabled(self.ctrl.autostart_enabled)
+            self.autostart_box.setText(self.ctrl.autostart_text)
             self.backend_radios.get(cfg.backend, self.backend_radios["subscription"]).setChecked(True)
             self.backend_note.setText(self._backend_note(provider))
             if provider.needs_key:
@@ -630,10 +650,14 @@ class SettingsWindow(QDialog):
                 spin.setEnabled(cfg.self_talk)
             self.memory_box.setChecked(cfg.companion_memory)
             self.link_box.setChecked(cfg.claude_link)
+            self.link_box.setText(LINK_LABEL + ("（hook 未找到或 settings.json 异常）" if self.ctrl.claude_link_broken() else ""))
             self.bedtime_combo.setCurrentIndex(max(0, self.bedtime_combo.findData(cfg.bedtime_reminder)))
             self.night_combo.setCurrentIndex(max(0, self.night_combo.findData(cfg.night_start_hour)))
             self._show_value(self.sleep_spin, max(1, round(cfg.sleep_after_sec / 60)))
             self.walking_box.setChecked(cfg.walking)
+            self.blink_combo.setCurrentIndex(max(0, self.blink_combo.findData(cfg.blink)))
+            self.mouth_box.setChecked(cfg.talk_mouth)
+            self.head_box.setChecked(cfg.head_motion)
             if not self.size_slider.isSliderDown():  # a drag in progress is the user's, not the config's
                 self.size_slider.setValue(cfg.sprite_height)
                 self.size_value.setText(f"{cfg.sprite_height} 像素")

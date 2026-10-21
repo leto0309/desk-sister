@@ -292,11 +292,9 @@ def test_enabling_asks_first_installs_hooks_and_starts_listening(pet):
     assert asked and "会话编号" in asked[0] and "不会被保存" in asked[0] and str(ctrl.claude_settings) in asked[0]
     assert ctrl.config.claude_link and is_installed(ctrl.claude_settings) and events.parent.is_dir()
     assert "联动开启" in ctrl.window.full_text
-    ctrl.tray.contextMenu().aboutToShow.emit()
-    assert ctrl.claude_link_action.isChecked()
+    assert not ctrl.claude_link_broken()
     ctrl.set_claude_link(False)
     assert not ctrl.config.claude_link and not is_installed(ctrl.claude_settings)
-    assert not ctrl.claude_link_action.isChecked()
 
 
 def test_declining_or_a_broken_settings_file_changes_nothing(pet):
@@ -309,7 +307,7 @@ def test_declining_or_a_broken_settings_file_changes_nothing(pet):
     ctrl.claude_settings.write_text("{oops", encoding="utf-8")
     ctrl.set_claude_link(True)
     assert not ctrl.config.claude_link and ctrl.claude_settings.read_text(encoding="utf-8") == "{oops"
-    assert "没能开启联动" in ctrl.window.full_text and not ctrl.claude_link_action.isChecked()
+    assert "没能开启联动" in ctrl.window.full_text
 
 
 def test_events_become_status_and_notices(pet):
@@ -723,13 +721,15 @@ def test_an_unreadable_backup_after_a_successful_swap_is_reported_truthfully(tmp
 
 
 
-def test_the_menu_can_always_switch_listening_off(pet):
+def test_the_settings_can_always_switch_listening_off(pet):
     ctrl, _asked, _events, _now, _machine = pet
     ctrl.set_claude_link(True)
     ctrl.claude_settings.write_text("{broken", encoding="utf-8")
-    ctrl.tray.contextMenu().aboutToShow.emit()
-    assert ctrl.claude_link_action.isChecked() and "异常" in ctrl.claude_link_action.text()
-    ctrl.claude_link_action.trigger()  # unchecking it switches listening off
+    ctrl.open_settings()
+    box = ctrl.settings_window.link_box
+    assert ctrl.claude_link_broken() and box.isChecked() and "异常" in box.text()
+    box.setChecked(False)  # unchecking it switches listening off
+    ctrl.settings_window.close()
     assert not ctrl.config.claude_link and ctrl.claude_tail is None
 
 
@@ -789,7 +789,6 @@ def test_no_event_folder_means_no_enabling(pet):
     ctrl.set_claude_link(True)
     assert not ctrl.config.claude_link and ctrl.claude_tail is None
     assert not ctrl.claude_settings.exists() and "没能开启" in ctrl.window.full_text
-    assert not ctrl.claude_link_action.isChecked()
 
 
 def test_a_running_automatic_look_never_covers_a_notice(pet):

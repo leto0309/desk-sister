@@ -14,7 +14,7 @@ from functools import partial
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPoint, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QIcon
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
 from . import agent_link, api_client, bedtime, capture, claude_client, codex_client, credstore, openai_client, persona, providers
@@ -23,7 +23,7 @@ from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
 from .autostart import Autostart, AutostartError
 from .memory import CompanionMemory, classify_activity
-from .config import INTERVAL_CHOICES, MODEL_CHOICES, Config, app_data_dir, save_config
+from .config import BLINK_CHOICES, Config, app_data_dir, save_config
 from .pet_window import PetWindow
 from .walker import Walker
 
@@ -99,7 +99,7 @@ def error_summary(result: claude_client.ClaudeResult, timeout_sec: int) -> str:
     if result.not_subscription:
         return f"不是订阅登录：{result.error}"[:ERROR_MAX]
     if result.no_api_key:
-        return "还没有设置 API Key（右键「调用方式」）"
+        return "还没有设置 API Key（设置里的「调用方式」页）"
     lines = [line.strip() for line in (result.error or "").splitlines() if line.strip()]
     text = lines[0] if lines else "未知错误"
     return text if len(text) <= ERROR_MAX else text[: ERROR_MAX - 1] + "…"
@@ -210,6 +210,9 @@ class PetController(QObject):
         self.config = config
         self.config_file = config_file
         self.window = PetWindow(sprite_folder, config.sprite_height)
+        self.window.set_blink(config.blink)
+        self.window.set_talk_mouth(config.talk_mouth)
+        self.window.set_head_motion(config.head_motion)
         self.recent: deque[str] = deque(maxlen=6)
         self.busy = False
         self.asleep = False
@@ -574,11 +577,9 @@ class PetController(QObject):
                                       QMessageBox.StandardButton.No)
         return answer == QMessageBox.StandardButton.Yes
 
-    def _refresh_claude_link_action(self) -> None:
-        # Checked = the pet is listening, so it can always be switched off from here.
-        self.claude_link_action.setChecked(self.config.claude_link)
-        broken = self.config.claude_link and not agent_link.is_installed(self.claude_settings)
-        self.claude_link_action.setText("Claude Code 联动" + ("（hook 未找到或 settings.json 异常）" if broken else ""))
+    def claude_link_broken(self) -> bool:
+        """Switched on, but the hooks are gone or settings.json cannot be read (shown in the settings window)."""
+        return self.config.claude_link and not agent_link.is_installed(self.claude_settings)
 
     def set_claude_link(self, enabled: bool) -> None:
         if enabled:
@@ -588,26 +589,22 @@ class PetController(QObject):
                     "（例如“在改文件”“等你批准”）；你的提示词、代码和命令内容不会被保存。"
                     "\n\n关闭联动时，只移除这些 hook。")
             if not self._confirm("Claude Code 联动", text):
-                self.claude_link_action.setChecked(False)
                 return
             try:
                 self._claude_event_file()  # first, so a failure leaves settings.json untouched
             except OSError as exc:
                 log.warning("could not prepare the Claude Code event file: %s", exc)
-                self.claude_link_action.setChecked(False)
                 self.window.say("sad", f"没能开启联动：事件文件写不进去（{exc}）")
                 return
             try:
                 backup = agent_link.install_hooks(self.claude_settings)
             except (agent_link.HooksError, OSError) as exc:
                 log.warning("could not install Claude Code hooks: %s", exc)
-                self.claude_link_action.setChecked(False)
                 self.window.say("sad", f"没能开启联动：{exc}")
                 return
             self.config.claude_link = True
             self._open_claude_tail()
             self._save()
-            self.claude_link_action.setChecked(True)
             saved = f"原来的设置备份在 {backup.name}。" if backup else ""
             self.window.say("happy", f"联动开启啦！Claude Code 妹妹在忙什么我都会知道～{saved}（已经开着的会话可能要重开才生效）")
             return
@@ -617,7 +614,6 @@ class PetController(QObject):
         self.pending_notices.clear()
         self.awake_until = 0.0
         self._save()
-        self.claude_link_action.setChecked(False)
         try:
             agent_link.uninstall_hooks(self.claude_settings)
         except (agent_link.HooksError, OSError) as exc:
@@ -669,7 +665,6 @@ class PetController(QObject):
         if not enabled:
             self._cancel_inflight()  # a request carrying the memory summary must not go out after this
         self.config.companion_memory = bool(enabled)
-        self.memory_action.setChecked(self.config.companion_memory)
         self._save()
 
     def clear_companion_memory(self) -> None:
@@ -914,6 +909,7 @@ class PetController(QObject):
 
     # ---- menus -------------------------------------------------------
     def _build_menu(self) -> QMenu:
+        """Only what is wanted at hand; everything else lives in the settings window."""
         menu = QMenu()
         menu.addAction("戳她一下（立即评论）", self.poke)
         menu.addAction("和她说话…", self.chat)
@@ -921,81 +917,17 @@ class PetController(QObject):
         self.pause_action = QAction("暂停观察 (Ctrl+Alt+P)", menu, checkable=True, checked=self.config.paused)
         self.pause_action.triggered.connect(lambda _checked: self.toggle_pause())
         menu.addAction(self.pause_action)
-        scope_menu = menu.addMenu("观察范围")
-        scope_group = QActionGroup(scope_menu)
-        self.watch_mode_actions = {}
-        for mode, label in (("blocklist", "除黑名单外都看"), ("allowlist", "只看白名单")):
-            action = QAction(label, scope_menu, checkable=True, checked=self.config.watch_mode == mode)
-            action.triggered.connect(partial(self.set_watch_mode, mode))
-            scope_group.addAction(action)
-            scope_menu.addAction(action)
-            self.watch_mode_actions[mode] = action
-        scope_menu.addSeparator()
-        self.allowlist_action = QAction("把当前程序加入白名单", scope_menu)
+        # About the window in front right now, so it stays here (shown in "only the allowlist" mode).
+        self.allowlist_action = QAction("把当前程序加入白名单", menu)
         self.allowlist_action.triggered.connect(self.toggle_current_in_allowlist)
-        scope_menu.addAction(self.allowlist_action)
+        menu.addAction(self.allowlist_action)
         menu.aboutToShow.connect(self._refresh_allowlist_action)
         self._refresh_allowlist_action()
-        self.claude_link_action = QAction("Claude Code 联动", menu, checkable=True, checked=self.config.claude_link)
-        self.claude_link_action.triggered.connect(self.set_claude_link)
-        menu.addAction(self.claude_link_action)
-        menu.aboutToShow.connect(self._refresh_claude_link_action)
-        memory_menu = menu.addMenu("陪伴记忆")
-        self.memory_action = QAction("记住主人在做什么", memory_menu, checkable=True, checked=self.config.companion_memory)
-        self.memory_action.triggered.connect(self.set_companion_memory)
-        memory_menu.addAction(self.memory_action)
-        memory_menu.addAction("清空陪伴记忆", self.clear_companion_memory)
-        self.self_talk_action = QAction("自言自语", menu, checkable=True, checked=self.config.self_talk)
-        self.self_talk_action.triggered.connect(self.set_self_talk)
-        menu.addAction(self.self_talk_action)
-        self.walking_action = QAction("沿屏幕底部溜达", menu, checkable=True, checked=self.config.walking)
-        self.walking_action.triggered.connect(self.set_walking)
-        menu.addAction(self.walking_action)
-
-        interval_menu = menu.addMenu("评论间隔")
-        group = QActionGroup(interval_menu)
-        for seconds in INTERVAL_CHOICES:
-            action = QAction(INTERVAL_LABELS[seconds], interval_menu, checkable=True, checked=seconds == self.config.interval_sec)
-            action.triggered.connect(partial(self.set_interval, seconds))
-            group.addAction(action)
-            interval_menu.addAction(action)
-
-        backend_menu = menu.addMenu("调用方式")
-        backend_group = QActionGroup(backend_menu)
-        self.backend_actions: dict[str, QAction] = {}
-        for backend, provider in PROVIDERS.items():
-            label = provider.label + ("（按量付费）" if provider.paid else "")
-            action = QAction(label, backend_menu, checkable=True, checked=backend == self.config.backend)
-            action.triggered.connect(partial(self.set_backend, backend))
-            backend_group.addAction(action)
-            backend_menu.addAction(action)
-            self.backend_actions[backend] = action
-        backend_menu.addSeparator()
-        backend_menu.addAction("设置 API Key…", self.set_api_key)
-        backend_menu.addAction("清除已保存的 API Key", self.clear_api_key)
-
-        model_menu = menu.addMenu("模型")
-        model_group = QActionGroup(model_menu)
-        self.model_actions: dict[str, QAction] = {}
-        for model in MODEL_CHOICES:  # labelled with the current provider's models
-            label = providers.model_label(self._provider(), model)
-            action = QAction(label, model_menu, checkable=True, checked=model == self.config.model)
-            action.triggered.connect(partial(self.set_model, model))
-            model_group.addAction(action)
-            model_menu.addAction(action)
-            self.model_actions[model] = action
-
-        self.autostart_action = QAction(AUTOSTART_LABEL, menu, checkable=True)
-        self.autostart_action.setEnabled(False)  # until the first (background) state read finishes
-        self.autostart_action.triggered.connect(self.set_autostart)
-        menu.addAction(self.autostart_action)
-        # Re-read every time the menu opens: the user may have changed it in Task Manager meanwhile.
-        menu.aboutToShow.connect(self._refresh_autostart)
-        self._refresh_autostart()
-
-        menu.addAction("打开日志文件夹", self.open_log_folder)
         menu.addSeparator()
         menu.addAction("退出", self.request_quit)
+        # The autostart switch is in the settings window; its state is read in the background.
+        self.autostart_on, self.autostart_enabled, self.autostart_text = False, False, AUTOSTART_LABEL
+        self._refresh_autostart()
         return menu
 
     @staticmethod
@@ -1028,10 +960,9 @@ class PetController(QObject):
         if self.autostart_busy:
             return
         foreign = state == AUTOSTART_FOREIGN
-        self.autostart_action.setChecked(state == AUTOSTART_ON)
-        self.autostart_action.setEnabled(not foreign)
-        self.autostart_action.setText(AUTOSTART_LABEL + ("（同名快捷方式属于其他程序）" if foreign else ""))
-        self._sync_settings()  # last: the window copies checked, enabled and the text
+        self.autostart_on, self.autostart_enabled = state == AUTOSTART_ON, not foreign
+        self.autostart_text = AUTOSTART_LABEL + ("（同名快捷方式属于其他程序）" if foreign else "")
+        self._sync_settings()  # last: the window copies on, enabled and the text
 
     def set_autostart(self, enabled: bool) -> None:
         if self.autostart is None or self.autostart_busy:
@@ -1039,7 +970,7 @@ class PetController(QObject):
         self.autostart_busy = True
         self.autostart_version += 1
         self.autostart_reading = False  # any read in flight is now stale
-        self.autostart_action.setEnabled(False)
+        self.autostart_enabled = False
         autostart = self.autostart
 
         def work() -> None:
@@ -1059,7 +990,7 @@ class PetController(QObject):
 
     def _on_autostart_done(self, ok: bool, message: str) -> None:
         self.autostart_busy = False
-        self.autostart_action.setEnabled(True)
+        self.autostart_enabled = True
         self._sync_settings()
         self.window.say("happy" if ok else "sad", message)
         if self.quit_pending:
@@ -1110,10 +1041,10 @@ class PetController(QObject):
         if mode != self.config.watch_mode:
             self._cancel_inflight()  # a job started under the old scope must not upload anything
         self.config.watch_mode = mode
-        self.watch_mode_actions[mode].setChecked(True)
+        self._refresh_allowlist_action()
         self._save()
         if mode == "allowlist" and not self.config.allowlist:
-            self.window.say("think", "白名单还是空的哦～右键「观察范围」，把想让我看的程序加进来吧。")
+            self.window.say("think", "白名单还是空的哦～打开想让我看的程序，右键选「把它加入白名单」，或在设置的「观察范围」页添加吧。")
         elif mode == "allowlist":
             self.window.say("happy", f"好的，以后我只看白名单里的 {len(self.config.allowlist)} 项～")
         else:
@@ -1140,6 +1071,7 @@ class PetController(QObject):
         return [rule for rule in self.config.allowlist if rule.casefold() in forms]
 
     def _refresh_allowlist_action(self) -> None:
+        self.allowlist_action.setVisible(self.config.watch_mode == "allowlist")
         name = self._current_program()
         listed = bool(self._exact_rules(name)) if name else False
         if not name:
@@ -1178,9 +1110,24 @@ class PetController(QObject):
         self._save()
         self._refresh_allowlist_action()
 
+    def set_blink(self, rate: str) -> None:
+        if rate in BLINK_CHOICES:
+            self.config.blink = rate
+            self.window.set_blink(rate)
+            self._save()
+
+    def set_head_motion(self, enabled: bool) -> None:
+        self.config.head_motion = bool(enabled)
+        self.window.set_head_motion(self.config.head_motion)
+        self._save()
+
+    def set_talk_mouth(self, enabled: bool) -> None:
+        self.config.talk_mouth = bool(enabled)
+        self.window.set_talk_mouth(self.config.talk_mouth)
+        self._save()
+
     def set_walking(self, enabled: bool) -> None:
         self.config.walking = bool(enabled)
-        self.walking_action.setChecked(self.config.walking)
         self.walker.set_enabled(self.config.walking)
         self._save()
         if self.config.walking and not self.walker.on_floor() and not self.walker.falling:
@@ -1255,7 +1202,6 @@ class PetController(QObject):
 
     def set_self_talk(self, enabled: bool) -> None:
         self.config.self_talk = bool(enabled)
-        self.self_talk_action.setChecked(self.config.self_talk)
         self._schedule_self_talk()
         self._save()
 
@@ -1308,13 +1254,6 @@ class PetController(QObject):
     def _provider(self, provider_id: str | None = None) -> providers.Provider:
         return PROVIDERS.get(provider_id or self.config.backend, PROVIDERS["subscription"])
 
-    def _sync_backend_actions(self) -> None:
-        for backend, action in self.backend_actions.items():
-            action.setChecked(backend == self.config.backend)
-        provider = self._provider()
-        for tier, action in self.model_actions.items():
-            action.setText(providers.model_label(provider, tier))
-
     def _has_key(self, provider_id: str | None = None) -> bool:
         provider = self._provider(provider_id)
         if not provider.needs_key:
@@ -1326,7 +1265,7 @@ class PetController(QObject):
 
     def set_backend(self, backend: str, _checked: bool = True) -> None:
         if backend == self.config.backend or backend not in PROVIDERS:
-            self._sync_backend_actions()
+            self._sync_settings()
             return
         provider = PROVIDERS[backend]
         if provider.paid:
@@ -1335,14 +1274,14 @@ class PetController(QObject):
                     "她每次看屏幕或回答都会调用一次 API，截图会发给这家公司；评论间隔越短、选「更聪明」的模型，花费越多。\n\n"
                     "Key 只保存在本机的 Windows 凭据管理器里，不会写进配置文件或日志。")
             if not self._confirm(f"切换到 {provider.label}", text):
-                self._sync_backend_actions()
+                self._sync_settings()
                 return
             if not self._has_key(backend) and not self.set_api_key(backend):
-                self._sync_backend_actions()
+                self._sync_settings()
                 return
         elif provider.kind == CODEX_CLI:
             if not self.codex:
-                self._sync_backend_actions()
+                self._sync_settings()
                 self._find_codex(("switch",))  # searched off the UI thread; asks again once found
                 return
             text = ("要改用 Codex（你自己的 ChatGPT 订阅）吗？\n\n"
@@ -1352,7 +1291,7 @@ class PetController(QObject):
                     "调用结束（包括失败或取消）后删除；若文件正被别的程序占用，会保留到能删时为止，桌宠每秒、退出和启动时都会重试。其他调用方式的截图只在内存里。\n\n"
                     "用订阅额度运行第三方程序以 OpenAI 现行条款为准。")
             if not self._confirm("切换到 Codex（ChatGPT 订阅）", text):
-                self._sync_backend_actions()
+                self._sync_settings()
                 return
         self._cancel_inflight()  # a request of the old kind must not come back
         self.config.backend = backend
@@ -1361,7 +1300,7 @@ class PetController(QObject):
         self.consecutive_failures = 0
         self.auto_paused_until = 0.0
         self._save()
-        self._sync_backend_actions()
+        self._sync_settings()
         self._refresh_status()
         if provider.paid:
             self.window.say("happy", f"好的，之后我用主人的 {provider.company} API Key 来思考～（按量计费，记得留意用量哦）")
@@ -1434,8 +1373,6 @@ class PetController(QObject):
 
     def set_model(self, model: str, _checked: bool = True) -> None:
         self.config.model = model
-        if model in getattr(self, "model_actions", {}):
-            self.model_actions[model].setChecked(True)  # the menu follows a change from the settings window
         self._save()
 
     def _remember_position(self, x: int, y: int) -> None:
@@ -1488,6 +1425,7 @@ class PetController(QObject):
             from .settings_window import SettingsWindow  # Qt widgets only when first needed
 
             self.settings_window = SettingsWindow(self)
+        self._refresh_autostart()  # it may have been changed in Task Manager meanwhile
         self.settings_window.refresh()
         self.settings_window.show()
         self.settings_window.raise_()

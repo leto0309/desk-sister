@@ -311,28 +311,28 @@ def autostart_controller(app, tmp_path, monkeypatch, fake, sync=True):
     return ctrl, quits
 
 
-def test_autostart_menu_toggle(app, tmp_path, monkeypatch):
+def test_autostart_toggle(app, tmp_path, monkeypatch):
     fake = FakeAutostart(enabled=True)
     ctrl, _quits = autostart_controller(app, tmp_path, monkeypatch, fake)
-    assert ctrl.autostart_action.isChecked() and ctrl.autostart_action.isEnabled()
+    assert ctrl.autostart_on and ctrl.autostart_enabled
     ctrl.set_autostart(False)
-    assert fake.calls == ["disable"] and not ctrl.autostart_action.isChecked() and ctrl.autostart_action.isEnabled()
+    assert fake.calls == ["disable"] and not ctrl.autostart_on and ctrl.autostart_enabled
     assert ctrl.window.mood == "happy"
-    fake.enabled = True  # changed outside the app (e.g. Task Manager); the menu re-reads on open
-    ctrl.tray.contextMenu().aboutToShow.emit()
-    assert ctrl.autostart_action.isChecked()
+    fake.enabled = True  # changed outside the app (e.g. Task Manager); the settings window re-reads on open
+    ctrl.open_settings()
+    assert ctrl.autostart_on and ctrl.settings_window.autostart_box.isChecked()
+    ctrl.settings_window.close()
 
 
 def test_foreign_shortcut_shows_as_blocked_not_checked(app, tmp_path, monkeypatch):
     ctrl, _quits = autostart_controller(app, tmp_path, monkeypatch, FakeAutostart(state="foreign"))
-    action = ctrl.autostart_action
-    assert not action.isChecked() and not action.isEnabled() and "其他程序" in action.text()
+    assert not ctrl.autostart_on and not ctrl.autostart_enabled and "其他程序" in ctrl.autostart_text
 
 
 def test_autostart_failure_is_reported_and_state_stays_true(app, tmp_path, monkeypatch):
     ctrl, _quits = autostart_controller(app, tmp_path, monkeypatch, FakeAutostart(enabled=False, fail=True))
     ctrl.set_autostart(True)
-    assert not ctrl.autostart_action.isChecked() and ctrl.window.mood == "sad" and "没设置成功" in ctrl.window.full_text
+    assert not ctrl.autostart_on and ctrl.window.mood == "sad" and "没设置成功" in ctrl.window.full_text
 
 
 def test_quit_waits_for_a_running_autostart_change(app, tmp_path, monkeypatch):
@@ -360,7 +360,7 @@ def test_quit_is_immediate_when_idle(app, tmp_path, monkeypatch):
 def test_without_autostart_support_the_item_is_disabled(app, tmp_path, monkeypatch):
     monkeypatch.setattr(claude_client, "find_claude", lambda _configured="": "claude.exe")
     ctrl = controller_module.PetController(app, Config(), SPRITES, tmp_path / "config.json")
-    assert not ctrl.autostart_action.isEnabled()
+    assert not ctrl.autostart_enabled
     ctrl.set_autostart(True)  # ignored
 
 
@@ -390,7 +390,7 @@ def test_stale_state_read_cannot_recheck_a_removed_autostart(app, tmp_path, monk
     gate = threading.Event()
     fake = SlowReadAutostart(gate)
     ctrl, _quits = autostart_controller(app, tmp_path, monkeypatch, fake)  # first read: sync, "on"
-    assert ctrl.autostart_action.isChecked()
+    assert ctrl.autostart_on
     threads = []
 
     def spawn(fn):
@@ -399,7 +399,7 @@ def test_stale_state_read_cannot_recheck_a_removed_autostart(app, tmp_path, monk
         thread.start()
 
     monkeypatch.setattr(controller_module.PetController, "_spawn_autostart", staticmethod(spawn))
-    ctrl.tray.contextMenu().aboutToShow.emit()  # read #2 captures "on" and stalls
+    ctrl._refresh_autostart()  # read #2 (as when the settings open) captures "on" and stalls
     pump(app, lambda: fake.reads >= 2)
     ctrl.set_autostart(False)  # the change overtakes the stalled read
     pump(app, lambda: not ctrl.autostart_busy and fake.reads >= 3 and not ctrl.autostart_reading)
@@ -408,7 +408,7 @@ def test_stale_state_read_cannot_recheck_a_removed_autostart(app, tmp_path, monk
         thread.join(10)
     pump(app, lambda: False, seconds=0.5)
     assert fake.calls == ["disable"] and not fake.enabled
-    assert not ctrl.autostart_action.isChecked()
+    assert not ctrl.autostart_on
 
 
 def test_waiting_to_quit_stops_observing(app, tmp_path, monkeypatch):
@@ -473,13 +473,11 @@ def test_watchdog_reason_is_shown(app, tmp_path, monkeypatch):
     assert ctrl.window.status == "原因：任务卡住，已放弃"
 
 
-def test_open_log_folder_menu_item(app, tmp_path, monkeypatch):
+def test_open_log_folder(app, tmp_path, monkeypatch):
     ctrl, _calls = make_controller(app, tmp_path, monkeypatch)
     opened = []
     ctrl._open_path = opened.append
-    labels = [action.text() for action in ctrl.tray.contextMenu().actions()]
-    assert "打开日志文件夹" in labels
-    next(a for a in ctrl.tray.contextMenu().actions() if a.text() == "打开日志文件夹").trigger()
+    ctrl.open_log_folder()  # the button on the settings window's About page
     assert opened == [str(tmp_path)]
     ctrl._open_path = lambda _p: (_ for _ in ()).throw(OSError("denied"))
     ctrl.open_log_folder()
