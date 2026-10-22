@@ -10,6 +10,7 @@ from pathlib import Path
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .days import clean_birthday
+from .updates import parse_version
 from .providers import BACKENDS, clean_custom_models  # every way she can think
 
 BLINK_CHOICES = ("off", "few", "normal", "often")
@@ -67,6 +68,10 @@ class Config:
     talk_mouth: bool = True  # her mouth moves while her words appear
     head_motion: bool = False  # off unless chosen: a nod as she starts to talk, a tilt now and then, a duck when patted
     birthday: str = ""  # "MM-DD" for a birthday wish, "" for none
+    check_updates: bool = True  # look for a newer release on GitHub, at most once a day
+    update_checked_at: float = 0.0  # wall-clock time of the last successful check
+    update_seen: str = ""  # the newest version she already told 主人 about
+    update_latest: str = ""  # the latest release the last successful check found
     greeted_on: str = ""  # the day (YYYY-MM-DD) she last said her first hello, so a restart does not repeat it
     bedtime_reminder: str = "nightly"  # off | nightly | every_2h (see bedtime.py)
     night_start_hour: int = 23
@@ -127,6 +132,17 @@ class Config:
             reminded = 0.0
         # A real reminder time lies between 2001 and 2286; anything else (1, true, 1e12) means none.
         self.bedtime_reminded_at = reminded if math.isfinite(reminded) and 1e9 <= reminded <= 1e10 else 0.0
+        if not isinstance(self.check_updates, bool):
+            self.check_updates = True
+        try:
+            checked = float(self.update_checked_at)
+        except (TypeError, ValueError, OverflowError):
+            checked = 0.0
+        self.update_checked_at = checked if math.isfinite(checked) and 1e9 <= checked <= 1e10 else 0.0
+        if parse_version(self.update_seen) is None:
+            self.update_seen = ""
+        if parse_version(self.update_latest) is None:
+            self.update_latest = ""
         for name in ("x", "y"):
             value = getattr(self, name)
             setattr(self, name, None if value is None else int(value))

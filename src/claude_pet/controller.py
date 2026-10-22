@@ -18,7 +18,7 @@ from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import agent_link, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers
+from . import __version__, agent_link, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers, updates
 from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
@@ -32,6 +32,7 @@ log = logging.getLogger("claude_pet")
 
 CHANGE_THRESHOLD = 0.02
 HOTKEY_ID = 0xC1A0
+UPDATE_FIRST_DELAY_SEC = 30.0  # the first update check, a little after start
 PAT_MEMORY_SEC = 60.0  # pats this close together count as one petting session
 DROP_MEMORY_SEC = 20.0  # drops this close together are being dragged about
 DROPS_TO_COMPLAIN = 3
@@ -207,6 +208,7 @@ class PetController(QObject):
     autostart_done = Signal(bool, str)
     autostart_state = Signal(int, str)
     codex_found = Signal(object, object)  # (path or None, what to do next)
+    update_found = Signal(object, bool)  # (latest released version or None, asked by 主人)
 
     def __init__(self, app: QApplication, config: Config, sprite_folder: Path, config_file: Path | None = None,
                  autostart: Autostart | None = None, memory: CompanionMemory | None = None) -> None:
@@ -270,6 +272,7 @@ class PetController(QObject):
 
         self.reply_ready.connect(self._on_reply)
         self.codex_found.connect(self._on_codex_found)
+        self.update_found.connect(self._on_update_found)
         self._codex_searching = False
         self._codex_request: tuple | None = None  # what to do once the Codex search is done
         self.thinking.connect(self._on_thinking)
@@ -294,6 +297,13 @@ class PetController(QObject):
         self._pat_count = 0  # pats in this petting session, for shy and then mock-annoyed replies
         self._drops: list[float] = []  # recent drops after a drag
         self._greeting_due = ""  # the day (YYYY-MM-DD) whose first hello had to wait
+        self.update_available = ""  # a newer released version, once a check found one
+        self.update_status = ""  # what the about page says about the last check
+        self.update_checking = False
+        self._update_from = float("inf")  # no automatic check before start() (then one shortly after)
+        self._update_announce = False
+        self._update_retry = False  # the last check failed: the next one is due an hour later, not a day
+        self._take_update(self.config.update_latest)  # found by an earlier run, maybe not told yet
         self._resize_from: int | None = None  # her height before the current burst of resizing
         self._resize_done = QTimer(self, singleShot=True, interval=RESIZE_SETTLE_MS, timeout=self._on_resized)
         self.window.hotkey_pressed.connect(self.toggle_pause)
@@ -320,6 +330,7 @@ class PetController(QObject):
         self.timer.start(self.config.interval_sec * 1000)
         self.focus_tracker.start()
         self._schedule_self_talk()
+        self._update_from = self._clock() + UPDATE_FIRST_DELAY_SEC
         self.walker.set_enabled(self.config.walking)
         self._refresh_status()
         if self.config.backend == "subscription" and not self.claude:
@@ -515,6 +526,9 @@ class PetController(QObject):
                 self._greet_if_new_day()  # one that had to wait (full screen, quitting) comes now
             else:
                 self._greeting_due = ""  # owed for a day that is over: wait for the next meeting
+        self._check_updates_if_due()
+        if self._update_announce:
+            self._announce_update()
         if self.auto_paused_until and self._clock() >= self.auto_paused_until:
             self.auto_paused_until = 0.0
             self.consecutive_failures = 0
@@ -1216,6 +1230,74 @@ class PetController(QObject):
         self.config.greeted_on = today.isoformat()
         self._save()
         return True
+
+    # ---- updates -------------------------------------------------------------
+    def _check_updates_if_due(self) -> None:
+        if not self.config.check_updates or self.update_checking or self._clock() < self._update_from:
+            return
+        recent = 0 <= self._now() - self.config.update_checked_at < updates.CHECK_EVERY_SEC
+        if recent and not self._update_retry:
+            return  # (a check time in the future means the clock was set back: check again)
+        self._start_update_check(asked=False)
+
+    def check_updates_now(self) -> None:
+        if not self.update_checking:
+            self._start_update_check(asked=True)
+
+    def _start_update_check(self, asked: bool) -> None:
+        self.update_checking = True
+        self.update_status = "正在检查…"
+        self._sync_settings()
+        def check() -> None:
+            try:
+                version = updates.fetch_latest()
+            except Exception:  # never leave the check stuck as running
+                log.exception("update check crashed")
+                version = None
+            self.update_found.emit(version, asked)
+
+        self._spawn(check)
+
+    def _on_update_found(self, version: str | None, _asked: bool) -> None:
+        self.update_checking = False
+        if version is None:
+            self._update_from = self._clock() + updates.RETRY_SEC
+            self._update_retry = True
+            self.update_status = "检查失败（网络不通或 GitHub 暂时连不上），过一会儿会再试。"
+        else:
+            self._update_retry = False
+            self.config.update_checked_at = self._now()
+            self.config.update_latest = version
+            self._save()
+            self._take_update(version)
+        self._sync_settings()
+
+    def _take_update(self, version: str) -> None:
+        """Show what the latest release is; a version newer than any she has told about is told once."""
+        if version and updates.is_newer(version):
+            self.update_available = version
+            self.update_status = f"有新版本 v{version}"
+            seen = self.config.update_seen
+            self._update_announce = not seen or updates.is_newer(version, seen)
+        else:
+            self.update_available = ""
+            self._update_announce = False  # (a release withdrawn meanwhile is not told)
+            self.update_status = f"已是最新版（{__version__}）" if version else ""
+
+    def _announce_update(self) -> None:
+        """Tell 主人 about a new version once, when she may talk."""
+        if self.quit_pending or self.quiet or self.asleep or self.window.full_text:
+            return
+        self._update_announce = False
+        seen = self.config.update_seen
+        if not seen or updates.is_newer(self.update_available, seen):  # the record only goes up
+            self.config.update_seen = self.update_available
+        self._save()
+        self.window.say("happy", f"主人，我有新版本 v{self.update_available} 啦～在设置 → 关于里可以打开下载页。")
+
+    def set_check_updates(self, enabled: bool) -> None:
+        self.config.check_updates = bool(enabled)
+        self._save()
 
     def set_birthday(self, month: int, day: int, enabled: bool) -> None:
         self.config.birthday = days.clean_birthday(f"{month:02d}-{day:02d}") if enabled else ""

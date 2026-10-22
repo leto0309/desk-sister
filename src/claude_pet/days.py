@@ -1,38 +1,28 @@
-"""Special days for her first greeting of the day: fixed festivals, a few lunar ones, 主人's birthday.
-
-There is no lunar calendar in the standard library, so the lunar festivals are a table (2026–2030);
-past its end they are simply not greeted.
-"""
+"""Special days for her first greeting of the day: fixed festivals, lunar ones, 主人's birthday."""
 from __future__ import annotations
 
 import datetime
+
+from .lunar import lunar_date
 
 FIXED = {
     (1, 1): "元旦", (2, 14): "情人节", (5, 1): "劳动节", (6, 1): "儿童节",
     (10, 1): "国庆节", (12, 24): "平安夜", (12, 25): "圣诞节",
 }
-_SPRING = {2026: (2, 17), 2027: (2, 6), 2028: (1, 26), 2029: (2, 13), 2030: (2, 3)}
-_DRAGON_BOAT = {2026: (6, 19), 2027: (6, 9), 2028: (5, 28), 2029: (6, 16), 2030: (6, 5)}
-_MID_AUTUMN = {2026: (9, 25), 2027: (9, 15), 2028: (10, 3), 2029: (9, 22), 2030: (9, 12)}
-
-
-def _lunar() -> dict[datetime.date, str]:
-    days: dict[datetime.date, str] = {}
-    for year, (month, day) in _SPRING.items():
-        spring = datetime.date(year, month, day)
-        days[spring] = "春节"
-        days[spring - datetime.timedelta(days=1)] = "除夕"
-    for table, name in ((_DRAGON_BOAT, "端午节"), (_MID_AUTUMN, "中秋节")):
-        for year, (month, day) in table.items():
-            days[datetime.date(year, month, day)] = name
-    return days
-
-
-LUNAR = _lunar()
+LUNAR = {(1, 1): "春节", (1, 15): "元宵节", (5, 5): "端午节", (7, 7): "七夕", (8, 15): "中秋节", (9, 9): "重阳节"}
 
 
 def festival(day: datetime.date) -> str | None:
-    return LUNAR.get(day) or FIXED.get((day.month, day.day))
+    try:
+        month, date_, leap = lunar_date(day)
+        tomorrow = lunar_date(day + datetime.timedelta(days=1))
+    except (ValueError, OverflowError):  # outside the computed years: only the fixed festivals
+        return FIXED.get((day.month, day.day))
+    if not leap and (month, date_) in LUNAR:  # a leap month has no festivals
+        return LUNAR[(month, date_)]
+    if tomorrow == (1, 1, False):
+        return "除夕"  # the last day of the year, whether the 29th or the 30th (not before a leap month 1)
+    return FIXED.get((day.month, day.day))
 
 
 def clean_birthday(value: object) -> str:

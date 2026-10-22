@@ -6,6 +6,7 @@ use), and `refresh()` reads everything back from the config, so the window and t
 from __future__ import annotations
 
 import calendar
+import html
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
+from .updates import RELEASES_PAGE
 from .bedtime import MODE_LABELS as BEDTIME_LABELS
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
@@ -576,6 +578,19 @@ class SettingsWindow(QDialog):
         text.setWordWrap(True)
         text.setOpenExternalLinks(True)
         text.setTextFormat(Qt.TextFormat.RichText)
+        updates_row = QHBoxLayout()
+        self.updates_box = QCheckBox("自动检查更新")
+        self.updates_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_check_updates(on)))
+        self.check_now = QPushButton("现在检查")
+        self.check_now.setObjectName("quiet")
+        self.check_now.clicked.connect(self.ctrl.check_updates_now)
+        updates_row.addWidget(self.updates_box)
+        updates_row.addWidget(self.check_now)
+        updates_row.addStretch(1)
+        self.update_label = QLabel()
+        self.update_label.setWordWrap(True)
+        self.update_label.setOpenExternalLinks(True)
+        self.update_label.setTextFormat(Qt.TextFormat.RichText)
         logs = QPushButton("打开日志文件夹")
         logs.setObjectName("quiet")
         logs.clicked.connect(self.ctrl.open_log_folder)
@@ -583,6 +598,9 @@ class SettingsWindow(QDialog):
         row.addWidget(logs)
         row.addStretch(1)
         layout.addWidget(text)
+        layout.addLayout(updates_row)
+        layout.addWidget(self.update_label)
+        layout.addWidget(_hint("每天最多查一次：只读取 GitHub 上公开的最新版本号，不发送你的任何数据，也不会自动下载。"))
         layout.addLayout(row)
         layout.addStretch(1)
         return page
@@ -689,6 +707,12 @@ class SettingsWindow(QDialog):
             self.blink_combo.setCurrentIndex(max(0, self.blink_combo.findData(cfg.blink)))
             self.mouth_box.setChecked(cfg.talk_mouth)
             self.head_box.setChecked(cfg.head_motion)
+            self.updates_box.setChecked(cfg.check_updates)
+            self.check_now.setEnabled(not self.ctrl.update_checking)
+            status = html.escape(self.ctrl.update_status)
+            if self.ctrl.update_available:
+                status += f" · <a style='color:#B5531F' href='{RELEASES_PAGE}'>打开下载页</a>"
+            self.update_label.setText(status)
             if not self.size_slider.isSliderDown():  # a drag in progress is the user's, not the config's
                 self.size_slider.setValue(cfg.sprite_height)
                 self.size_value.setText(f"{cfg.sprite_height} 像素")

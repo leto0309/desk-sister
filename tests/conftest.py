@@ -19,3 +19,17 @@ def _private_codex_temp(tmp_path_factory, monkeypatch):
         if thread.name == "codex-cleanup":
             thread.join(timeout=10)
 
+
+
+@pytest.fixture(autouse=True)
+def _no_update_checks(monkeypatch):
+    """No test may reach GitHub: the update check is told it is offline unless a test says otherwise."""
+    from claude_pet import updates
+
+    def offline(opener=None):
+        if opener is not None:
+            return real(opener)
+        return None
+
+    real = updates.fetch_latest
+    monkeypatch.setattr(updates, "fetch_latest", offline)
