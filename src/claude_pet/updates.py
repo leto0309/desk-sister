@@ -26,7 +26,8 @@ log = logging.getLogger(__name__)
 LATEST_URL = "https://api.github.com/repos/leto0309/desk-sister/releases/latest"
 RELEASES_PAGE = "https://github.com/leto0309/desk-sister/releases/latest"
 DOWNLOAD_PREFIX = "https://github.com/leto0309/desk-sister/releases/download/"
-ASSET_NAME = "desk-sister.exe"
+ASSET_NAME = "desk-sister.exe"  # the single-file exe
+SETUP_NAME = "DeskSister-Setup.exe"  # the installer (one-folder build)
 CHECK_EVERY_SEC = 24 * 3600
 RETRY_SEC = 3600  # after a failed check (offline at start, say)
 TIMEOUT_SEC = 10
@@ -37,6 +38,7 @@ CHUNK = 1 << 16
 PART_PREFIX, PART_SUFFIX = "desk-sister.update.", ".part"  # a random name in between
 UPDATE_NAME = "desk-sister.update.exe"
 OLD_NAME = "desk-sister.old.exe"  # the previous exe, kept until the new one has started
+SETUP_UPDATE_NAME = "DeskSister-Setup.update.exe"  # a downloaded installer, checked, waiting to run
 RESULT_NAME = "desk-sister.update.result"  # what the last swap did: updated, restored or failed
 _VERSION = re.compile(r"v?(\d{1,6}(?:\.\d{1,6}){1,3})")
 _SHA256 = re.compile(r"sha256:([0-9a-f]{64})")
@@ -96,19 +98,44 @@ def fetch_latest(opener=urllib.request.urlopen) -> str | None:
     return ".".join(map(str, parse_version(data["tag_name"]))) if data else None
 
 
-def fetch_asset(opener=urllib.request.urlopen) -> Asset | None:
-    """The latest release's exe: its download address (this repository's release only), size and SHA-256."""
+def one_folder(exe: Path, meipass: str | None) -> bool:
+    """The one-folder build: its files are in <exe folder>\\_internal. (A single-file exe unpacks to a _MEIxxxx folder,
+    which may well sit next to the exe, say both in %TEMP%: only the exact _internal folder counts.)"""
+    if not meipass:
+        return False
+    try:
+        return Path(meipass).resolve() == (exe.parent / "_internal").resolve()
+    except OSError:
+        return False
+
+
+def uses_installer(exe: Path, meipass: str | None, local_appdata: str | None) -> bool:
+    """Whether this copy updates through the installer: the one-folder build (only the installer ships it),
+    or the single-file exe sitting where the installer installs, which the installer then takes over."""
+    if one_folder(exe, meipass):
+        return True
+    if not local_appdata:
+        return False
+    try:
+        return exe.parent.resolve() == (Path(local_appdata) / "Programs" / "DeskSister").resolve()
+    except OSError:
+        return False
+
+
+def fetch_asset(opener=urllib.request.urlopen, name: str = ASSET_NAME) -> Asset | None:
+    """The latest release's file `name` (the exe or the installer): its download address (this repository's
+    release only), size and SHA-256."""
     data = _read_release(opener)
     if data is None:
         return None
     tag = data["tag_name"]
     assets = data.get("assets")
     for item in assets if isinstance(assets, list) else ():
-        if not isinstance(item, dict) or item.get("name") != ASSET_NAME:
+        if not isinstance(item, dict) or item.get("name") != name:
             continue
         url, size = item.get("browser_download_url"), item.get("size")
         digest = _SHA256.fullmatch(item.get("digest") or "") if isinstance(item.get("digest"), str) else None
-        if url != f"{DOWNLOAD_PREFIX}{tag}/{ASSET_NAME}" or digest is None:
+        if url != f"{DOWNLOAD_PREFIX}{tag}/{name}" or digest is None:
             log.warning("release asset refused: %r", url)
             return None
         if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_EXE_BYTES:
@@ -126,13 +153,13 @@ def file_sha256(path: Path) -> str:
 
 
 def download(asset: Asset, folder: Path, cancelled: Callable[[], bool], progress: Callable[[int, int], None],
-             opener=urllib.request.urlopen) -> Path:
+             opener=urllib.request.urlopen, final_name: str = UPDATE_NAME) -> Path:
     """Fetch the exe into `folder` as UPDATE_NAME once its size and SHA-256 match; raises on anything else
     (Cancelled, OSError when the folder is not writable or the network fails, ValueError on a mismatch).
 
     The part file gets a fresh random name, created exclusively: nothing already there (a link someone placed)
     is ever opened or written through."""
-    final = folder / UPDATE_NAME
+    final = folder / final_name
     handle, name = tempfile.mkstemp(prefix=PART_PREFIX, suffix=PART_SUFFIX, dir=folder)
     part = Path(name)
     digest, got = hashlib.sha256(), 0
@@ -175,10 +202,10 @@ def remove_leftovers(folder: Path) -> str:
         result = ""
     if result not in ("updated", "restored", "failed"):
         result = ""
-    if not result and (folder / UPDATE_NAME).exists():
+    if not result and ((folder / UPDATE_NAME).exists() or (folder / SETUP_UPDATE_NAME).exists()):
         result = "restored"  # a download that never went in: this is still the old exe
     remove_note(folder)
-    for path in [*folder.glob(f"{PART_PREFIX}*{PART_SUFFIX}"), folder / UPDATE_NAME]:
+    for path in [*folder.glob(f"{PART_PREFIX}*{PART_SUFFIX}"), folder / UPDATE_NAME, folder / SETUP_UPDATE_NAME]:
         _remove(path)
     return result
 
@@ -284,10 +311,34 @@ def restart_env(base: dict[str, str], exe: Path, new: Path, sha256: str, wait: l
     return env
 
 
-def launch_restart(env: dict[str, str]) -> None:
+# The installer's turn: wait for her to quit, check the downloaded installer, run it silently into the same folder
+# (it closes anything still holding her files and rolls itself back if it fails), note the outcome, start her.
+SETUP_SCRIPT = r"""
+$ErrorActionPreference = 'Stop'
+function Write-Result([string]$Text) {
+    try { Set-Content -LiteralPath $env:DS_RESULT -Value $Text -Encoding Ascii; return $true } catch { return $false }
+}
+$waiting = foreach ($id in ($env:DS_WAIT -split ',')) { if ($id) { try { Get-Process -Id ([int]$id) } catch {} } }
+foreach ($process in $waiting) { $process.WaitForExit() }
+$ok = $false
+try {
+    if ((Get-FileHash -LiteralPath $env:DS_NEW -Algorithm SHA256).Hash -eq $env:DS_SHA) {
+        $dir = Split-Path -LiteralPath $env:DS_EXE
+        $setup = Start-Process -FilePath $env:DS_NEW -Wait -PassThru `
+            -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', ('/DIR="' + $dir + '"')
+        $ok = $setup.ExitCode -eq 0
+    }
+} catch {}
+$null = Write-Result $(if ($ok) { 'updated' } else { 'restored' })
+try { Remove-Item -LiteralPath $env:DS_NEW } catch {}
+try { Start-Process -FilePath $env:DS_EXE -WorkingDirectory (Split-Path -LiteralPath $env:DS_EXE) } catch {}
+"""
+
+
+def launch_restart(env: dict[str, str], script: str = RESTART_SCRIPT) -> None:
     subprocess.Popen(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-         "-Command", RESTART_SCRIPT],
+         "-Command", script],
         env=env, creationflags=_NO_WINDOW | _DETACHED, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL, close_fds=True,
     )

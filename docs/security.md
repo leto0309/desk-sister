@@ -94,6 +94,14 @@
   再对放好的文件算一次 SHA-256，不一致或移动失败就删掉它、把备份改回原名。只启动校验过的新版或换回的原版；
   新版启动不了（比如被安全软件拦下）或启动后还没就绪就退出（就绪的标志是新版启动时取走结果文件），也会换回原版再启动；两样都做不到时什么都不启动、保留备份。脚本把结果
   （updated / restored / failed）写进 `desk-sister.update.result`，下次启动时读取后在关于页说明，并删除它、备份和残留的下载文件。重启时去掉 PyInstaller 的内部环境变量和 PSModulePath（从 PowerShell 7 继承来的模块路径会让 Windows PowerShell 算不了校验值）。
+- 安装版（文件夹版，或放在 `%LOCALAPPDATA%\Programs\DeskSister` 的单文件版）下载的是 `DeskSister-Setup.exe`，
+  同样只认本仓库 release 里的这个文件、按 GitHub 的大小和 SHA-256 校验，存为 `DeskSister-Setup.update.exe`。
+  重启时隐藏脚本等本进程退出，再算一次 SHA-256，一致才以 `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR=<原目录>`
+  运行它（安装程序会关掉仍占用文件的程序；失败时自行回滚），然后记下结果、删掉安装包、启动桌宠。
+- 安装程序（Inno Setup，按当前用户安装，不需要管理员）只写入 `%LOCALAPPDATA%\Programs\DeskSister`、开始菜单（和可选的
+  桌面快捷方式）以及当前用户的卸载登记。卸载先关掉从该目录运行的桌宠，删除程序文件和更新残留；开机自启快捷方式只在
+  指向本安装的 exe 时才删除；`%APPDATA%\ClaudePet` 的配置和记忆保留。云端构建使用固定版本的 Inno Setup 官方安装包，
+  先核对 SHA-256 再安装。
 - 能写入 exe 所在文件夹的人本来就能直接替换 exe，所以下载文件放在同一文件夹不增加新的风险；默认安装位置
   （%LOCALAPPDATA%\Programs\DeskSister）只有当前用户可写。
 - 网络失败、被限流或返回异常只写一行日志，不弹提示。

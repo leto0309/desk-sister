@@ -45,8 +45,16 @@ or the address.
 
 ## Install
 
-**The exe:** download `desk-sister.exe` from Releases, put it in any folder and double-click it. The exe is not code
-signed, so Windows SmartScreen may stop it the first time: click "More info → Run anyway".
+**Installer (recommended):** download `DeskSister-Setup.exe` from Releases and run it. It installs for the current
+user into `%LOCALAPPDATA%\Programs\DeskSister` (no administrator needed), adds a Start menu entry and can be
+uninstalled under Settings → Apps; she starts about twice as fast as the single-file exe (about 2 seconds against 4).
+Uninstalling removes only the program; your config and memory (`%APPDATA%\ClaudePet`) stay.
+
+**Portable:** download `desk-sister.exe`, put it in any folder and double-click it.
+
+Neither the installer nor the exe is code signed, so Windows SmartScreen may stop it the first time: click "More info →
+Run anyway". If you used to keep the single-file exe in `%LOCALAPPDATA%\Programs\DeskSister`, "Download and update"
+on the About page switches you to the installed version.
 
 **From source (Python 3.11+):** double-click `DeskSister.cmd` (the first run creates .venv and installs the
 dependencies), or:
@@ -85,7 +93,8 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
 - Download and update (the exe): with a new version out, the "About" page has a "Download and update" button. Only
   that click downloads anything; the download is checked against the size and SHA-256 GitHub gives, and once you
   confirm she quits and comes back as the new version a few seconds later. If the swap fails, the old version starts
-  again. A download in progress can be cancelled.
+  again. A download in progress can be cancelled. The installed version downloads the installer and runs it silently;
+  the portable one replaces just the exe.
 - Right-click her or the tray icon: Poke her, Talk to her, Settings…, Pause watching, Quit; in "only the allowlist"
   mode there is also a one-click "Add the current program to the allowlist".
 - "Settings…" has six pages: General, How she thinks, Watching, Companion, Appearance and About; every change applies
@@ -145,7 +154,10 @@ The config and the log are in `%APPDATA%\ClaudePet\` (config.json, pet.log).
 ## Development
 
 PowerShell 7: `./scripts/verify.ps1` runs the tests (pytest, compileall, ruff, `app.py --self-test`),
-`./scripts/build.ps1` builds, and `./scripts/package.ps1` makes the single-file `dist/desk-sister.exe` with PyInstaller.
+`./scripts/build.ps1` builds, `./scripts/package.ps1` makes the single-file `dist/desk-sister.exe` with PyInstaller,
+and `./devtools/build_installer.ps1` makes the one-folder build and wraps it with Inno Setup 6 into
+`dist/DeskSister-Setup.exe` (the script is in installer/; the Simplified Chinese wizard text is the translation from the
+Inno Setup repository).
 Requirements and acceptance criteria are in docs/requirements.md, the architecture in docs/architecture.md (both in
 Chinese). After regenerating the art run `python devtools/process_sprites.py assets/raw assets/sprites`, then
 `python devtools/embed_sprites.py` to update the embedded art (otherwise the tests report it as stale), and

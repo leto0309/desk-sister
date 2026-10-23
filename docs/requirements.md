@@ -168,6 +168,13 @@
 38. 问候与小结更丰富：早安、又见面各 6 句；周一、周五、周六、周日的第一次问候有一半概率换成当天的话
     （persona.WEEKDAY_GREETINGS，节日和生日仍优先）；小结结尾每类活动至少 2 句随机选。中英文结构一致，不提睡觉。
 
+39. 安装包（Inno Setup 6，installer/desk-sister.iss，devtools/build_installer.ps1）：PyInstaller 文件夹版，按当前用户装到
+    %LOCALAPPDATA%\Programs\DeskSister（与原单文件 exe 同位置，快捷方式继续可用），开始菜单入口、可选桌面快捷方式、
+    卸载登记；中英文安装界面；安装时关掉占用文件的桌宠，卸载时先关掉从该目录运行的桌宠，只删指向本安装的开机自启
+    快捷方式，保留 %APPDATA%\ClaudePet。发布同时提供 DeskSister-Setup.exe 与单文件 desk-sister.exe。「下载并更新」：
+    文件夹版和位于默认安装位置的单文件版下载安装包并静默安装（/DIR 为原目录），其他位置的单文件版只替换 exe。
+    启动时间实测：单文件约 4.2 秒，文件夹版约 1.8 秒。release.yml 用固定版本、核对 SHA-256 的 Inno Setup 构建安装包。
+
 ## 不在本版范围
 
 语音合成、Live2D 动画、跨平台（仅 Windows）、exe 代码签名与自定义图标。

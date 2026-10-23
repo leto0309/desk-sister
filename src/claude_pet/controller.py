@@ -321,6 +321,7 @@ class PetController(QObject):
         self._download_cancel = threading.Event()
         self._download_path: Path | None = None
         self._download_sha = ""
+        self._download_installer = False  # the download is the installer, not the exe
         self._download_percent = -1
         self._launch_restart = updates.launch_restart
         self._update_note_retry = False
@@ -1398,21 +1399,30 @@ class PetController(QObject):
         elif self.update_available and self._exe_path() is not None:
             self._start_download()
 
+    def _uses_installer(self) -> bool:
+        exe = self._exe_path()
+        return exe is not None and updates.uses_installer(exe, getattr(sys, "_MEIPASS", None),
+                                                          os.environ.get("LOCALAPPDATA"))
+
     def _start_download(self) -> None:
         folder = self._exe_path().parent
+        installer = self._download_installer = self._uses_installer()
+        name = updates.SETUP_NAME if installer else updates.ASSET_NAME
+        final_name = updates.SETUP_UPDATE_NAME if installer else updates.UPDATE_NAME
         self.download_state, self.download_text, self._download_percent = "downloading", i18n.Msg("正在准备下载…"), -1
         self._download_cancel = cancel = threading.Event()
 
         def run() -> None:
             try:
-                asset = updates.fetch_asset()
+                asset = updates.fetch_asset(name=name)
                 if asset is None:
                     self.download_done.emit(None, i18n.Msg("读不到新版的下载信息，请稍后再试，或到下载页手动下载。"))
                     return
                 if not updates.is_newer(asset.version):
                     self.download_done.emit(None, i18n.Msg("已是最新版（{0}）。", __version__))
                     return
-                path = updates.download(asset, folder, cancel.is_set, self.download_progress.emit)
+                path = updates.download(asset, folder, cancel.is_set, self.download_progress.emit,
+                                        final_name=final_name)
                 self._download_sha = asset.sha256
             except updates.Cancelled:
                 self.download_done.emit(None, i18n.Msg("已取消下载。"))
@@ -1482,11 +1492,12 @@ class PetController(QObject):
             return
         wait = [os.getpid()]
         meipass = getattr(sys, "_MEIPASS", None)
-        if meipass and Path(meipass) != exe.parent:  # one-file: the launcher process holds the exe too
+        if meipass and not updates.one_folder(exe, meipass):  # single-file: its launcher holds the exe too
             wait.append(os.getppid())
+        script = updates.SETUP_SCRIPT if self._download_installer else updates.RESTART_SCRIPT
         try:
             self._launch_restart(updates.restart_env(claude_client.environ_snapshot(), exe, path,
-                                                     self._download_sha, wait))
+                                                     self._download_sha, wait), script)
         except OSError as exc:
             log.warning("could not start the update helper: %s", exc)
             self.download_text = i18n.Msg("没能启动更新程序，请到下载页手动下载。")

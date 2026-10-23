@@ -456,9 +456,11 @@ def pet(app, tmp_path, monkeypatch):
     monkeypatch.setattr(claude_client, "find_claude", lambda _configured="": "claude.exe")
     monkeypatch.setattr(controller_module, "save_config", lambda *_a, **_k: None)
     monkeypatch.setattr(controller_module, "app_data_dir", lambda: tmp_path)
-    monkeypatch.setattr(updates, "fetch_asset", lambda: ASSET)
-    monkeypatch.setattr(updates, "download", lambda asset, folder, cancelled, progress:
-                        updates.__dict__["_real_download"](asset, folder, cancelled, progress, fetch(EXE)))
+    asked = []
+    monkeypatch.setattr(updates, "fetch_asset", lambda name=updates.ASSET_NAME: asked.append(name) or ASSET)
+    monkeypatch.setattr(updates, "download", lambda asset, folder, cancelled, progress, final_name=updates.UPDATE_NAME:
+                        updates.__dict__["_real_download"](asset, folder, cancelled, progress, fetch(EXE),
+                                                           final_name=final_name))
     updates._real_download = real_download
     folder = tmp_path / "app"
     folder.mkdir()
@@ -470,9 +472,11 @@ def pet(app, tmp_path, monkeypatch):
     ctrl._rng = random.Random(1)
     ctrl._exe_path = lambda: exe
     ctrl._spawn = lambda fn: fn()
-    answers, launched, quits = [], [], []
+    answers, launched, quits, scripts = [], [], [], []
     ctrl._confirm = lambda _title, _text: answers.pop(0)
-    ctrl._launch_restart = launched.append
+    ctrl._launch_restart = lambda env, script=updates.RESTART_SCRIPT: launched.append(env) or scripts.append(script)
+    ctrl._uses_installer = lambda: False  # a portable single-file exe unless a test says otherwise
+    ctrl.asked, ctrl.scripts = asked, scripts
     ctrl.request_quit = lambda: quits.append(1)
     yield ctrl, exe, answers, launched, quits
     del updates._real_download
@@ -529,11 +533,11 @@ def test_cancel(pet, monkeypatch):
 def test_failures_end_the_download(pet, monkeypatch, failure, text):
     ctrl, _exe, _answers, launched, quits = pet
     if failure == "no asset":
-        monkeypatch.setattr(updates, "fetch_asset", lambda: None)
+        monkeypatch.setattr(updates, "fetch_asset", lambda name=None: None)
     elif failure == "not newer":
-        monkeypatch.setattr(updates, "fetch_asset", lambda: updates.Asset(__version__, URL, 1, SHA))
+        monkeypatch.setattr(updates, "fetch_asset", lambda name=None: updates.Asset(__version__, URL, 1, SHA))
     else:
-        def broken(*_a):
+        def broken(*_a, **_k):
             raise failure
         monkeypatch.setattr(updates, "download", broken)
     ctrl.update_action()
@@ -565,8 +569,8 @@ def test_cancelled_while_the_result_was_on_its_way(pet, monkeypatch):
     ctrl, exe, _answers, launched, _quits = pet
     finished = updates.download
 
-    def then_cancel(*args):
-        path = finished(*args)
+    def then_cancel(*args, **kwargs):
+        path = finished(*args, **kwargs)
         ctrl._download_cancel.set()  # 主人 clicks 取消 just as the download completes
         return path
 
@@ -580,8 +584,8 @@ def test_a_cancelled_download_that_cannot_be_removed_still_ends(pet, monkeypatch
     ctrl, exe, _answers, launched, _quits = pet
     finished = updates.download
 
-    def then_cancel(*args):
-        path = finished(*args)
+    def then_cancel(*args, **kwargs):
+        path = finished(*args, **kwargs)
         ctrl._download_cancel.set()
         return path
 
@@ -607,7 +611,7 @@ def test_a_vanished_download_is_not_swapped(pet):
 def test_a_helper_that_cannot_start_keeps_her_running(pet):
     ctrl, _exe, answers, _launched, quits = pet
 
-    def fail(_env):
+    def fail(_env, _script=None):
         raise OSError("no powershell")
 
     ctrl._launch_restart = fail
@@ -713,3 +717,105 @@ def test_the_bubble_points_at_the_button(pet):
     ctrl._take_update("9.0.0")
     ctrl._announce_update()
     assert "下载并更新" in ctrl.window.full_text
+
+
+
+# ---- the installer -------------------------------------------------------------------------------------------
+def test_who_updates_through_the_installer(tmp_path):
+    local = tmp_path / "Local"
+    installed = local / "Programs" / "DeskSister"
+    installed.mkdir(parents=True)
+    exe = installed / "desk-sister.exe"
+    assert updates.uses_installer(exe, str(installed / "_internal"), str(local))  # the one-folder build
+    assert updates.uses_installer(tmp_path / "x" / "desk-sister.exe", str(tmp_path / "x" / "_internal"), None)
+    assert updates.uses_installer(exe, str(tmp_path / "_MEI123"), str(local))  # single-file, where the installer goes
+    temp = tmp_path / "Temp"  # a single-file exe run straight from %TEMP%: it unpacks next to itself
+    assert not updates.uses_installer(temp / "desk-sister.exe", str(temp / "_MEI4242"), str(local))
+    assert not updates.one_folder(temp / "desk-sister.exe", str(temp / "_MEI4242"))
+    portable = tmp_path / "USB" / "desk-sister.exe"
+    assert not updates.uses_installer(portable, str(tmp_path / "_MEI123"), str(local))
+    assert not updates.uses_installer(portable, None, None)
+
+
+def test_fetch_the_installer():
+    url = f"{updates.DOWNLOAD_PREFIX}{TAG}/{updates.SETUP_NAME}"
+    data = release()
+    data["assets"].append({"name": updates.SETUP_NAME, "browser_download_url": url, "size": 10,
+                           "digest": f"sha256:{SHA}"})
+    assert updates.fetch_asset(opener_for(data), name=updates.SETUP_NAME) == updates.Asset("9.0.0", url, 10, SHA)
+    data["assets"][-1]["browser_download_url"] = url.replace(updates.SETUP_NAME, "desk-sister.exe")
+    assert updates.fetch_asset(opener_for(data), name=updates.SETUP_NAME) is None  # the name must match the address
+
+
+def test_the_installed_copy_downloads_and_runs_the_installer(pet):
+    ctrl, exe, answers, launched, quits = pet
+    ctrl._uses_installer = lambda: True
+    answers.append(True)
+    ctrl.update_action()
+    setup = exe.parent / updates.SETUP_UPDATE_NAME
+    assert ctrl.asked == [updates.SETUP_NAME] and setup.read_bytes() == EXE
+    assert not (exe.parent / updates.UPDATE_NAME).exists()
+    (env,) = launched
+    assert env["DS_NEW"] == str(setup) and env["DS_EXE"] == str(exe) and ctrl.scripts == [updates.SETUP_SCRIPT]
+    assert quits == [1]
+
+
+def test_a_portable_copy_still_swaps_the_exe(pet):
+    ctrl, exe, answers, launched, _quits = pet
+    answers.append(True)
+    ctrl.update_action()
+    assert ctrl.asked == [updates.ASSET_NAME] and ctrl.scripts == [updates.RESTART_SCRIPT]
+    assert launched[0]["DS_NEW"] == str(exe.parent / updates.UPDATE_NAME)
+
+
+def test_a_left_installer_download_is_cleaned_up(tmp_path):
+    (tmp_path / updates.SETUP_UPDATE_NAME).write_bytes(b"x")
+    assert updates.remove_leftovers(tmp_path) == "restored" and list(tmp_path.iterdir()) == []
+
+
+def setup_stand_in(folder, exit_code):
+    """A stand-in installer: a script that records its arguments and exits with `exit_code`."""
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    setup = folder / updates.SETUP_UPDATE_NAME
+    shutil.copyfile(pythonw if pythonw.is_file() else sys.executable, setup)
+    venv = Path(sys.prefix, "pyvenv.cfg")
+    if venv.is_file():
+        shutil.copyfile(venv, folder / "pyvenv.cfg")
+    return setup
+
+
+@windows_only
+@pytest.mark.parametrize(("exit_code", "result"), [(0, "updated"), (3, "restored")])
+def test_the_setup_script_runs_the_installer_quietly_then_starts_her(tmp_path, exit_code, result):
+    folder, exe, _new, marker = stand_ins(tmp_path)
+    setup = setup_stand_in(folder, exit_code)
+    runner = folder / "installer_main"
+    runner.mkdir()
+    args_file = folder / "setup-args.txt"
+    (runner / "__main__.py").write_text(
+        f"import sys\nopen({str(args_file)!r}, 'w').write(' '.join(sys.argv[1:]))\nsys.exit({exit_code})\n",
+        encoding="utf-8")
+    env = updates.restart_env(dict(os.environ), exe, setup, updates.file_sha256(setup), [])
+    script = updates.SETUP_SCRIPT.replace(  # the stand-in installer runs its folder's __main__.py, and so does she
+        "-ArgumentList '/VERYSILENT'", "-ArgumentList ('\"' + $env:DS_RUNNER + '\"'), '/VERYSILENT'").replace(
+        "Start-Process -FilePath $env:DS_EXE", "Start-Process -FilePath $env:DS_EXE -ArgumentList ('\"' + $env:DS_DIR + '\"')")
+    proc = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+                           script], env={**env, "DS_DIR": str(folder), "DS_RUNNER": str(runner)}, capture_output=True,
+                          timeout=120)
+    assert proc.returncode == 0, proc.stderr
+    assert args_file.read_text().split()[0:4] == ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"]
+    assert f"/DIR={folder}" in args_file.read_text()
+    assert not setup.exists() and started(marker) == b"old version" and note(folder) == result
+
+
+@windows_only
+def test_the_setup_script_never_runs_a_changed_installer(tmp_path):
+    folder, exe, _new, marker = stand_ins(tmp_path)
+    setup = setup_stand_in(folder, 0)
+    env = updates.restart_env(dict(os.environ), exe, setup, "0" * 64, [])
+    script = updates.SETUP_SCRIPT.replace(
+        "Start-Process -FilePath $env:DS_EXE", "Start-Process -FilePath $env:DS_EXE -ArgumentList ('\"' + $env:DS_DIR + '\"')")
+    proc = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+                           script], env={**env, "DS_DIR": str(folder)}, capture_output=True, timeout=120)
+    assert proc.returncode == 0, proc.stderr
+    assert not (folder / "setup-args.txt").exists() and note(folder) == "restored" and started(marker) == b"old version"

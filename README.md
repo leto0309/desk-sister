@@ -40,8 +40,14 @@ API Key 只保存在本机的 Windows 凭据管理器里（每家分开保存）
 
 ## 安装
 
-**直接用 exe：** 在 Releases 下载 `desk-sister.exe`，放到任意文件夹双击运行。exe 没有代码签名，
-第一次运行时 Windows SmartScreen 可能拦截，点「更多信息 → 仍要运行」。
+**安装版（推荐）：** 在 Releases 下载 `DeskSister-Setup.exe` 运行。装在当前用户的
+`%LOCALAPPDATA%\Programs\DeskSister`（不需要管理员），有开始菜单入口，可以在「设置 → 应用」里卸载；
+启动比单文件版快一倍左右（约 2 秒对 4 秒）。卸载只删程序，配置和记忆（`%APPDATA%\ClaudePet`）会保留。
+
+**免安装版：** 下载 `desk-sister.exe`，放到任意文件夹双击运行。
+
+安装包和 exe 都没有代码签名，第一次运行时 Windows SmartScreen 可能拦截，点「更多信息 → 仍要运行」。
+以前把单文件版放在 `%LOCALAPPDATA%\Programs\DeskSister` 的，在「关于」页点「下载并更新」就会换成安装版。
 
 **从源码运行（Python 3.11+）：** 双击 `DeskSister.cmd`（首次会创建 .venv 并安装依赖），或：
 
@@ -70,7 +76,8 @@ Claude 桌面版自带的 claude-code。
 - 检查更新：启动后约半分钟、之后每天最多一次，她会看看 GitHub 上有没有新版本；有的话提醒你一次，
   「关于」页会显示下载链接。可以在「关于」页关掉自动检查，或点「现在检查」。
 - 下载并更新（exe 版）：有新版本时「关于」页有「下载并更新」按钮。点了才下载，下载后核对 GitHub 公布的大小和 SHA-256，
-  确认后她会退出，几秒后换成新版自己回来；替换失败就照旧打开原来的版本。下载中可以取消。
+  确认后她会退出，几秒后换成新版自己回来；替换失败就照旧打开原来的版本。下载中可以取消。安装版下载的是安装包，
+  静默安装；免安装版只替换 exe。
 - 右键她或托盘图标：戳她一下、和她说话、设置…、暂停观察、退出；「只看白名单」模式下还能一键把当前程序加入白名单。
 - 「设置…」：分「常规、调用方式、观察范围、陪伴、外观、关于」六页，改动立即生效。评论间隔（30 秒～10 分钟）、
   模型（快速省钱 / 更聪明）、调用方式、开机自启、黑名单和白名单、陪伴、溜达、她的身高等都在这里调整。
@@ -111,7 +118,9 @@ Claude 桌面版自带的 claude-code。
 ## 开发
 
 PowerShell 7：`./scripts/verify.ps1` 运行测试（pytest、compileall、ruff、`app.py --self-test`），
-`./scripts/build.ps1` 构建，`./scripts/package.ps1` 用 PyInstaller 生成单文件 `dist/desk-sister.exe`。
+`./scripts/build.ps1` 构建，`./scripts/package.ps1` 用 PyInstaller 生成单文件 `dist/desk-sister.exe`，
+`./devtools/build_installer.ps1` 生成文件夹版并用 Inno Setup 6 打成安装包 `dist/DeskSister-Setup.exe`
+（脚本在 installer/，简体中文界面来自 Inno Setup 官方仓库的翻译）。
 需求与验收条件见 docs/requirements.md，架构见 docs/architecture.md。
 重新生成立绘后执行 `python devtools/process_sprites.py assets/raw assets/sprites`，
 再执行 `python devtools/embed_sprites.py` 更新内嵌立绘（否则测试会提示过期），

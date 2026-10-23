@@ -142,6 +142,17 @@ production deployments need authorisation. Secrets are configured only in GitHub
   page before deleting it, the backup and any leftover download. The restart drops PyInstaller's internal environment
   variables and PSModulePath (a module path inherited from PowerShell 7 keeps Windows PowerShell from computing the
   checksum).
+- The installed version (the one-folder build, or the single-file exe in `%LOCALAPPDATA%\Programs\DeskSister`)
+  downloads `DeskSister-Setup.exe` instead, likewise accepted only from this repository's release and checked against
+  GitHub's size and SHA-256, and saved as `DeskSister-Setup.update.exe`. On restart the hidden script waits for this
+  process to quit, computes the SHA-256 once more, and only if it matches runs it with
+  `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR=<the same folder>` (the installer closes anything still holding the
+  files and rolls itself back on failure); then it notes the outcome, deletes the installer and starts the pet.
+- The installer (Inno Setup, per user, no administrator) writes only to `%LOCALAPPDATA%\Programs\DeskSister`, the Start
+  menu (and an optional desktop shortcut) and the current user's uninstall entry. Uninstalling first closes a pet running
+  from that folder and removes the program files and update leftovers; the start-with-Windows shortcut is removed only
+  when it points at this installation's exe; the config and memory in `%APPDATA%\ClaudePet` stay. The cloud build uses
+  a pinned official Inno Setup installer and checks its SHA-256 before installing it.
 - Anyone who can write to the exe's folder could replace the exe directly anyway, so putting the download in that same
   folder adds no new risk; the default install location (%LOCALAPPDATA%\Programs\DeskSister) is writable only by the
   current user.
