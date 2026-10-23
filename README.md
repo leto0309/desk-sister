@@ -1,5 +1,7 @@
 # Desk Sister
 
+[English](README.en.md) · **中文**
+
 > **非官方粉丝作品，与 Anthropic 无任何关联，也未获其认可。** “Claude” 和 “Anthropic” 是 Anthropic PBC 的商标，
 > 这里只用于说明本程序调用的是 Claude 模型。
 > *Unofficial fan project, not affiliated with or endorsed by Anthropic.*
@@ -129,22 +131,4 @@ PowerShell 7：`./scripts/verify.ps1` 运行测试（pytest、compileall、ruff�
 
 ---
 
-### English summary
-
-Desk Sister is an unofficial Windows desktop pet: a chibi girl who glances at your active window now and then and
-comments on it in one line. It thinks through **your own** logged-in Claude Code (Claude subscription) or Codex CLI
-(ChatGPT subscription, with all its agent tools switched off), or through **your own** Anthropic, OpenAI, DeepSeek or
-Gemini API key (stored in Windows Credential Manager). Screenshots stay in
-memory, except in Codex mode: the Codex CLI only reads images from files, so the screenshot is written to a private
-temporary folder and deleted in the background when the call ends (retried later if Windows still holds the file).
-Private windows are skipped by a blocklist. She strolls along the bottom of the screen now and then, and reminds you
-to go to bed at most once a night by default (configurable). Ctrl + mouse wheel over her changes her size; rub her head
-with the mouse for a pat. She says good morning, sums up your day in the evening, wishes you a happy birthday and
-checks GitHub for a new version, which the About page can download and install for you.
-
-**Language.** She speaks English on a non-Chinese Windows (and Chinese on a Chinese one): the menu, the settings window,
-her own lines and the model's replies. Change it under Settings → General → Language.
-
-Code is MIT-licensed; the character art is **not** — it is
-AI-generated from an original design by ZipZipPipe and may be used for non-commercial purposes only
-(see ASSETS-LICENSE.md). Not affiliated with Anthropic.
+**English:** see [README.en.md](README.en.md).
