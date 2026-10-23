@@ -11,6 +11,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .i18n import tr
 from .claude_client import environ_snapshot
 
 SHORTCUT_NAME = "Desk Sister.lnk"
@@ -177,26 +178,26 @@ class Autostart:
             try:
                 legacy.unlink()
             except OSError as exc:
-                raise AutostartError(f"删不掉旧的启动快捷方式 {legacy.name}：{exc}") from exc
+                raise AutostartError(tr("删不掉旧的启动快捷方式 {0}：{1}", legacy.name, exc)) from exc
 
     def is_enabled(self) -> bool:
         return self.state() == ON
 
     def enable(self) -> None:
         if self.shortcut.exists() and not points_to_us(self.shortcut, self.launch):
-            raise AutostartError(f"{self.shortcut.name} 已存在且指向其他程序，未覆盖")
+            raise AutostartError(tr("{0} 已存在且指向其他程序，未覆盖", self.shortcut.name))
         self.folder.mkdir(parents=True, exist_ok=True)
         proc = _powershell(_CREATE, {
             "PET_LNK": str(self.shortcut), "PET_TARGET": self.launch.target, "PET_ARGS": self.launch.arguments,
             "PET_WORKDIR": self.launch.workdir, "PET_ICON": self.launch.icon,
         })
         if proc.returncode != 0 or not self.shortcut.is_file():
-            raise AutostartError("创建启动快捷方式失败：" + (proc.stderr.strip().splitlines() or ["未知错误"])[-1])
+            raise AutostartError(tr("创建启动快捷方式失败：") + (proc.stderr.strip().splitlines() or [tr("未知错误")])[-1])
         if self.task_manager:
             try:
                 clear_task_manager_flag()
             except OSError as exc:
-                raise AutostartError(f"无法解除任务管理器中的禁用：{exc}") from exc
+                raise AutostartError(tr("无法解除任务管理器中的禁用：{0}", exc)) from exc
         self._remove_legacy()  # one entry under the new name, never two
 
     def disable(self) -> None:
@@ -204,5 +205,5 @@ class Autostart:
         if not self.shortcut.exists():
             return
         if not points_to_us(self.shortcut, self.launch):
-            raise AutostartError(f"{self.shortcut.name} 指向其他程序，未删除")
+            raise AutostartError(tr("{0} 指向其他程序，未删除", self.shortcut.name))
         self.shortcut.unlink()

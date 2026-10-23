@@ -13,6 +13,7 @@ from typing import Callable
 
 import openai
 
+from .i18n import tr
 from .api_client import _short
 from .claude_client import ENV_LOCK, ClaudeResult
 from .providers import Provider
@@ -72,9 +73,9 @@ class OpenAICompatCall:
         try:
             key = self._load_key()
         except OSError as exc:
-            return ClaudeResult(False, error=f"读取 API Key 失败：{exc}")
+            return ClaudeResult(False, error=tr("读取 API Key 失败：{0}", exc))
         if not key:
-            return ClaudeResult(False, error="还没有设置 API Key", no_api_key=True)
+            return ClaudeResult(False, error=tr("还没有设置 API Key"), no_api_key=True)
         client = clean_client(self._make_client, api_key=key, base_url=self.provider.base_url,
                               organization=None, project=None, timeout=self.timeout, max_retries=1)
         with self._lock:
@@ -100,34 +101,34 @@ class OpenAICompatCall:
         try:
             response = client.chat.completions.create(**params)
         except openai.AuthenticationError:
-            return ClaudeResult(False, error=f"{name} API Key 无效（401）", bad_api_key=True)
+            return ClaudeResult(False, error=tr("{0} API Key 无效（401）", name), bad_api_key=True)
         except openai.PermissionDeniedError:
-            return ClaudeResult(False, error=f"{name} API Key 没有权限（403）", bad_api_key=True)
+            return ClaudeResult(False, error=tr("{0} API Key 没有权限（403）", name), bad_api_key=True)
         except openai.BadRequestError as exc:
             if "api key" in str(exc.message).lower():  # Gemini answers a wrong key with 400, not 401
-                return ClaudeResult(False, error=f"{name} API Key 无效（400）", bad_api_key=True)
-            return ClaudeResult(False, error=f"{name} API 错误 400：{_short(exc.message, key)}")
+                return ClaudeResult(False, error=tr("{0} API Key 无效（400）", name), bad_api_key=True)
+            return ClaudeResult(False, error=tr("{0} API 错误 400：{1}", name, _short(exc.message, key)))
         except openai.RateLimitError as exc:
-            return ClaudeResult(False, error=f"{name} 请求太频繁或额度不足（429）：{_short(exc.message, key)}")
+            return ClaudeResult(False, error=tr("{0} 请求太频繁或额度不足（429）：{1}", name, _short(exc.message, key)))
         except openai.APITimeoutError:
             if self.cancelled:
                 return ClaudeResult(False, error="cancelled", cancelled=True)
             return ClaudeResult(False, error="timeout", timed_out=True)
         except openai.APIStatusError as exc:
-            return ClaudeResult(False, error=f"{name} API 错误 {exc.status_code}：{_short(exc.message, key)}")
+            return ClaudeResult(False, error=tr("{0} API 错误 {1}：{2}", name, exc.status_code, _short(exc.message, key)))
         except openai.APIError as exc:  # connection problems, or the client closed by cancel()
             if self.cancelled:
                 return ClaudeResult(False, error="cancelled", cancelled=True)
-            return ClaudeResult(False, error=f"连不上 {name} API：{_short(exc, key)}")
+            return ClaudeResult(False, error=tr("连不上 {0} API：{1}", name, _short(exc, key)))
         if self.cancelled:
             return ClaudeResult(False, error="cancelled", cancelled=True)
         choice = response.choices[0] if response.choices else None
         if choice is None:
-            return ClaudeResult(False, error=f"{name} API 返回了空回复")
+            return ClaudeResult(False, error=tr("{0} API 返回了空回复", name))
         refusal = getattr(choice.message, "refusal", None) if choice.message else None
         if choice.finish_reason == "content_filter" or refusal:  # OpenAI may refuse with message.refusal instead
-            return ClaudeResult(False, error="模型拒绝了这次请求")
+            return ClaudeResult(False, error=tr("模型拒绝了这次请求"))
         reply = (choice.message.content or "").strip() if choice.message else ""
         if not reply:
-            return ClaudeResult(False, error=f"{name} API 返回了空回复（{choice.finish_reason}）")
+            return ClaudeResult(False, error=tr("{0} API 返回了空回复（{1}）", name, choice.finish_reason))
         return ClaudeResult(True, text=reply)

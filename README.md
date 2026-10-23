@@ -72,6 +72,8 @@ Claude 桌面版自带的 claude-code。
 - 右键她或托盘图标：戳她一下、和她说话、设置…、暂停观察、退出；「只看白名单」模式下还能一键把当前程序加入白名单。
 - 「设置…」：分「常规、调用方式、观察范围、陪伴、外观、关于」六页，改动立即生效。评论间隔（30 秒～10 分钟）、
   模型（快速省钱 / 更聪明）、调用方式、开机自启、黑名单和白名单、陪伴、溜达、她的身高等都在这里调整。
+- 语言：默认跟随 Windows 显示语言（中文系统用中文，其他用英文），可以在「常规」页改成中文或 English。
+  切换后菜单、设置窗口、她的台词和模型的回复都会换成那种语言。
 - Ctrl+Alt+P：暂停/继续观察。
 - 画面没变化时不调用模型；离开键盘鼠标 10 分钟她会睡着，一动鼠标就醒。同一个窗口停留满 20 秒才会自动评论。
 - 全屏游戏、视频、幻灯片时她不看也不说，攒着的话等你退出全屏再说。
@@ -137,6 +139,12 @@ memory, except in Codex mode: the Codex CLI only reads images from files, so the
 temporary folder and deleted in the background when the call ends (retried later if Windows still holds the file).
 Private windows are skipped by a blocklist. She strolls along the bottom of the screen now and then, and reminds you
 to go to bed at most once a night by default (configurable). Ctrl + mouse wheel over her changes her size; rub her head
-with the mouse for a pat. Code is MIT-licensed; the character art is **not** — it is
+with the mouse for a pat. She says good morning, sums up your day in the evening, wishes you a happy birthday and
+checks GitHub for a new version, which the About page can download and install for you.
+
+**Language.** She speaks English on a non-Chinese Windows (and Chinese on a Chinese one): the menu, the settings window,
+her own lines and the model's replies. Change it under Settings → General → Language.
+
+Code is MIT-licensed; the character art is **not** — it is
 AI-generated from an original design by ZipZipPipe and may be used for non-commercial purposes only
 (see ASSETS-LICENSE.md). Not affiliated with Anthropic.

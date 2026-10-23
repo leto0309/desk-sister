@@ -18,7 +18,8 @@ from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import __version__, agent_link, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers, updates
+from .i18n import N_, tr
+from . import __version__, agent_link, i18n, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers, updates
 from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
@@ -33,9 +34,9 @@ log = logging.getLogger("claude_pet")
 CHANGE_THRESHOLD = 0.02
 HOTKEY_ID = 0xC1A0
 UPDATE_RESULTS = {  # what the about page says after a swap, by the restart helper's note
-    "updated": "已更新到 {version}。",
-    "restored": "上次下载的新版没能换上，现在用的还是原来的版本（{version}），可以再试一次。",
-    "failed": "上次的更新没有完成，请到下载页手动下载新版。",
+    "updated": N_("已更新到 {version}。"),
+    "restored": N_("上次下载的新版没能换上，现在用的还是原来的版本（{version}），可以再试一次。"),
+    "failed": N_("上次的更新没有完成，请到下载页手动下载新版。"),
 }
 UPDATE_NOTE_RETRY_SEC = 2.0  # the restart helper's note, held open at start: tried again this often
 UPDATE_FIRST_DELAY_SEC = 30.0  # the first update check, a little after start
@@ -47,7 +48,7 @@ PAT_COOLDOWN_SEC = 5.0  # one reaction per head pat, however long the rubbing go
 RESIZE_SETTLE_MS = 1200  # resizing has stopped when nothing changed for this long
 SIZE_SHOWN_SEC = 2.5  # how long her height stays under her feet after Ctrl + wheel
 AUTH_CHECK_TTL = 1800
-AUTOSTART_LABEL = "开机自启"
+AUTOSTART_LABEL = N_("开机自启")
 MEMORY_TALK_CHANCE = 0.25  # share of self-talk turns that mention today's main activity (if >= 1 h)
 MEMORY_FLUSH_SEC = 60
 SELF_TALK_GAP_SEC = 60  # never talk to herself within a minute of saying anything
@@ -55,7 +56,7 @@ WAKE_IDLE_SEC = 5
 NOTICE_AWAKE_SEC = 120  # after a Claude Code notice wakes her, she stays awake this long  # input within this many seconds wakes her
 ERROR_MAX = 80  # characters of an error reason shown under the pet
 AUTOSTART_QUIT_GRACE_MS = 30_000  # longest wait for a running autostart change when quitting
-INTERVAL_LABELS = {30: "30 秒", 60: "1 分钟", 90: "90 秒", 120: "2 分钟", 300: "5 分钟", 600: "10 分钟"}
+INTERVAL_LABELS = {30: N_("30 秒"), 60: N_("1 分钟"), 90: N_("90 秒"), 120: N_("2 分钟"), 300: N_("5 分钟"), 600: N_("10 分钟")}
 
 
 @dataclass
@@ -107,13 +108,13 @@ class Outcome:
 def error_summary(result: claude_client.ClaudeResult, timeout_sec: int) -> str:
     """One short line for the status text under the pet."""
     if result.timed_out:
-        return f"超时（{timeout_sec} 秒内没有回复）"
+        return tr("超时（{0} 秒内没有回复）", timeout_sec)
     if result.not_subscription:
-        return f"不是订阅登录：{result.error}"[:ERROR_MAX]
+        return tr("不是订阅登录：{0}", result.error)[:ERROR_MAX]
     if result.no_api_key:
-        return "还没有设置 API Key（设置里的「调用方式」页）"
+        return tr("还没有设置 API Key（设置里的「调用方式」页）")
     lines = [line.strip() for line in (result.error or "").splitlines() if line.strip()]
-    text = lines[0] if lines else "未知错误"
+    text = lines[0] if lines else tr("未知错误")
     return text if len(text) <= ERROR_MAX else text[: ERROR_MAX - 1] + "…"
 
 
@@ -216,7 +217,7 @@ class PetController(QObject):
     codex_found = Signal(object, object)  # (path or None, what to do next)
     update_found = Signal(object, bool)  # (latest released version or None, asked by 主人)
     download_progress = Signal(int, int)  # (bytes so far, of)
-    download_done = Signal(object, str)  # (the verified exe or None, version or what went wrong)
+    download_done = Signal(object, object)  # (the verified exe or None, its version or an i18n.Msg why not)
 
     def __init__(self, app: QApplication, config: Config, sprite_folder: Path, config_file: Path | None = None,
                  autostart: Autostart | None = None, memory: CompanionMemory | None = None) -> None:
@@ -224,6 +225,7 @@ class PetController(QObject):
         self.app = app
         self.config = config
         self.config_file = config_file
+        i18n.set_language(config.language)  # before any text is made
         self.window = PetWindow(sprite_folder, config.sprite_height)
         self.window.set_blink(config.blink)
         self.window.set_talk_mouth(config.talk_mouth)
@@ -308,14 +310,14 @@ class PetController(QObject):
         self._drops: list[float] = []  # recent drops after a drag
         self._greeting_due = ""  # the day (YYYY-MM-DD) whose first hello had to wait
         self.update_available = ""  # a newer released version, once a check found one
-        self.update_status = ""  # what the about page says about the last check
+        self._update_status: str | i18n.Msg = ""  # what the about page says about the last check
         self.update_checking = False
         self._update_from = float("inf")  # no automatic check before start() (then one shortly after)
         self._update_announce = False
         self._update_retry = False  # the last check failed: the next one is due an hour later, not a day
         self._take_update(self.config.update_latest)  # found by an earlier run, maybe not told yet
         self.download_state = ""  # "", "downloading" or "ready" (verified, waiting for the restart)
-        self.download_text = ""  # progress or outcome, for the about page
+        self._download_text: str | i18n.Msg = ""  # progress or outcome, for the about page
         self._download_cancel = threading.Event()
         self._download_path: Path | None = None
         self._download_sha = ""
@@ -360,7 +362,7 @@ class PetController(QObject):
                 self._greeting_due = today  # after the notice
         else:
             if not self._greet_if_new_day():  # the first hello of the day, or the usual one
-                self.window.say("happy", "主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。")
+                self.window.say("happy", tr("主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。"))
             # First look once the dwell gate can pass, so she does not wait a whole interval.
             QTimer.singleShot(max(8, self.config.dwell_sec + 1) * 1000, self.tick)
 
@@ -402,7 +404,7 @@ class PetController(QObject):
             return
         if self.config.paused and not user_message:
             if force:
-                self.window.say("sad", "我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）")
+                self.window.say("sad", tr("我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）"))
             return
         provider = self._provider()
         if provider.kind == CODEX_CLI and not self.codex:
@@ -459,15 +461,15 @@ class PetController(QObject):
 
     def poke(self) -> None:
         if self.busy:
-            self.window.say("think", "等一下下，我还在想上一句……")
+            self.window.say("think", tr("等一下下，我还在想上一句……"))
             return
         self.tick(force=True)
 
     def chat(self) -> None:
-        text, ok = QInputDialog.getText(None, "和 Claude 说话", "想对她说什么？")
+        text, ok = QInputDialog.getText(None, tr("和 Claude 说话"), tr("想对她说什么？"))
         if ok and text.strip():
             if self.busy:
-                self.window.say("think", "等一下下，我还在想上一句……")
+                self.window.say("think", tr("等一下下，我还在想上一句……"))
                 return
             self.tick(force=True, user_message=text.strip()[:300])
 
@@ -637,30 +639,26 @@ class PetController(QObject):
 
     def set_claude_link(self, enabled: bool) -> None:
         if enabled:
-            text = (f"要开启 Claude Code 联动吗？\n\n这会修改 {self.claude_settings}：添加几条 hook。"
-                    "如果文件已存在，会先备份为 settings.json.claude-pet-backup-<时间戳>（保留最近 5 份）。\n\n"
-                    "hook 只从 Claude Code 的事件数据里取出会话编号，往本地文件写“事件名 + 会话编号 + 时间”"
-                    "（例如“在改文件”“等你批准”）；你的提示词、代码和命令内容不会被保存。"
-                    "\n\n关闭联动时，只移除这些 hook。")
-            if not self._confirm("Claude Code 联动", text):
+            text = (tr("要开启 Claude Code 联动吗？\n\n这会修改 {0}：添加几条 hook。如果文件已存在，会先备份为 settings.json.claude-pet-backup-<时间戳>（保留最近 5 份）。\n\nhook 只从 Claude Code 的事件数据里取出会话编号，往本地文件写“事件名 + 会话编号 + 时间”（例如“在改文件”“等你批准”）；你的提示词、代码和命令内容不会被保存。\n\n关闭联动时，只移除这些 hook。", self.claude_settings))
+            if not self._confirm(tr("Claude Code 联动"), text):
                 return
             try:
                 self._claude_event_file()  # first, so a failure leaves settings.json untouched
             except OSError as exc:
                 log.warning("could not prepare the Claude Code event file: %s", exc)
-                self.window.say("sad", f"没能开启联动：事件文件写不进去（{exc}）")
+                self.window.say("sad", tr("没能开启联动：事件文件写不进去（{0}）", exc))
                 return
             try:
                 backup = agent_link.install_hooks(self.claude_settings)
             except (agent_link.HooksError, OSError) as exc:
                 log.warning("could not install Claude Code hooks: %s", exc)
-                self.window.say("sad", f"没能开启联动：{exc}")
+                self.window.say("sad", tr("没能开启联动：{0}", exc))
                 return
             self.config.claude_link = True
             self._open_claude_tail()
             self._save()
-            saved = f"原来的设置备份在 {backup.name}。" if backup else ""
-            self.window.say("happy", f"联动开启啦！Claude Code 妹妹在忙什么我都会知道～{saved}（已经开着的会话可能要重开才生效）")
+            saved = tr("原来的设置备份在 {0}。", backup.name) if backup else ""
+            self.window.say("happy", tr("联动开启啦！Claude Code 妹妹在忙什么我都会知道～{0}（已经开着的会话可能要重开才生效）", saved))
             return
         self.config.claude_link = False
         self.claude_tail = None
@@ -672,9 +670,9 @@ class PetController(QObject):
             agent_link.uninstall_hooks(self.claude_settings)
         except (agent_link.HooksError, OSError) as exc:
             log.warning("could not remove Claude Code hooks: %s", exc)
-            self.window.say("sad", f"我不再看联动了，但没能从 settings.json 移除 hook：{exc}")
+            self.window.say("sad", tr("我不再看联动了，但没能从 settings.json 移除 hook：{0}", exc))
             return
-        self.window.say("happy", "好的，联动关掉了，hook 也移除了。")
+        self.window.say("happy", tr("好的，联动关掉了，hook 也移除了。"))
         self._refresh_status()
 
     # ---- companion memory ---------------------------------------------------
@@ -728,9 +726,9 @@ class PetController(QObject):
             self.memory.clear()
         except OSError as exc:
             log.exception("could not clear companion memory")
-            self.window.say("sad", f"记忆在我这儿清空了，但 memory.json 没能改写（{exc}），我稍后会再试。")
+            self.window.say("sad", tr("记忆在我这儿清空了，但 memory.json 没能改写（{0}），我稍后会再试。", exc))
             return
-        self.window.say("happy", "好的，陪伴记忆都清空啦……（翻到新的一页）")
+        self.window.say("happy", tr("好的，陪伴记忆都清空啦……（翻到新的一页）"))
 
     def _update_quiet(self) -> None:
         if not self.config.quiet_fullscreen:
@@ -764,7 +762,7 @@ class PetController(QObject):
             return
         if not self.asleep and not self.busy and idle >= self.config.sleep_after_sec and self._clock() >= self.awake_until:
             self.asleep = True
-            reply = persona.pick(persona.SLEEP_LINES)
+            reply = persona.pick(persona.lines("SLEEP_LINES"))
             if self.quiet:
                 self.window.set_mood(reply.mood)
             else:
@@ -784,7 +782,7 @@ class PetController(QObject):
                 self._greeting_due = today  # said once she may talk
             self.window.set_mood("idle")
         elif not self._greet_if_new_day():
-            self.window.say(*self._reply_tuple(persona.pick(persona.WAKE_LINES)))
+            self.window.say(*self._reply_tuple(persona.pick(persona.lines("WAKE_LINES"))))
 
     # ---- worker thread ---------------------------------------------------
     def _work(self, job: Job) -> None:
@@ -851,13 +849,13 @@ class PetController(QObject):
             bedtime=job.bedtime,
         )
         if job.kind == CLAUDE_CLI:
-            args = claude_client.build_args(job.claude, job.model, persona.SYSTEM_PROMPT)
+            args = claude_client.build_args(job.claude, job.model, persona.system_prompt())
             result = job.call.run(args, claude_client.build_message(text, snapshot.jpeg))
         elif job.kind == CODEX_CLI:
-            result = job.call.ask(job.codex, job.model, persona.SYSTEM_PROMPT, text, snapshot.jpeg,
+            result = job.call.ask(job.codex, job.model, persona.system_prompt(), text, snapshot.jpeg,
                                   effort=codex_client.EFFORTS.get(job.tier, "low"))
         else:
-            result = job.call.ask(job.model, persona.SYSTEM_PROMPT, text, snapshot.jpeg)
+            result = job.call.ask(job.model, persona.system_prompt(), text, snapshot.jpeg)
         source = "claude" if job.kind == CLAUDE_CLI else job.backend
         log.info("%s call ok=%s in %.1fs", source, result.ok, time.monotonic() - started)
         if not result.ok:
@@ -873,7 +871,7 @@ class PetController(QObject):
     def _watchdog(self, generation: int, force: bool = True) -> None:
         if generation == self.generation and self.busy:
             log.warning("request %d did not finish; abandoning it", generation)
-            self.last_error = "任务卡住，已放弃"
+            self.last_error = tr("任务卡住，已放弃")
             self._cancel_inflight()
             if not force and generation <= self.notice_generation:
                 return  # an automatic look older than a Claude Code notice: never cover the notice
@@ -903,7 +901,7 @@ class PetController(QObject):
             return
         if outcome.kind == "no_window":
             if outcome.force:
-                self.window.say("think", "主人现在好像没有打开什么窗口呢……")
+                self.window.say("think", tr("主人现在好像没有打开什么窗口呢……"))
             return
         if outcome.kind == "unchanged":
             return
@@ -968,22 +966,22 @@ class PetController(QObject):
     def _build_menu(self) -> QMenu:
         """Only what is wanted at hand; everything else lives in the settings window."""
         menu = QMenu()
-        menu.addAction("戳她一下（立即评论）", self.poke)
-        menu.addAction("和她说话…", self.chat)
-        menu.addAction("设置…", self.open_settings)
-        self.pause_action = QAction("暂停观察 (Ctrl+Alt+P)", menu, checkable=True, checked=self.config.paused)
+        menu.addAction(tr("戳她一下（立即评论）"), self.poke)
+        menu.addAction(tr("和她说话…"), self.chat)
+        menu.addAction(tr("设置…"), self.open_settings)
+        self.pause_action = QAction(tr("暂停观察 (Ctrl+Alt+P)"), menu, checkable=True, checked=self.config.paused)
         self.pause_action.triggered.connect(lambda _checked: self.toggle_pause())
         menu.addAction(self.pause_action)
         # About the window in front right now, so it stays here (shown in "only the allowlist" mode).
-        self.allowlist_action = QAction("把当前程序加入白名单", menu)
+        self.allowlist_action = QAction(tr("把当前程序加入白名单"), menu)
         self.allowlist_action.triggered.connect(self.toggle_current_in_allowlist)
         menu.addAction(self.allowlist_action)
         menu.aboutToShow.connect(self._refresh_allowlist_action)
         self._refresh_allowlist_action()
         menu.addSeparator()
-        menu.addAction("退出", self.request_quit)
+        menu.addAction(tr("退出"), self.request_quit)
         # The autostart switch is in the settings window; its state is read in the background.
-        self.autostart_on, self.autostart_enabled, self.autostart_text = False, False, AUTOSTART_LABEL
+        self.autostart_on, self.autostart_enabled, self.autostart_text = False, False, tr(AUTOSTART_LABEL)
         self._refresh_autostart()
         return menu
 
@@ -1018,7 +1016,7 @@ class PetController(QObject):
             return
         foreign = state == AUTOSTART_FOREIGN
         self.autostart_on, self.autostart_enabled = state == AUTOSTART_ON, not foreign
-        self.autostart_text = AUTOSTART_LABEL + ("（同名快捷方式属于其他程序）" if foreign else "")
+        self.autostart_text = tr(AUTOSTART_LABEL) + (tr("（同名快捷方式属于其他程序）") if foreign else "")
         self._sync_settings()  # last: the window copies on, enabled and the text
 
     def set_autostart(self, enabled: bool) -> None:
@@ -1037,11 +1035,11 @@ class PetController(QObject):
                     autostart.enable()
                 else:
                     autostart.disable()
-                message = "好的，以后开机我就会自动来陪主人啦～" if enabled else "好的，开机时我就不自己跑出来了。"
+                message = tr("好的，以后开机我就会自动来陪主人啦～") if enabled else tr("好的，开机时我就不自己跑出来了。")
                 self.autostart_done.emit(True, message)
             except (AutostartError, OSError, subprocess.SubprocessError) as exc:
                 log.warning("autostart change failed: %s", exc)
-                self.autostart_done.emit(False, f"呜…开机自启没设置成功：{exc}")
+                self.autostart_done.emit(False, tr("呜…开机自启没设置成功：{0}", exc))
 
         self._spawn_autostart(work)
 
@@ -1063,7 +1061,7 @@ class PetController(QObject):
             self.timer.stop()
             self.focus_tracker.stop()
             self._cancel_inflight()
-            self.window.say("think", "等我把开机自启设置好就走～")
+            self.window.say("think", tr("等我把开机自启设置好就走～"))
             QTimer.singleShot(AUTOSTART_QUIT_GRACE_MS, self._quit)
             return
         self._quit()
@@ -1081,9 +1079,9 @@ class PetController(QObject):
         self.pause_action.setChecked(self.config.paused)
         if self.config.paused:
             self._cancel_inflight()
-            self.window.say("sad", "好的，我先闭上眼睛，不偷看了。需要我的时候再叫我～")
+            self.window.say("sad", tr("好的，我先闭上眼睛，不偷看了。需要我的时候再叫我～"))
         else:
-            self.window.say("happy", "我回来啦！继续陪着主人～")
+            self.window.say("happy", tr("我回来啦！继续陪着主人～"))
             self.last_fingerprint = None
         self._refresh_status()
         self._save()
@@ -1101,11 +1099,11 @@ class PetController(QObject):
         self._refresh_allowlist_action()
         self._save()
         if mode == "allowlist" and not self.config.allowlist:
-            self.window.say("think", "白名单还是空的哦～打开想让我看的程序，右键选「把它加入白名单」，或在设置的「观察范围」页添加吧。")
+            self.window.say("think", tr("白名单还是空的哦～打开想让我看的程序，右键选「把它加入白名单」，或在设置的「观察范围」页添加吧。"))
         elif mode == "allowlist":
-            self.window.say("happy", f"好的，以后我只看白名单里的 {len(self.config.allowlist)} 项～")
+            self.window.say("happy", tr("好的，以后我只看白名单里的 {0} 项～", len(self.config.allowlist)))
         else:
-            self.window.say("happy", "好的，除了黑名单里的窗口，我都会看看～")
+            self.window.say("happy", tr("好的，除了黑名单里的窗口，我都会看看～"))
 
     def _current_window(self) -> capture.WindowInfo | None:
         """The window the user was in before opening the menu."""
@@ -1132,16 +1130,16 @@ class PetController(QObject):
         name = self._current_program()
         listed = bool(self._exact_rules(name)) if name else False
         if not name:
-            self.allowlist_action.setText("把当前程序加入白名单（没有可加入的窗口）")
+            self.allowlist_action.setText(tr("把当前程序加入白名单（没有可加入的窗口）"))
             self.allowlist_action.setEnabled(False)
         elif listed:
-            self.allowlist_action.setText(f"从白名单移除「{name}」")
+            self.allowlist_action.setText(tr("从白名单移除「{0}」", name))
             self.allowlist_action.setEnabled(True)
         elif capture.matches_allowlist(self.config.allowlist, name, self._current_title()):
-            self.allowlist_action.setText(f"「{name}」已被白名单规则匹配（在 config.json 修改）")
+            self.allowlist_action.setText(tr("「{0}」已被白名单规则匹配（在 config.json 修改）", name))
             self.allowlist_action.setEnabled(False)
         else:
-            self.allowlist_action.setText(f"把「{name}」加入白名单")
+            self.allowlist_action.setText(tr("把「{0}」加入白名单", name))
             self.allowlist_action.setEnabled(True)
 
     def toggle_current_in_allowlist(self) -> None:
@@ -1156,14 +1154,14 @@ class PetController(QObject):
             title = self._current_title()
             still = [rule for rule in self.config.allowlist if capture.matches_allowlist([rule], name, title)]
             if still:
-                rules = "、".join(still)
-                self.window.say("think", f"移掉了「{name}」这一条，但规则 {rules} 仍然匹配它，要在 config.json 里改哦。")
+                rules = tr("、").join(still)
+                self.window.say("think", tr("移掉了「{0}」这一条，但规则 {1} 仍然匹配它，要在 config.json 里改哦。", name, rules))
             else:
-                self.window.say("happy", f"好的，「{name}」移出白名单了。")
+                self.window.say("happy", tr("好的，「{0}」移出白名单了。", name))
         else:
             self.config.allowlist = self.config.allowlist + [capture.literal_rule(name)]
-            hint = "" if self.config.watch_mode == "allowlist" else "（切到「只看白名单」后生效）"
-            self.window.say("happy", f"记住啦，「{name}」加入白名单～{hint}")
+            hint = "" if self.config.watch_mode == "allowlist" else tr("（切到「只看白名单」后生效）")
+            self.window.say("happy", tr("记住啦，「{0}」加入白名单～{1}", name, hint))
         self._save()
         self._refresh_allowlist_action()
 
@@ -1293,7 +1291,7 @@ class PetController(QObject):
 
     def _start_update_check(self, asked: bool) -> None:
         self.update_checking = True
-        self.update_status = "正在检查…"
+        self.update_status = i18n.Msg("正在检查…")
         self._sync_settings()
         def check() -> None:
             try:
@@ -1310,7 +1308,7 @@ class PetController(QObject):
         if version is None:
             self._update_from = self._clock() + updates.RETRY_SEC
             self._update_retry = True
-            self.update_status = "检查失败（网络不通或 GitHub 暂时连不上），过一会儿会再试。"
+            self.update_status = i18n.Msg("检查失败（网络不通或 GitHub 暂时连不上），过一会儿会再试。")
         else:
             self._update_retry = False
             self.config.update_checked_at = self._now()
@@ -1323,13 +1321,13 @@ class PetController(QObject):
         """Show what the latest release is; a version newer than any she has told about is told once."""
         if version and updates.is_newer(version):
             self.update_available = version
-            self.update_status = f"有新版本 v{version}"
+            self.update_status = i18n.Msg("有新版本 v{0}", version)
             seen = self.config.update_seen
             self._update_announce = not seen or updates.is_newer(version, seen)
         else:
             self.update_available = ""
             self._update_announce = False  # (a release withdrawn meanwhile is not told)
-            self.update_status = f"已是最新版（{__version__}）" if version else ""
+            self.update_status = i18n.Msg("已是最新版（{0}）", __version__) if version else ""
 
     def _announce_update(self) -> None:
         """Tell 主人 about a new version once, when she may talk."""
@@ -1340,8 +1338,25 @@ class PetController(QObject):
         if not seen or updates.is_newer(self.update_available, seen):  # the record only goes up
             self.config.update_seen = self.update_available
         self._save()
-        where = "点「下载并更新」就能换上" if self._exe_path() else "可以打开下载页"
-        self.window.say("happy", f"主人，我有新版本 v{self.update_available} 啦～在设置 → 关于里{where}。")
+        where = tr("点「下载并更新」就能换上") if self._exe_path() else tr("可以打开下载页")
+        self.window.say("happy", tr("主人，我有新版本 v{0} 啦～在设置 → 关于里{1}。", self.update_available, where))
+
+    # Kept as i18n.Msg and translated when read: the about page follows a language switch.
+    @property
+    def update_status(self) -> str:
+        return str(self._update_status)
+
+    @update_status.setter
+    def update_status(self, value: str | i18n.Msg) -> None:
+        self._update_status = value
+
+    @property
+    def download_text(self) -> str:
+        return str(self._download_text)
+
+    @download_text.setter
+    def download_text(self, value: str | i18n.Msg) -> None:
+        self._download_text = value
 
     # ---- self-update (the packaged exe only) --------------------------------
     @staticmethod
@@ -1360,7 +1375,7 @@ class PetController(QObject):
             result = updates.remove_leftovers(exe.parent)
             if result:
                 log.info("last update: %s", result)
-            self.download_text = UPDATE_RESULTS.get(result, "").format(version=__version__)
+            self.download_text = i18n.Msg(UPDATE_RESULTS[result], version=__version__) if result in UPDATE_RESULTS else ""
         except OSError:
             log.exception("could not remove an old update download")
         # The restart helper waits for its note to go (that is how it knows this copy is up): if it is held
@@ -1385,30 +1400,30 @@ class PetController(QObject):
 
     def _start_download(self) -> None:
         folder = self._exe_path().parent
-        self.download_state, self.download_text, self._download_percent = "downloading", "正在准备下载…", -1
+        self.download_state, self.download_text, self._download_percent = "downloading", i18n.Msg("正在准备下载…"), -1
         self._download_cancel = cancel = threading.Event()
 
         def run() -> None:
             try:
                 asset = updates.fetch_asset()
                 if asset is None:
-                    self.download_done.emit(None, "读不到新版的下载信息，请稍后再试，或到下载页手动下载。")
+                    self.download_done.emit(None, i18n.Msg("读不到新版的下载信息，请稍后再试，或到下载页手动下载。"))
                     return
                 if not updates.is_newer(asset.version):
-                    self.download_done.emit(None, f"已是最新版（{__version__}）。")
+                    self.download_done.emit(None, i18n.Msg("已是最新版（{0}）。", __version__))
                     return
                 path = updates.download(asset, folder, cancel.is_set, self.download_progress.emit)
                 self._download_sha = asset.sha256
             except updates.Cancelled:
-                self.download_done.emit(None, "已取消下载。")
+                self.download_done.emit(None, i18n.Msg("已取消下载。"))
             except PermissionError:
-                self.download_done.emit(None, "exe 所在的文件夹不能写入，请到下载页手动下载。")
+                self.download_done.emit(None, i18n.Msg("exe 所在的文件夹不能写入，请到下载页手动下载。"))
             except ValueError as exc:
                 log.warning("update download refused: %s", exc)
-                self.download_done.emit(None, "下载的文件和 GitHub 公布的大小或校验值不一致，已删除。")
+                self.download_done.emit(None, i18n.Msg("下载的文件和 GitHub 公布的大小或校验值不一致，已删除。"))
             except Exception as exc:  # network and anything else: never leave the button stuck
                 log.warning("update download failed: %s", exc)
-                self.download_done.emit(None, "下载失败（网络中断？），请稍后再试。")
+                self.download_done.emit(None, i18n.Msg("下载失败（网络中断？），请稍后再试。"))
             else:
                 self.download_done.emit(path, asset.version)
 
@@ -1420,34 +1435,34 @@ class PetController(QObject):
         if self.download_state != "downloading" or percent == self._download_percent:
             return
         self._download_percent = percent
-        self.download_text = f"正在下载 {percent}%（{got / 1048576:.1f} / {total / 1048576:.1f} MB）"
+        self.download_text = i18n.Msg("正在下载 {0}%（{1:.1f} / {2:.1f} MB）", percent, got / 1048576, total / 1048576)
         self._sync_settings()
 
     def _on_download_done(self, path, text: str) -> None:
         if path is not None and self._download_cancel.is_set():  # cancelled while the result was on its way
-            text = "已取消下载。"
+            text = i18n.Msg("已取消下载。")
             try:
                 Path(path).unlink(missing_ok=True)
             except OSError:  # held open (a virus scan?): removed at the next start
                 log.warning("could not remove a cancelled update download", exc_info=True)
-                text = "已取消下载（下载的文件暂时删不掉，下次启动时会清理）。"
+                text = i18n.Msg("已取消下载（下载的文件暂时删不掉，下次启动时会清理）。")
             path = None
         if path is None:
             self.download_state, self.download_text = "", text
             self._sync_settings()
             return
         self.download_state, self._download_path = "ready", Path(path)
-        self.download_text = f"v{text} 已下载并校验好。"
+        self.download_text = i18n.Msg("v{0} 已下载并校验好。", text)
         self._sync_settings()
         self._offer_restart()
 
     def _offer_restart(self) -> None:
         if self.quit_pending:
             return
-        if self._confirm("更新 Desk Sister", "新版已下载并校验好。现在重启换成新版吗？\n她会先退出，几秒后自己回来。"):
+        if self._confirm(tr("更新 Desk Sister"), tr("新版已下载并校验好。现在重启换成新版吗？\n她会先退出，几秒后自己回来。")):
             self._apply_update()
         else:
-            self.download_text = "新版已下载好，点「重启并更新」就会换上。"
+            self.download_text = i18n.Msg("新版已下载好，点「重启并更新」就会换上。")
             self._sync_settings()
 
     def _apply_update(self) -> None:
@@ -1462,7 +1477,7 @@ class PetController(QObject):
                     path.unlink(missing_ok=True)
                 except OSError:
                     log.exception("could not remove a changed update download")
-            self.download_state, self.download_text = "", "下载的文件不见了或被改动过，请重新下载。"
+            self.download_state, self.download_text = "", i18n.Msg("下载的文件不见了或被改动过，请重新下载。")
             self._sync_settings()
             return
         wait = [os.getpid()]
@@ -1474,11 +1489,33 @@ class PetController(QObject):
                                                      self._download_sha, wait))
         except OSError as exc:
             log.warning("could not start the update helper: %s", exc)
-            self.download_text = "没能启动更新程序，请到下载页手动下载。"
+            self.download_text = i18n.Msg("没能启动更新程序，请到下载页手动下载。")
             self._sync_settings()
             return
         log.info("restarting into the downloaded update")
         self.request_quit()
+
+    def set_language(self, choice: str) -> None:
+        """Switch her language now: the menu and an open settings window are rebuilt; lines follow at once."""
+        if choice not in i18n.CHOICES:
+            return
+        self.config.language = choice
+        self._save()
+        before = i18n.current()
+        if i18n.set_language(choice) != before:
+            self._cancel_inflight()  # a reply on its way is in the old language: dropped, the next look asks anew
+        self.tray.setContextMenu(self._build_menu())
+        self._refresh_allowlist_action()
+        if self.settings_window is not None:
+            visible, geometry = self.settings_window.isVisible(), self.settings_window.geometry()
+            self.settings_window.close()
+            self.settings_window.deleteLater()
+            self.settings_window = None
+            if visible:
+                self.open_settings()
+                self.settings_window.setGeometry(geometry)
+                self.settings_window.nav.setCurrentRow(0)
+        self._refresh_status()
 
     def set_check_updates(self, enabled: bool) -> None:
         self.config.check_updates = bool(enabled)
@@ -1599,11 +1636,8 @@ class PetController(QObject):
             return
         provider = PROVIDERS[backend]
         if provider.paid:
-            text = (f"要改用你自己的 {provider.company} API Key 吗？\n\n"
-                    f"API 按用量收费，费用记在这个 Key 所属的 {provider.company} 账户上。"
-                    "她每次看屏幕或回答都会调用一次 API，截图会发给这家公司；评论间隔越短、选「更聪明」的模型，花费越多。\n\n"
-                    "Key 只保存在本机的 Windows 凭据管理器里，不会写进配置文件或日志。")
-            if not self._confirm(f"切换到 {provider.label}", text):
+            text = (tr("要改用你自己的 {0} API Key 吗？\n\nAPI 按用量收费，费用记在这个 Key 所属的 {1} 账户上。她每次看屏幕或回答都会调用一次 API，截图会发给这家公司；评论间隔越短、选「更聪明」的模型，花费越多。\n\nKey 只保存在本机的 Windows 凭据管理器里，不会写进配置文件或日志。", provider.company, provider.company))
+            if not self._confirm(tr("切换到 {0}", provider.label), text):
                 self._sync_settings()
                 return
             if not self._has_key(backend) and not self.set_api_key(backend):
@@ -1614,13 +1648,8 @@ class PetController(QObject):
                 self._sync_settings()
                 self._find_codex(("switch",))  # searched off the UI thread; asks again once found
                 return
-            text = ("要改用 Codex（你自己的 ChatGPT 订阅）吗？\n\n"
-                    "她会通过本机已登录的 Codex CLI 思考，只接受 ChatGPT 订阅登录，不会改用 API Key 计费。"
-                    "Codex 的命令、浏览器、电脑操作等工具都会被关闭。\n\n"
-                    "注意：Codex CLI 只能从文件读取图片，所以每次看屏幕时，截图会短暂写入你自己的临时文件夹，"
-                    "调用结束（包括失败或取消）后删除；若文件正被别的程序占用，会保留到能删时为止，桌宠每秒、退出和启动时都会重试。其他调用方式的截图只在内存里。\n\n"
-                    "用订阅额度运行第三方程序以 OpenAI 现行条款为准。")
-            if not self._confirm("切换到 Codex（ChatGPT 订阅）", text):
+            text = (tr("要改用 Codex（你自己的 ChatGPT 订阅）吗？\n\n她会通过本机已登录的 Codex CLI 思考，只接受 ChatGPT 订阅登录，不会改用 API Key 计费。Codex 的命令、浏览器、电脑操作等工具都会被关闭。\n\n注意：Codex CLI 只能从文件读取图片，所以每次看屏幕时，截图会短暂写入你自己的临时文件夹，调用结束（包括失败或取消）后删除；若文件正被别的程序占用，会保留到能删时为止，桌宠每秒、退出和启动时都会重试。其他调用方式的截图只在内存里。\n\n用订阅额度运行第三方程序以 OpenAI 现行条款为准。"))
+            if not self._confirm(tr("切换到 Codex（ChatGPT 订阅）"), text):
                 self._sync_settings()
                 return
         self._cancel_inflight()  # a request of the old kind must not come back
@@ -1633,17 +1662,17 @@ class PetController(QObject):
         self._sync_settings()
         self._refresh_status()
         if provider.paid:
-            self.window.say("happy", f"好的，之后我用主人的 {provider.company} API Key 来思考～（按量计费，记得留意用量哦）")
+            self.window.say("happy", tr("好的，之后我用主人的 {0} API Key 来思考～（按量计费，记得留意用量哦）", provider.company))
         elif provider.kind == CODEX_CLI:
-            self.window.say("happy", "好的，之后我借 Codex 的 ChatGPT 订阅来思考～")
+            self.window.say("happy", tr("好的，之后我借 Codex 的 ChatGPT 订阅来思考～"))
         else:
-            self.window.say("happy", "好的，之后我用 Claude Code 的订阅登录来思考～")
+            self.window.say("happy", tr("好的，之后我用 Claude Code 的订阅登录来思考～"))
 
     def set_custom_model(self, provider_id: str, model_id: str) -> bool:
         """A model ID that overrides the tier for one provider ("" goes back to the presets)."""
         model_id = model_id.strip()
         if provider_id not in PROVIDERS or (model_id and not providers.MODEL_ID.match(model_id)):
-            self.window.say("think", "这个模型名看起来不对呢……（只能有字母、数字和 . _ - : / @）我没有改。")
+            self.window.say("think", tr("这个模型名看起来不对呢……（只能有字母、数字和 . _ - : / @）我没有改。"))
             return False
         models = dict(self.config.custom_models)
         if model_id:
@@ -1662,44 +1691,44 @@ class PetController(QObject):
         """Ask for a key and keep it in Windows Credential Manager. True when one was saved."""
         provider = self._provider(provider_id)
         if not provider.needs_key:
-            self.window.say("think", "现在的调用方式用的是订阅登录，不需要 API Key 哦。")
+            self.window.say("think", tr("现在的调用方式用的是订阅登录，不需要 API Key 哦。"))
             return False
-        key, ok = self._ask_secret(f"设置 {provider.company} API Key",
-                                   f"粘贴你的 {provider.company} API Key（只保存在本机 Windows 凭据管理器）：")
+        key, ok = self._ask_secret(tr("设置 {0} API Key", provider.company),
+                                   tr("粘贴你的 {0} API Key（只保存在本机 Windows 凭据管理器）：", provider.company))
         key = (key or "").strip()
         if not ok or not key:
             return False
         if not api_client.looks_like_key(key):
-            self.window.say("think", "这串看起来不像 API Key 呢……（不能有空格或中文）我没有保存。")
+            self.window.say("think", tr("这串看起来不像 API Key 呢……（不能有空格或中文）我没有保存。"))
             return False
         try:
             self._save_key(key, provider.vault_entry)
         except OSError as exc:
             log.warning("could not save the API key: %s", exc)
-            self.window.say("sad", f"没能保存 API Key：{exc}")
+            self.window.say("sad", tr("没能保存 API Key：{0}", exc))
             return False
         self.last_error = ""
         self._refresh_status()
         self._sync_settings()  # the key lives outside config.json, so no save announces it
-        self.window.say("happy", "API Key 收好啦，锁在 Windows 凭据管理器里～")
+        self.window.say("happy", tr("API Key 收好啦，锁在 Windows 凭据管理器里～"))
         return True
 
     def clear_api_key(self, provider_id: str | None = None) -> None:
         provider = self._provider(provider_id)
         if not provider.needs_key:
-            self.window.say("think", "现在的调用方式用的是订阅登录，没有保存 API Key。")
+            self.window.say("think", tr("现在的调用方式用的是订阅登录，没有保存 API Key。"))
             return
         try:
             removed = self._delete_key(provider.vault_entry)
         except OSError as exc:
-            self.window.say("sad", f"没能清除 API Key：{exc}")
+            self.window.say("sad", tr("没能清除 API Key：{0}", exc))
             return
         current = provider.id == self.config.backend
         if current:
             self._cancel_inflight()
         self._sync_settings()
-        tail = "（现在正用它，要再设置一个 Key 才能继续看屏幕）" if current else ""
-        self.window.say("happy", ("已经清除保存的 API Key。" if removed else "本来就没有保存 API Key 哦。") + tail)
+        tail = tr("（现在正用它，要再设置一个 Key 才能继续看屏幕）") if current else ""
+        self.window.say("happy", (tr("已经清除保存的 API Key。") if removed else tr("本来就没有保存 API Key 哦。")) + tail)
 
     def set_model(self, model: str, _checked: bool = True) -> None:
         self.config.model = model
@@ -1712,24 +1741,24 @@ class PetController(QObject):
     def _refresh_status(self) -> None:
         if self._clock() < self._size_shown_until and not self.last_error and not self.auto_paused_until:
             # Just resized with Ctrl + wheel: show the height for a moment over any state but an error.
-            self.window.set_status(f"身高 {self.config.sprite_height} 像素")
+            self.window.set_status(tr("身高 {0} 像素", self.config.sprite_height))
         elif self.config.paused:
-            self.window.set_status("已暂停")
+            self.window.set_status(tr("已暂停"))
         elif self.busy:
-            self.window.set_status("思考中…")
+            self.window.set_status(tr("思考中…"))
         elif self.quiet:
             held = self.deferred is not None or self.deferred_notice is not None
-            self.window.set_status("全屏中，先不打扰" + ("（攒了一句）" if held else ""))
+            self.window.set_status(tr("全屏中，先不打扰") + (tr("（攒了一句）") if held else ""))
         elif self.auto_paused_until:
             resume = time.strftime("%H:%M", time.localtime(time.time() + max(0.0, self.auto_paused_until - self._clock())))
-            reason = f"｜原因：{self.last_error}" if self.last_error else ""
-            self.window.set_status(f"连续失败 {self.consecutive_failures} 次，{resume} 前不自动看{reason}")
+            reason = tr("｜原因：{0}", self.last_error) if self.last_error else ""
+            self.window.set_status(tr("连续失败 {0} 次，{1} 前不自动看{2}", self.consecutive_failures, resume, reason))
         elif self.last_error:
-            self.window.set_status("原因：" + self.last_error)
+            self.window.set_status(tr("原因：") + self.last_error)
         elif self.config.claude_link and self.claude_state.status():
             self.window.set_status(self.claude_state.status())
         elif self.asleep:
-            self.window.set_status("睡着了…动一下鼠标叫醒她")
+            self.window.set_status(tr("睡着了…动一下鼠标叫醒她"))
         else:
             self.window.set_status("")
 
@@ -1740,7 +1769,7 @@ class PetController(QObject):
             self._open_path(str(folder))
         except OSError as exc:
             log.warning("could not open log folder: %s", exc)
-            self.window.say("sad", f"打不开日志文件夹：{folder}")
+            self.window.say("sad", tr("打不开日志文件夹：{0}", folder))
 
     def _save(self) -> None:
         try:

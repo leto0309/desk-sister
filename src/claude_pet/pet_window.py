@@ -62,6 +62,16 @@ def embedded_sprite(mood: str, part: bool = False) -> QPixmap:
     return QPixmap.fromImage(qimage.copy())  # copy: the QImage must not outlive the bytes it wraps
 
 
+TYPE_MS = 35  # per Chinese character; a Latin letter is half of one
+HOLD_MS, HOLD_PER_CHAR_MS = 6000, 180  # how long a line stays: a base plus so much per Chinese character
+
+
+def reading_length(text: str) -> float:
+    """How long a line takes to read, in Chinese characters: a CJK or full-width character is one, anything
+    else (an English letter, a space) half of one."""
+    return sum(1.0 if ord(ch) >= 0x2E80 else 0.5 for ch in text)
+
+
 def fit_lines(text: str, metrics: QFontMetrics, width: int, max_lines: int = 2) -> list[str]:
     """Wrap to the real pixel width at character boundaries (preferring spaces), at most max_lines;
     the last line ends with an ellipsis when text is cut. The start of the text is always kept."""
@@ -192,7 +202,7 @@ class PetWindow(QWidget):
         self.bubble_area = 150
         self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + sprite_height + 8)
 
-        self._typer = QTimer(self, interval=35, timeout=self._type_next)
+        self._typer = QTimer(self, interval=TYPE_MS, timeout=self._type_next)
         self._hide_bubble = QTimer(self, singleShot=True, timeout=self.clear_bubble)
         self._bob = QTimer(self, interval=60, timeout=self._animate)
         self._bob.start()
@@ -278,8 +288,10 @@ class PetWindow(QWidget):
         self.shown_chars = 0
         self._talk_started = self.clock()
         self._paused_mouth = False
+        units = reading_length(text)
+        self._typer.setInterval(max(1, round(TYPE_MS * units / max(1, len(text)))))  # English types faster
         self._typer.start()
-        self._hide_bubble.start(hold_ms if hold_ms is not None else 6000 + 180 * len(text))
+        self._hide_bubble.start(hold_ms if hold_ms is not None else round(HOLD_MS + HOLD_PER_CHAR_MS * units))
         self.start_head("nod")  # a little nod as she starts to talk
 
     def clear_bubble(self) -> None:

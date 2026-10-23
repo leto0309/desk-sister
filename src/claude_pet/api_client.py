@@ -12,6 +12,7 @@ from typing import Callable
 
 import anthropic
 
+from .i18n import tr
 from . import credstore
 from .claude_client import ClaudeResult
 
@@ -47,8 +48,8 @@ def _short(message: object, key: str = "", limit: int = 120) -> str:
     """Server/SDK text for the log and the status line: the key (or anything key-like) never survives."""
     text = " ".join(str(message or "").split())
     if key:
-        text = text.replace(key, "[已隐藏]")
-    text = _KEY_LIKE.sub("[已隐藏]", text)
+        text = text.replace(key, tr("[已隐藏]"))
+    text = _KEY_LIKE.sub(tr("[已隐藏]"), text)
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -87,9 +88,9 @@ class ApiCall:
         try:
             key = self._load_key()
         except OSError as exc:
-            return ClaudeResult(False, error=f"读取 API Key 失败：{exc}")
+            return ClaudeResult(False, error=tr("读取 API Key 失败：{0}", exc))
         if not key:
-            return ClaudeResult(False, error="还没有设置 API Key", no_api_key=True)
+            return ClaudeResult(False, error=tr("还没有设置 API Key"), no_api_key=True)
         client = self._make_client(api_key=key, base_url=API_BASE_URL, timeout=self.timeout, max_retries=1)
         with self._lock:
             self._client = client
@@ -121,26 +122,26 @@ class ApiCall:
             else:
                 response = client.messages.create(**params)
         except anthropic.AuthenticationError:
-            return ClaudeResult(False, error="API Key 无效（401）", bad_api_key=True)
+            return ClaudeResult(False, error=tr("API Key 无效（401）"), bad_api_key=True)
         except anthropic.PermissionDeniedError:
-            return ClaudeResult(False, error="API Key 没有权限（403）", bad_api_key=True)
+            return ClaudeResult(False, error=tr("API Key 没有权限（403）"), bad_api_key=True)
         except anthropic.RateLimitError:
-            return ClaudeResult(False, error="API 请求太频繁（429），稍后再试")
+            return ClaudeResult(False, error=tr("API 请求太频繁（429），稍后再试"))
         except anthropic.APITimeoutError:
             if self.cancelled:
                 return ClaudeResult(False, error="cancelled", cancelled=True)
             return ClaudeResult(False, error="timeout", timed_out=True)
         except anthropic.APIStatusError as exc:
-            return ClaudeResult(False, error=f"API 错误 {exc.status_code}：{_short(exc.message, key)}")
+            return ClaudeResult(False, error=tr("API 错误 {0}：{1}", exc.status_code, _short(exc.message, key)))
         except anthropic.APIError as exc:  # connection problems, or the client closed by cancel()
             if self.cancelled:
                 return ClaudeResult(False, error="cancelled", cancelled=True)
-            return ClaudeResult(False, error=f"连不上 Anthropic API：{_short(exc, key)}")
+            return ClaudeResult(False, error=tr("连不上 Anthropic API：{0}", _short(exc, key)))
         if self.cancelled:
             return ClaudeResult(False, error="cancelled", cancelled=True)
         if response.stop_reason == "refusal":
-            return ClaudeResult(False, error="模型拒绝了这次请求")
+            return ClaudeResult(False, error=tr("模型拒绝了这次请求"))
         reply = "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
         if not reply.strip():
-            return ClaudeResult(False, error=f"API 返回了空回复（{response.stop_reason}）")
+            return ClaudeResult(False, error=tr("API 返回了空回复（{0}）", response.stop_reason))
         return ClaudeResult(True, text=reply)

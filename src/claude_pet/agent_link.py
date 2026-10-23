@@ -15,6 +15,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from .i18n import N_, tr
 
 EVENT_FILE_REL = r"ClaudePet\agent-events\claude.log"  # under %APPDATA%
 MAX_EVENT_FILE = 256 * 1024
@@ -58,7 +59,7 @@ class SettingsFormatError(HooksError):
 
     def __init__(self, path: Path, reason: str) -> None:
         self.reason = reason
-        super().__init__(f"{path.name} {reason}，没有修改它")
+        super().__init__(tr("{0} {1}，没有修改它", path.name, reason))
 
 
 def claude_settings_path() -> Path:
@@ -158,9 +159,9 @@ def _parse(raw: bytes | None, path: Path) -> dict:
     try:
         data = json.loads(raw.decode("utf-8-sig"))
     except (ValueError, UnicodeDecodeError) as exc:
-        raise SettingsFormatError(path, f"不是有效的 JSON（{exc}）") from exc
+        raise SettingsFormatError(path, tr("不是有效的 JSON（{0}）", exc)) from exc
     if not isinstance(data, dict):
-        raise SettingsFormatError(path, "的内容不是 JSON 对象")
+        raise SettingsFormatError(path, tr("的内容不是 JSON 对象"))
     hooks = data.get("hooks", {})
     shape_ok = isinstance(hooks, dict) and all(
         isinstance(groups, list) and all(
@@ -173,7 +174,7 @@ def _parse(raw: bytes | None, path: Path) -> dict:
         for groups in hooks.values()
     )
     if not shape_ok:
-        raise SettingsFormatError(path, "里的 hooks 格式不是预期的样子")
+        raise SettingsFormatError(path, tr("里的 hooks 格式不是预期的样子"))
     return data
 
 
@@ -183,7 +184,7 @@ def _read(path: Path) -> bytes | None:
     except FileNotFoundError:
         return None
     except OSError as exc:
-        raise HooksError(f"读不了 {path}：{exc}") from exc
+        raise HooksError(tr("读不了 {0}：{1}", path, exc)) from exc
 
 
 def _strip_ours(data: dict) -> bool:
@@ -307,7 +308,7 @@ def _commit(path: Path, content: bytes) -> tuple[bytes | None, Path | None]:
                 return backup.read_bytes(), backup
             except OSError as exc:
                 last = exc
-        raise HooksError(f"{path.name} 已被桌宠改动，但读不了被替换的版本（{last}）；它保存在 {backup}，请检查")
+        raise HooksError(tr("{0} 已被桌宠改动，但读不了被替换的版本（{1}）；它保存在 {2}，请检查", path.name, last, backup))
     finally:
         if temp.exists():
             temp.unlink()
@@ -354,11 +355,11 @@ def _modify(path: Path, change) -> tuple[bool, Path | None]:
                 change(data)
                 restored = _render(data)
                 if _read(path) != ours_on_disk:
-                    raise HooksError("文件又被改动了")
+                    raise HooksError(tr("文件又被改动了"))
                 try:
                     replaced, newer_backup = _commit(path, restored)
                 except _CreatedMeanwhile as exc:
-                    raise HooksError("文件被删除后又被重新创建") from exc
+                    raise HooksError(tr("文件被删除后又被重新创建")) from exc
                 if replaced == ours_on_disk:
                     if newer_backup is not None:
                         try:
@@ -369,15 +370,14 @@ def _modify(path: Path, change) -> tuple[bool, Path | None]:
                     return True, theirs_backup
                 # Yet another save, made on top of our intermediate version: it may lack the first save's
                 # change, so merging it blindly could lose that. Stop and name both versions.
-                raise HooksError(f"又有程序保存了一次，那次的版本在 {newer_backup}")
+                raise HooksError(tr("又有程序保存了一次，那次的版本在 {0}", newer_backup))
             except (HooksError, OSError, ValueError) as exc:
                 # The file WAS changed by us; say so, and where the other program's version is kept.
                 detail = exc.reason if isinstance(exc, SettingsFormatError) else exc
                 raise HooksError(
-                    f"{path.name} 已被桌宠改动，但同时有其他程序保存了它，未能把两边合并（{detail}）。"
-                    f"那个程序保存的版本在 {theirs_backup}，请对照检查。"
+                    tr("{0} 已被桌宠改动，但同时有其他程序保存了它，未能把两边合并（{1}）。那个程序保存的版本在 {2}，请对照检查。", path.name, detail, theirs_backup)
                 ) from exc
-        raise HooksError(f"{path.name} 一直在被其他程序修改，没有改动它，稍后再试")
+        raise HooksError(tr("{0} 一直在被其他程序修改，没有改动它，稍后再试", path.name))
 
 
 def is_installed(path: Path) -> bool:
@@ -502,19 +502,24 @@ class EventTail:
 
 
 WORKING_TEXT = {
-    "edit": "Claude Code 在改文件…",
-    "run": "Claude Code 在跑命令…",
-    "read": "Claude Code 在读代码…",
-    "web": "Claude Code 在查资料…",
-    "agent": "Claude Code 派出了子代理…",
-    "tool": "Claude Code 在用工具…",
+    "edit": N_("Claude Code 在改文件…"),
+    "run": N_("Claude Code 在跑命令…"),
+    "read": N_("Claude Code 在读代码…"),
+    "web": N_("Claude Code 在查资料…"),
+    "agent": N_("Claude Code 派出了子代理…"),
+    "tool": N_("Claude Code 在用工具…"),
 }
 NOTICES = {
-    "permission": ("panic", "主人主人，Claude Code 妹妹在等你批准操作！"),
-    "waiting": ("talk", "Claude Code 妹妹在等你回话哦～"),
-    "done": ("happy", "Claude Code 妹妹那边做完啦，去看看吧～"),
-    "error": ("sad", "Claude Code 妹妹那边好像出错了……去看一眼吧。"),
+    "permission": ("panic", N_("主人主人，Claude Code 妹妹在等你批准操作！")),
+    "waiting": ("talk", N_("Claude Code 妹妹在等你回话哦～")),
+    "done": ("happy", N_("Claude Code 妹妹那边做完啦，去看看吧～")),
+    "error": ("sad", N_("Claude Code 妹妹那边好像出错了……去看一眼吧。")),
 }
+
+
+def _notice(label: str) -> "Notice":
+    mood, text = NOTICES[label]
+    return Notice(label, mood, tr(text))
 DONE_MIN_SEC = 20  # only announce turns that took a while
 STALE_SEC = 600    # no event for this long while not idle: assume it is over
 
@@ -558,14 +563,14 @@ class SessionState:
                 self.phase = "working"
         elif label in ("permission", "waiting"):
             if self.phase != label:
-                notices.append(Notice(label, *NOTICES[label]))
+                notices.append(_notice(label))
             self.phase = label
         elif label == "done":
             if self.turn_started and now - self.turn_started >= DONE_MIN_SEC:
-                notices.append(Notice("done", *NOTICES["done"]))
+                notices.append(_notice("done"))
             self.phase, self.activity, self.turn_started = "idle", "", 0.0
         elif label == "error":
-            notices.append(Notice("error", *NOTICES["error"]))
+            notices.append(_notice("error"))
             self.phase, self.activity, self.turn_started = "idle", "", 0.0
         elif label in ("start", "end"):
             self.phase, self.activity, self.turn_started = "idle", "", 0.0
@@ -573,13 +578,13 @@ class SessionState:
 
     def status(self) -> str:
         if self.phase == "thinking":
-            return "Claude Code 在思考…"
+            return tr("Claude Code 在思考…")
         if self.phase == "working":
-            return WORKING_TEXT.get(self.activity, "Claude Code 在干活…")
+            return tr(WORKING_TEXT.get(self.activity, N_("Claude Code 在干活…")))
         if self.phase == "permission":
-            return "Claude Code 在等你批准"
+            return tr("Claude Code 在等你批准")
         if self.phase == "waiting":
-            return "Claude Code 在等你回话"
+            return tr("Claude Code 在等你回话")
         return ""
 
 
@@ -598,7 +603,7 @@ class ClaudeCodeState:
         if not session:
             # Source unknown (the event JSON did not start with session_id): it must not reset or end any
             # known session, so only the things the user should hear about are kept.
-            return [Notice(label, *NOTICES[label])] if label in ("permission", "waiting", "error") else []
+            return [_notice(label)] if label in ("permission", "waiting", "error") else []
         key = session
         state = self.sessions.setdefault(key, SessionState())
         notices = state.feed(label, now)

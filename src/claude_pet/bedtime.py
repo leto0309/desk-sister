@@ -9,16 +9,21 @@ from __future__ import annotations
 import datetime
 import re
 
+from .i18n import N_
+
 MODES = ("off", "nightly", "every_2h")
-MODE_LABELS = {"off": "关闭", "nightly": "一晚一次", "every_2h": "每 2 小时一次"}
+MODE_LABELS = {"off": N_("关闭"), "nightly": N_("一晚一次"), "every_2h": N_("每 2 小时一次")}  # shown through tr()
 NIGHT_STARTS = (20, 21, 22, 23, 0, 1, 2)  # hours the night may start at
 NIGHT_END = 5  # the night is over at 5:00
 GAP_SEC = 2 * 3600
-_MENTION = re.compile(r"睡|休息|熬夜|晚安")
+_MENTION = re.compile(r"睡|休息|熬夜|晚安|\b(?:sleep(?:s|ing|y)?|slept|asleep|beds?|bedtime|rest|resting|"
+                      r"stay(?:s|ing)? up|good ?night)\b", re.IGNORECASE)
 
 # What the model is told at night.
 MAY = "已经很晚了，这次可以顺带关心一句主人休息（只说一句，不要说教）。"
 MAY_NOT = "这次不要主动提睡觉、休息或熬夜。"
+MAY_EN = "It is very late: this time you may add one caring word about getting some rest (one sentence, no lecture)."
+MAY_NOT_EN = "This time do not bring up sleep, rest or staying up late."
 
 
 def is_night(hour: int, start: int) -> bool:

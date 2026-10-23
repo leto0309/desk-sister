@@ -18,7 +18,7 @@ def resource_root() -> Path:
 def self_test() -> int:
     reply = persona.parse_reply("happy|主人的缩进好整齐！")
     assert reply == persona.Reply("happy", "主人的缩进好整齐！"), reply
-    args = claude_client.build_args("claude", "haiku", persona.SYSTEM_PROMPT)
+    args = claude_client.build_args("claude", "haiku", persona.system_prompt())
     assert args[args.index("--tools") + 1] == "" and "--safe-mode" in args
     assert not any("dangerously" in a or a == "bypassPermissions" for a in args)
     stream = '{"type":"result","subtype":"success","is_error":false,"result":"talk|你好"}\n'

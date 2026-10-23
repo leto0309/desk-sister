@@ -10,6 +10,7 @@ from pathlib import Path
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .days import clean_birthday
+from .i18n import CHOICES as LANGUAGES
 from .persona import SUMMARY_HOURS
 from .updates import parse_version
 from .providers import BACKENDS, clean_custom_models  # every way she can think
@@ -75,6 +76,7 @@ class Config:
     update_latest: str = ""  # the latest release the last successful check found
     daily_summary_hour: int = 21  # from this hour she sums up the day once; 0 = never
     summary_on: str = ""  # the day (YYYY-MM-DD) of the last summary
+    language: str = ""  # "" follows the Windows display language; "zh" or "en"
     greeted_on: str = ""  # the day (YYYY-MM-DD) she last said her first hello, so a restart does not repeat it
     bedtime_reminder: str = "nightly"  # off | nightly | every_2h (see bedtime.py)
     night_start_hour: int = 23
@@ -139,6 +141,8 @@ class Config:
             self.daily_summary_hour = 21
         if not isinstance(self.summary_on, str) or len(self.summary_on) != 10:
             self.summary_on = ""
+        if self.language not in LANGUAGES:
+            self.language = ""
         if not isinstance(self.check_updates, bool):
             self.check_updates = True
         try:

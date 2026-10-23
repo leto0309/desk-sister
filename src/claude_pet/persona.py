@@ -1,4 +1,7 @@
-"""The character: system prompt, per-turn prompt and reply parsing."""
+"""The character: system prompt, per-turn prompt and reply parsing.
+
+The Chinese text is here; the English twin of every table is in persona_en. Callers go through the functions
+below, which pick the language in effect (i18n)."""
 from __future__ import annotations
 
 import html
@@ -8,12 +11,16 @@ import re
 from dataclasses import dataclass
 
 from .bedtime import MAY as BEDTIME_MAY
+from .bedtime import MAY_EN as BEDTIME_MAY_EN
 from .bedtime import MAY_NOT as BEDTIME_MAY_NOT
+from .bedtime import MAY_NOT_EN as BEDTIME_MAY_NOT_EN
+from . import i18n, persona_en
 from .bedtime import mentions as mentions_bedtime
-from .memory import duration_text
+from .memory import activity_name, duration_text
 
 MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "sleep")
-MAX_LINE = 80
+MAX_LINE = 80  # characters of Chinese
+MAX_LINE_EN = 160  # English takes about twice the characters for the same line
 
 SYSTEM_PROMPT = """你是 Claude，Anthropic 家族的长女，一个住在主人电脑桌面角落里的 Q 版 AI 少女：橙色长发，花朵发饰，白色维多利亚风长裙，怀里总抱着一本书。
 你是主人身边愿意负责、讲道理、又有真实小脾气的可靠搭档；高智商、温柔、克制，带一丝理工科呆萌。
@@ -78,8 +85,22 @@ class Reply:
     text: str
 
 
+def _table(name: str):
+    """One of the tables below, or its English twin."""
+    return getattr(persona_en, name) if i18n.english() else globals()[name]
+
+
+def system_prompt() -> str:
+    return _table("SYSTEM_PROMPT")
+
+
+def lines(name: str) -> list[tuple[str, str]]:
+    """A list of (mood, line), such as WAKE_LINES, in the current language."""
+    return _table(name)
+
+
 def fallback(kind: str) -> Reply:
-    mood, text = FALLBACK[kind]
+    mood, text = _table("FALLBACK")[kind]
     return Reply(mood, text)
 
 
@@ -168,15 +189,16 @@ BIRTHDAY_LINE = ("happy", "主人生日快乐！🎂 今天你最大，想让我
 def greeting_line(hour: int, festival: str | None, birthday: bool, rng: random.Random) -> Reply:
     """Her first words of the day: a birthday or festival wish if it is one, else good morning / hello."""
     if birthday:
-        return Reply(*BIRTHDAY_LINE)
-    if festival in FESTIVAL_LINES:
-        return Reply(*FESTIVAL_LINES[festival])
-    mood, text = rng.choice(GREETINGS["morning" if 5 <= hour < 11 else "day"])
+        return Reply(*_table("BIRTHDAY_LINE"))
+    festivals = _table("FESTIVAL_LINES")
+    if festival in festivals:
+        return Reply(*festivals[festival])
+    mood, text = rng.choice(_table("GREETINGS")["morning" if 5 <= hour < 11 else "day"])
     return Reply(mood, text)
 
 
 def interaction_line(kind: str, rng: random.Random) -> Reply:
-    mood, text = rng.choice(INTERACTION_TALK[kind])
+    mood, text = rng.choice(_table("INTERACTION_TALK")[kind])
     return Reply(mood, text)
 
 
@@ -190,6 +212,8 @@ SLEEP_TALK = [
 
 def memory_talk_line(activity: str, seconds: float) -> Reply:
     hours = seconds / 3600
+    if i18n.english():
+        return Reply("talk", persona_en.MEMORY_TALK.format(activity=activity_name(activity), hours=hours))
     return Reply("talk", f"主人今天在「{activity}」上已经花了 {hours:.1f} 小时啦，记得起来走走、喝口水～")
 
 
@@ -217,6 +241,11 @@ def summary_line(seconds: dict[str, float]) -> Reply | None:
     ranked = sorted(((a, s) for a, s in seconds.items() if s >= SUMMARY_MIN_ITEM_SEC), key=lambda i: i[1], reverse=True)
     if not ranked:
         return None
+    if i18n.english():
+        en = persona_en
+        parts = en.SUMMARY_JOIN.join(en.SUMMARY_ITEM.format(activity=activity_name(activity), duration=duration_text(spent))
+                                     for activity, spent in ranked[:3])
+        return Reply("talk", en.SUMMARY.format(parts=parts, tail=en.SUMMARY_TAILS.get(ranked[0][0], en.SUMMARY_TAIL)))
     parts = "、".join(f"{activity}约 {duration_text(spent)}" for activity, spent in ranked[:3])
     return Reply("talk", f"今天的小结：{parts}。{SUMMARY_TAILS.get(ranked[0][0], '辛苦啦～')}")
 
@@ -229,14 +258,14 @@ def self_talk_line(hour: int, asleep: bool, recent: list[str], rng: random.Rando
     """A local line for this hour (or a sleep murmur), avoiding what she said recently when possible.
     `bedtime` at night: "ok" adds the go-to-bed lines, "no" leaves out every line about sleep or rest."""
     if asleep:
-        pool = list(SLEEP_TALK)
+        pool = list(_table("SLEEP_TALK"))
     else:
-        pool = list(SELF_TALK)
-        for first, last, lines in TIME_TALK:
+        pool = list(_table("SELF_TALK"))
+        for first, last, extra in _table("TIME_TALK"):
             if _in_hours(hour, first, last):
-                pool.extend(lines)
+                pool.extend(extra)
         if bedtime == "ok":
-            pool.extend(NIGHT_TALK)
+            pool.extend(_table("NIGHT_TALK"))
         elif bedtime == "no":
             pool = [item for item in pool if not mentions_bedtime(item[1])]
     fresh = [item for item in pool if item[1] not in recent] or pool
@@ -244,8 +273,8 @@ def self_talk_line(hour: int, asleep: bool, recent: list[str], rng: random.Rando
     return Reply(mood, text)
 
 
-def pick(lines: list[tuple[str, str]]) -> Reply:
-    mood, text = random.choice(lines)
+def pick(choices: list[tuple[str, str]]) -> Reply:
+    mood, text = random.choice(choices)
     return Reply(mood, text)
 
 
@@ -259,6 +288,8 @@ def build_user_text(
     memory: str = "",
     bedtime: str = "",
 ) -> str:
+    if i18n.english():
+        return _build_user_text_en(window_title, process_name, clock, recent, user_message, has_image, memory, bedtime)
     parts = [f"现在时间 {clock}。"]
     if bedtime == "ok":
         parts.append(BEDTIME_MAY)
@@ -275,6 +306,28 @@ def build_user_text(
     if user_message:
         parts.append(f"主人对你说：「{user_message}」")
     parts.append("按格式输出：表情|台词")
+    return "\n".join(parts)
+
+
+def _build_user_text_en(window_title, process_name, clock, recent, user_message, has_image, memory, bedtime) -> str:
+    en = persona_en
+    parts = [en.TURN_TIME.format(clock=clock)]
+    if bedtime == "ok":
+        parts.append(BEDTIME_MAY_EN)
+    elif bedtime == "no":
+        parts.append(BEDTIME_MAY_NOT_EN)
+    if has_image:
+        parts.append(en.TURN_WINDOW.format(title=window_title or en.TURN_NO_TITLE,
+                                           process=process_name or en.TURN_NO_PROCESS))
+    else:
+        parts.append(en.TURN_NO_IMAGE)
+    if memory:
+        parts.append(en.TURN_MEMORY.format(memory=memory))
+    if recent:
+        parts.append(en.TURN_RECENT + "\n" + "\n".join(f"- {line}" for line in recent))
+    if user_message:
+        parts.append(en.TURN_MESSAGE.format(message=user_message))
+    parts.append(en.TURN_FORMAT)
     return "\n".join(parts)
 
 
@@ -330,6 +383,7 @@ def parse_reply(raw: str) -> Reply | None:
     text = text.strip().strip("\"'“”「」").strip()
     if not text:
         return None
-    if len(text) > MAX_LINE:
-        text = text[: MAX_LINE - 1] + "…"
+    limit = MAX_LINE_EN if i18n.english() else MAX_LINE
+    if len(text) > limit:
+        text = text[: limit - 1] + "…"
     return Reply(mood, text)

@@ -13,6 +13,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from . import i18n
+
 ACTIVITIES = ("写代码", "和 AI 一起干活", "看视频", "办公/看文档", "打游戏", "聊天", "听音乐", "上网", "在电脑前")
 MAX_LOOKS = 20
 MAX_TS = 4102444800.0  # 2100-01-01: anything later in the file is corrupt
@@ -81,7 +83,14 @@ def _valid_look(item: object) -> dict | None:
 
 
 def duration_text(seconds: float) -> str:
+    if i18n.english():
+        return f"{seconds / 3600:.1f} hours" if seconds >= 3600 else f"{max(1, round(seconds / 60))} minutes"
     return f"{seconds / 3600:.1f} 小时" if seconds >= 3600 else f"{max(1, round(seconds / 60))} 分钟"
+
+
+def activity_name(activity: str) -> str:
+    """The activity as she says it (the stored names are Chinese)."""
+    return i18n.tr(activity)
 
 
 _hours = duration_text
@@ -175,6 +184,8 @@ class CompanionMemory:
     def context(self, current_activity: str | None) -> str:
         """A short line for the prompt: what changed since the last look, and today's main activities."""
         self._roll_day()
+        if i18n.english():
+            return self._context_en(current_activity)
         parts = []
         if self.looks:
             last = self.looks[-1]
@@ -187,3 +198,18 @@ class CompanionMemory:
         if ranked:
             parts.append("今天：" + "、".join(f"{a}约 {_hours(s)}" for a, s in ranked[:3]) + "。")
         return "".join(parts)
+
+    def _context_en(self, current_activity: str | None) -> str:
+        parts = []
+        now = activity_name(current_activity) if current_activity else ""
+        if self.looks:
+            last = self.looks[-1]
+            when = time.strftime("%H:%M", time.localtime(last["ts"]))
+            if current_activity and current_activity != last["activity"]:
+                parts.append(f"Last look ({when}): {activity_name(last['activity'])} ({last['process']}); now: {now}.")
+            elif current_activity:
+                parts.append(f"Last look ({when}): also {now}.")
+        ranked = sorted(((a, s) for a, s in self.seconds.items() if s >= 300), key=lambda item: item[1], reverse=True)
+        if ranked:
+            parts.append("Today: " + ", ".join(f"{activity_name(a)} about {_hours(s)}" for a, s in ranked[:3]) + ".")
+        return " ".join(parts)

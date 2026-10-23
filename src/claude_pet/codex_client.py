@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from .i18n import N_, tr
 from . import claude_client
 from .claude_client import ClaudeCall, ClaudeResult
 
@@ -44,7 +45,7 @@ _wanted = False
 _sweeps: list[Path | None] = []
 _worker_lock = threading.Lock()
 _STARTED = time.time()  # folders made after this belong to this run: a call may still be using them
-INSTRUCTION = "（附图是主人当前窗口的截图。不要调用任何工具，只按上面的输出格式回答一行。）"
+INSTRUCTION = N_("（附图是主人当前窗口的截图。不要调用任何工具，只按上面的输出格式回答一行。）")
 
 
 def find_codex(configured: str = "") -> str | None:
@@ -102,7 +103,7 @@ class CodexCall(ClaudeCall):
         text = (stdout + "\n" + stderr).strip()
         if CHATGPT_LOGIN in text:
             return True, ""
-        return False, "不是 ChatGPT 订阅登录（" + (text.splitlines()[0] if text else "未登录") + "）"
+        return False, tr("不是 ChatGPT 订阅登录（{0}）", text.splitlines()[0] if text else tr("未登录"))
 
     def features(self, executable: str, timeout: float = 30) -> set[str] | None:
         """The feature names the installed CLI knows, or None when that cannot be read."""
@@ -120,7 +121,7 @@ class CodexCall(ClaudeCall):
             return ClaudeResult(False, error="cancelled", cancelled=True)
         if known is None:
             # Without the list the tools cannot be switched off: no screenshot is written, nothing is sent.
-            return ClaudeResult(False, error="读不到 Codex 的功能清单，无法确认能关闭它的工具，这次先不调用")
+            return ClaudeResult(False, error=tr("读不到 Codex 的功能清单，无法确认能关闭它的工具，这次先不调用"))
         try:
             folder = _make_folder(Path(TEMP_ROOT or tempfile.gettempdir()))  # under the user's own %TEMP%
         except OSError as exc:
@@ -141,7 +142,7 @@ class CodexCall(ClaudeCall):
                 _write_new(folder, "screen.jpg", jpeg)  # a new file in the held folder, never an existing one
                 args += ["-i", str(folder.path / "screen.jpg")]
             args.append("-")  # the prompt comes from stdin
-            prompt = f"{system}\n\n----\n\n{text}\n\n{INSTRUCTION if jpeg else ''}"
+            prompt = f"{system}\n\n----\n\n{text}\n\n{tr(INSTRUCTION) if jpeg else ''}"
             previous_cwd, self.cwd = self.cwd, str(folder.path)
             try:
                 code, _stdout, stderr = self._run(args, prompt, self.timeout)
@@ -153,7 +154,7 @@ class CodexCall(ClaudeCall):
             data = _read(folder, "reply.txt")  # read inside the held folder, never through the path again
             reply = data.decode("utf-8", errors="replace").strip() if data else ""
             if not reply:
-                return ClaudeResult(False, error="codex 没有给出回答")
+                return ClaudeResult(False, error=tr("codex 没有给出回答"))
             return ClaudeResult(True, text=reply)
         except claude_client._Cancelled:
             return ClaudeResult(False, error="cancelled", cancelled=True)

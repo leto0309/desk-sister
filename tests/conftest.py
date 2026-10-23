@@ -36,3 +36,20 @@ def _no_update_checks(monkeypatch):
     real_asset = updates.fetch_asset
     monkeypatch.setattr(updates, "fetch_asset", lambda opener=None: None if opener is None else real_asset(opener))
     monkeypatch.setattr(updates, "launch_restart", lambda _env: pytest.fail("no test may start the update helper"))
+
+
+@pytest.fixture(autouse=True)
+def _chinese_by_default():
+    """Tests speak Chinese unless they switch; whatever a test switched to is undone after it."""
+    from claude_pet import i18n
+
+    real = i18n.system_language
+    def chinese_system():  # a pet made with the default config follows "the system": Chinese here
+        return "zh"
+
+    chinese_system.__wrapped__ = real  # for the test of the real detection
+    i18n.system_language = chinese_system
+    i18n.set_language("zh")
+    yield
+    i18n.system_language = real
+    i18n.set_language("zh")
