@@ -624,7 +624,7 @@ def test_sleeps_on_real_input_idle_and_wakes_on_input(app, tmp_path, monkeypatch
     assert calls == []  # asleep: no screenshots, no quota
     machine["idle"] = 1
     ctrl._heartbeat()
-    assert not ctrl.asleep and ctrl.window.mood in ("happy", "talk")  # greeted on waking
+    assert not ctrl.asleep and ctrl.window.mood != "sleep" and ctrl.window.full_text  # greeted on waking (any mood: some hellos think)
     machine["idle"] = 700
     ctrl._heartbeat()
     assert ctrl.asleep
