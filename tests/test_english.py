@@ -315,3 +315,33 @@ def test_new_english_greetings_and_tails_never_mention_sleep():
     texts += [t for part in persona_en.WEEKDAY_GREETINGS.values() for _m, t in part]
     texts += [t for tails in persona_en.SUMMARY_TAILS.values() for t in tails]
     assert [t for t in texts if bedtime.mentions(t)] == []
+
+
+@pytest.mark.parametrize("lines_of", [persona, persona_en], ids=["zh", "en"])
+def test_plenty_of_different_self_talk(lines_of):
+    texts = [t for _m, t in lines_of.SELF_TALK] + [t for _f, _l, part in lines_of.TIME_TALK for _m, t in part]
+    assert len(lines_of.SELF_TALK) >= 40 and len(texts) == len(set(texts))
+    assert len({m for m, _t in lines_of.SELF_TALK}) >= 6  # many moods, not one face all day
+    assert any(first <= 15 <= last for first, last, _part in lines_of.TIME_TALK)  # the afternoon has its own
+
+
+
+OLD_REST_LINES = {"如果累了，可以闭上眼睛休息二十秒，我帮你看着屏幕。",
+                  "If you're tired, close your eyes and rest for twenty seconds. I'll watch the screen."}
+
+
+@pytest.mark.parametrize("lines_of", [persona, persona_en], ids=["zh", "en"])
+def test_daytime_self_talk_says_nothing_about_sleep_or_tiredness(lines_of):
+    texts = [t for _m, t in lines_of.SELF_TALK] + [t for _f, _l, part in lines_of.TIME_TALK for _m, t in part]
+    assert [t for t in texts if t not in OLD_REST_LINES
+            and (bedtime.mentions(t) or re.search(r"困|累|tired|heavy", t, re.IGNORECASE))] == []
+
+
+@pytest.mark.parametrize("lang", ["zh", "en"])
+def test_afternoon_lines_only_in_the_afternoon(lang):
+    i18n.set_language(lang)
+    table = persona_en if lang == "en" else persona
+    afternoon = {t for first, last, part in table.TIME_TALK if (first, last) == (14, 16) for _m, t in part}
+    for hour, expected in ((13, False), (14, True), (16, True), (17, False)):
+        said = {persona.self_talk_line(hour, False, [], random.Random(seed)).text for seed in range(400)}
+        assert bool(said & afternoon) is expected, hour

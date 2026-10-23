@@ -103,7 +103,8 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   still gets an answer.
 - "Watching": "Everything except the blocklist" (default) or "Only the programs on the allowlist"; the current program
   can be added to or removed from the allowlist with one click.
-- "Self-talk": a local line every 3 to 10 minutes, no model calls, free.
+- "Self-talk": a local line every 3 to 10 minutes (forty-odd lines, plus some of their own for morning, lunch, afternoon
+  and evening), no model calls, free.
 - "Stroll along the bottom of the screen" (on by default): when she stands at the very bottom of the screen (above the
   taskbar), every half minute to a minute or so she takes a few steps left or right, never off the current screen. Not
   while talking, asleep, being dragged, in full-screen quiet or with watching paused. While it is on, she drops to the
