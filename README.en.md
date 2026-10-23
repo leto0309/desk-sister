@@ -70,7 +70,9 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
 
 ## Using her
 
-- Click her: she comments at once. Drag her to move her (the place is remembered).
+- Click her: she comments at once. Clicks within the next 30 seconds get a local line instead (no model call, no
+  usage), more flustered with each; after 30 seconds a click makes her look again. "Poke her (comment now)" in the
+  right-click menu always looks. Drag her to move her (the place is remembered).
 - Hold Ctrl and scroll the wheel over her: change her height (10 pixels a notch, 100 to 600); her feet stay put.
 - She blinks now and then (except when happy or flustered), and her mouth moves while her words appear in the bubble,
   with each mood's own mouth shapes. The "Appearance" page sets how often she blinks (off / few / normal / often) and

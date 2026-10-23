@@ -44,6 +44,7 @@ PAT_MEMORY_SEC = 60.0  # pats this close together count as one petting session
 DROP_MEMORY_SEC = 20.0  # drops this close together are being dragged about
 DROPS_TO_COMPLAIN = 3
 LONG_CARRY_SEC = 4.0  # carried at least this long: dizzy
+POKE_COOLDOWN_SEC = 30.0  # clicks this soon after a click's look get a local line, not another look
 PAT_COOLDOWN_SEC = 5.0  # one reaction per head pat, however long the rubbing goes on
 RESIZE_SETTLE_MS = 1200  # resizing has stopped when nothing changed for this long
 SIZE_SHOWN_SEC = 2.5  # how long her height stays under her feet after Ctrl + wheel
@@ -299,14 +300,16 @@ class PetController(QObject):
         self._open_path = getattr(os, "startfile", None) or (lambda _path: None)
         self.autostart_done.connect(self._on_autostart_done)
         self.autostart_state.connect(self._on_autostart_state)
-        self.window.poked.connect(self.poke)
+        self.window.poked.connect(self._on_poked)
         self.window.context_menu_requested.connect(self._show_menu)
         self.window.moved.connect(self._on_user_dropped)
         self.walker = Walker(self.window, self._can_walk, self._remember_position, self._rng,
                              edge=self._on_edge, landed=self._on_landed)
         self.window.patted.connect(self._on_patted)
         self._last_pat = float("-inf")
-        self._pat_count = 0  # pats in this petting session, for shy and then mock-annoyed replies
+        self._pat_count = 0
+        self._last_poke_look = float("-inf")  # when a click last made her look at the screen
+        self._pokes_since_look = 0  # pats in this petting session, for shy and then mock-annoyed replies
         self._drops: list[float] = []  # recent drops after a drag
         self._greeting_due = ""  # the day (YYYY-MM-DD) whose first hello had to wait
         self.update_available = ""  # a newer released version, once a check found one
@@ -461,10 +464,27 @@ class PetController(QObject):
         self._spawn(partial(self._work, job))
 
     def poke(self) -> None:
+        """The menu's 「戳她一下（立即评论）」: always a fresh look."""
         if self.busy:
             self.window.say("think", tr("等一下下，我还在想上一句……"))
             return
         self.tick(force=True)
+
+    def _on_poked(self) -> None:
+        """A click on her: a fresh look, but clicks soon after one get a local line instead (no model call),
+        a little more flustered with each."""
+        if self.busy:
+            self.window.say("think", tr("等一下下，我还在想上一句……"))
+            return
+        now = self._clock()
+        if now - self._last_poke_look < POKE_COOLDOWN_SEC:
+            self._pokes_since_look += 1
+            self._react(("poke", "poke_again", "poke_annoyed")[min(self._pokes_since_look, 3) - 1])
+            return
+        generation = self.generation
+        self.tick(force=True)
+        if self.busy and self.generation != generation:  # she really is looking (not paused, not unable to)
+            self._last_poke_look, self._pokes_since_look = now, 0
 
     def chat(self) -> None:
         text, ok = QInputDialog.getText(None, tr("和 Claude 说话"), tr("想对她说什么？"))

@@ -455,3 +455,66 @@ def test_the_greeting_knows_the_weekday(pet):
             break
     else:
         pytest.fail("never a Monday line")
+
+
+
+# ---- clicks: a look, then local lines for a while ------------------------------------------------------------
+def test_clicks_soon_after_a_look_get_local_lines(pet, monkeypatch):
+    ctrl, clock = pet
+    looks = []
+    def look(force=False, user_message=None):  # as the real tick: a look makes her busy with a new generation
+        looks.append(force)
+        ctrl.generation += 1
+        ctrl.busy = True
+
+    monkeypatch.setattr(ctrl, "tick", look)
+    ctrl.window.poked.emit()
+    ctrl.busy = False  # the comment came back
+    assert looks == [True]
+    said = []
+    for _ in range(5):
+        clock.now += 3
+        ctrl.window.clear_bubble()
+        ctrl.window.poked.emit()
+        said.append(next(k for k in ("poke", "poke_again", "poke_annoyed") if ctrl.window.full_text in lines(k)))
+    assert looks == [True] and said == ["poke", "poke_again", "poke_annoyed", "poke_annoyed", "poke_annoyed"]
+    clock.now += controller_module.POKE_COOLDOWN_SEC
+    ctrl.window.poked.emit()
+    ctrl.busy = False
+    assert looks == [True, True]  # a fresh look again, and the count starts over
+    clock.now += 1
+    ctrl.window.clear_bubble()
+    ctrl.window.poked.emit()
+    assert ctrl.window.full_text in lines("poke")
+
+
+def test_the_menu_poke_always_looks(pet, monkeypatch):
+    ctrl, clock = pet
+    looks = []
+    monkeypatch.setattr(ctrl, "tick", lambda force=False, user_message=None: looks.append(force))
+    for _ in range(3):
+        ctrl.poke()
+        clock.now += 1
+    assert looks == [True, True, True]
+
+
+def test_a_click_while_she_is_thinking_waits(pet, monkeypatch):
+    ctrl, _clock = pet
+    monkeypatch.setattr(ctrl, "tick", lambda *a, **k: pytest.fail("no look while busy"))
+    ctrl.busy = True
+    ctrl.window.poked.emit()
+    assert "等一下下" in ctrl.window.full_text
+
+
+
+def test_a_click_that_did_not_look_starts_no_cooldown(pet, monkeypatch):
+    ctrl, clock = pet
+    ctrl.config.paused = True
+    ctrl.window.poked.emit()  # the real tick: paused, so she only says her eyes are closed
+    assert "闭着眼睛" in ctrl.window.full_text and not ctrl.busy
+    ctrl.config.paused = False
+    looks = []
+    monkeypatch.setattr(ctrl, "tick", lambda force=False, user_message=None: looks.append(force))
+    clock.now += 5
+    ctrl.window.poked.emit()
+    assert looks == [True]  # within 30 s, but the first click never looked
