@@ -81,5 +81,17 @@
 
 - 每天最多一次（另有「现在检查」按钮）向 `https://api.github.com/repos/leto0309/desk-sister/releases/latest` 发一个 GET，
   请求里只有 `Accept` 和 `User-Agent: desk-sister/<版本>`，不带截图、配置、记忆或任何本地数据。
-- 只读取返回的版本号（最多读 1 MB，格式不对就忽略）；不下载、不安装、不执行任何东西。下载页链接是固定的 GitHub 地址。
+- 自动检查只读取返回的版本号（最多读 1 MB，格式不对就忽略），不下载任何东西。下载页链接是固定的 GitHub 地址。
+- 「下载并更新」（只在打包的 exe 里，点了才做）：重新读取 latest release，只接受名为 desk-sister.exe、地址正好是
+  `https://github.com/leto0309/desk-sister/releases/download/<该版本标签>/desk-sister.exe` 的文件，大小不超过 300 MB；
+  下载到 exe 同目录、用随机名独占新建的 `desk-sister.update.<随机>.part`（不会打开或写穿已有的文件或链接），
+  大小和 GitHub 给出的 SHA-256 digest 都一致才改名为 `desk-sister.update.exe`，否则删除。版本不比当前新就不下载。
+- 确认重启时先重新计算下载文件的 SHA-256，与当时校验的不同（被改动或不见了）就删除、不安装。然后启动一个隐藏的
+  Windows PowerShell 脚本（脚本是程序里固定的文本，路径、校验值和要等待的进程号通过环境变量传入，不拼进命令）：
+  等本进程（以及单文件 exe 的启动器进程）退出；把原 exe 改名为 `desk-sister.old.exe` 留作备份；把新文件移到原位置，
+  再对放好的文件算一次 SHA-256，不一致或移动失败就删掉它、把备份改回原名。只启动校验过的新版或换回的原版；
+  新版启动不了（比如被安全软件拦下）或启动后还没就绪就退出（就绪的标志是新版启动时取走结果文件），也会换回原版再启动；两样都做不到时什么都不启动、保留备份。脚本把结果
+  （updated / restored / failed）写进 `desk-sister.update.result`，下次启动时读取后在关于页说明，并删除它、备份和残留的下载文件。重启时去掉 PyInstaller 的内部环境变量和 PSModulePath（从 PowerShell 7 继承来的模块路径会让 Windows PowerShell 算不了校验值）。
+- 能写入 exe 所在文件夹的人本来就能直接替换 exe，所以下载文件放在同一文件夹不增加新的风险；默认安装位置
+  （%LOCALAPPDATA%\Programs\DeskSister）只有当前用户可写。
 - 网络失败、被限流或返回异常只写一行日志，不弹提示。

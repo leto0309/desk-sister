@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from .bedtime import MAY as BEDTIME_MAY
 from .bedtime import MAY_NOT as BEDTIME_MAY_NOT
 from .bedtime import mentions as mentions_bedtime
+from .memory import duration_text
 
 MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "sleep")
 MAX_LINE = 80
@@ -190,6 +191,34 @@ SLEEP_TALK = [
 def memory_talk_line(activity: str, seconds: float) -> Reply:
     hours = seconds / 3600
     return Reply("talk", f"主人今天在「{activity}」上已经花了 {hours:.1f} 小时啦，记得起来走走、喝口水～")
+
+
+# The day's summary (设置→陪伴「每日小结」): from the companion memory's time per activity.
+SUMMARY_HOURS = (0, 18, 20, 21, 22)  # 0 = off
+SUMMARY_MIN_ITEM_SEC = 600  # an activity counts from 10 minutes
+SUMMARY_MIN_TOTAL_SEC = 1800  # under half an hour in all: nothing to sum up (yet)
+SUMMARY_TAILS = {
+    "写代码": "代码敲了这么久，辛苦啦～",
+    "和 AI 一起干活": "和 AI 搭档了这么久，配合得还顺利吧？",
+    "看视频": "今天看到什么好看的了吗？",
+    "办公/看文档": "文档一份份啃下来，主人真厉害。",
+    "打游戏": "今天赢了几把呀？",
+    "聊天": "今天和大家聊得挺开心吧～",
+    "听音乐": "今天的歌单我也想听听～",
+    "上网": "今天在网上逛到什么有趣的东西了吗？",
+    "在电脑前": "今天也在电脑前忙了好久，辛苦啦～",
+}
+
+
+def summary_line(seconds: dict[str, float]) -> Reply | None:
+    """'今天的小结：写代码约 3.2 小时、看视频约 40 分钟。' and a word on the main one; None if too little."""
+    if sum(seconds.values()) < SUMMARY_MIN_TOTAL_SEC:
+        return None
+    ranked = sorted(((a, s) for a, s in seconds.items() if s >= SUMMARY_MIN_ITEM_SEC), key=lambda i: i[1], reverse=True)
+    if not ranked:
+        return None
+    parts = "、".join(f"{activity}约 {duration_text(spent)}" for activity, spent in ranked[:3])
+    return Reply("talk", f"今天的小结：{parts}。{SUMMARY_TAILS.get(ranked[0][0], '辛苦啦～')}")
 
 
 def _in_hours(hour: int, first: int, last: int) -> bool:

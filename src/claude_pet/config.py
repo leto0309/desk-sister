@@ -10,6 +10,7 @@ from pathlib import Path
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .days import clean_birthday
+from .persona import SUMMARY_HOURS
 from .updates import parse_version
 from .providers import BACKENDS, clean_custom_models  # every way she can think
 
@@ -72,6 +73,8 @@ class Config:
     update_checked_at: float = 0.0  # wall-clock time of the last successful check
     update_seen: str = ""  # the newest version she already told 主人 about
     update_latest: str = ""  # the latest release the last successful check found
+    daily_summary_hour: int = 21  # from this hour she sums up the day once; 0 = never
+    summary_on: str = ""  # the day (YYYY-MM-DD) of the last summary
     greeted_on: str = ""  # the day (YYYY-MM-DD) she last said her first hello, so a restart does not repeat it
     bedtime_reminder: str = "nightly"  # off | nightly | every_2h (see bedtime.py)
     night_start_hour: int = 23
@@ -132,6 +135,10 @@ class Config:
             reminded = 0.0
         # A real reminder time lies between 2001 and 2286; anything else (1, true, 1e12) means none.
         self.bedtime_reminded_at = reminded if math.isfinite(reminded) and 1e9 <= reminded <= 1e10 else 0.0
+        if self.daily_summary_hour not in SUMMARY_HOURS or isinstance(self.daily_summary_hour, bool):
+            self.daily_summary_hour = 21
+        if not isinstance(self.summary_on, str) or len(self.summary_on) != 10:
+            self.summary_on = ""
         if not isinstance(self.check_updates, bool):
             self.check_updates = True
         try:

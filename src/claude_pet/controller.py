@@ -32,6 +32,12 @@ log = logging.getLogger("claude_pet")
 
 CHANGE_THRESHOLD = 0.02
 HOTKEY_ID = 0xC1A0
+UPDATE_RESULTS = {  # what the about page says after a swap, by the restart helper's note
+    "updated": "已更新到 {version}。",
+    "restored": "上次下载的新版没能换上，现在用的还是原来的版本（{version}），可以再试一次。",
+    "failed": "上次的更新没有完成，请到下载页手动下载新版。",
+}
+UPDATE_NOTE_RETRY_SEC = 2.0  # the restart helper's note, held open at start: tried again this often
 UPDATE_FIRST_DELAY_SEC = 30.0  # the first update check, a little after start
 PAT_MEMORY_SEC = 60.0  # pats this close together count as one petting session
 DROP_MEMORY_SEC = 20.0  # drops this close together are being dragged about
@@ -209,6 +215,8 @@ class PetController(QObject):
     autostart_state = Signal(int, str)
     codex_found = Signal(object, object)  # (path or None, what to do next)
     update_found = Signal(object, bool)  # (latest released version or None, asked by 主人)
+    download_progress = Signal(int, int)  # (bytes so far, of)
+    download_done = Signal(object, str)  # (the verified exe or None, version or what went wrong)
 
     def __init__(self, app: QApplication, config: Config, sprite_folder: Path, config_file: Path | None = None,
                  autostart: Autostart | None = None, memory: CompanionMemory | None = None) -> None:
@@ -273,6 +281,8 @@ class PetController(QObject):
         self.reply_ready.connect(self._on_reply)
         self.codex_found.connect(self._on_codex_found)
         self.update_found.connect(self._on_update_found)
+        self.download_progress.connect(self._on_download_progress)
+        self.download_done.connect(self._on_download_done)
         self._codex_searching = False
         self._codex_request: tuple | None = None  # what to do once the Codex search is done
         self.thinking.connect(self._on_thinking)
@@ -304,6 +314,15 @@ class PetController(QObject):
         self._update_announce = False
         self._update_retry = False  # the last check failed: the next one is due an hour later, not a day
         self._take_update(self.config.update_latest)  # found by an earlier run, maybe not told yet
+        self.download_state = ""  # "", "downloading" or "ready" (verified, waiting for the restart)
+        self.download_text = ""  # progress or outcome, for the about page
+        self._download_cancel = threading.Event()
+        self._download_path: Path | None = None
+        self._download_sha = ""
+        self._download_percent = -1
+        self._launch_restart = updates.launch_restart
+        self._update_note_retry = False
+        self._update_note_retry_at = 0.0
         self._resize_from: int | None = None  # her height before the current burst of resizing
         self._resize_done = QTimer(self, singleShot=True, interval=RESIZE_SETTLE_MS, timeout=self._on_resized)
         self.window.hotkey_pressed.connect(self.toggle_pause)
@@ -331,6 +350,7 @@ class PetController(QObject):
         self.focus_tracker.start()
         self._schedule_self_talk()
         self._update_from = self._clock() + UPDATE_FIRST_DELAY_SEC
+        self._remove_update_leftovers()
         self.walker.set_enabled(self.config.walking)
         self._refresh_status()
         if self.config.backend == "subscription" and not self.claude:
@@ -350,6 +370,7 @@ class PetController(QObject):
 
     def shutdown(self) -> None:
         self._cancel_inflight()
+        self._download_cancel.set()
         self.walker.set_enabled(False)
         if codex_client.has_pending():
             codex_client.schedule_cleanup()
@@ -526,6 +547,8 @@ class PetController(QObject):
                 self._greet_if_new_day()  # one that had to wait (full screen, quitting) comes now
             else:
                 self._greeting_due = ""  # owed for a day that is over: wait for the next meeting
+        self._summarize_day_if_due()
+        self._retry_update_note()
         self._check_updates_if_due()
         if self._update_announce:
             self._announce_update()
@@ -1231,6 +1254,30 @@ class PetController(QObject):
         self._save()
         return True
 
+    def _summarize_day_if_due(self) -> None:
+        """Once a day from the chosen hour, the first time she may talk: today's time per activity."""
+        hour = self.config.daily_summary_hour
+        if not hour or not self.config.companion_memory:
+            return
+        if time.localtime(self._now()).tm_hour < hour:
+            return
+        today = self._today().isoformat()
+        if self.config.summary_on == today:
+            return
+        if self.quit_pending or self.quiet or self.asleep or self.window.full_text:
+            return  # later, when she may talk
+        line = persona.summary_line(self.memory.today_seconds())
+        if line is None:
+            return  # too little yet: maybe later today
+        self.config.summary_on = today
+        self._save()
+        self.window.say(*self._reply_tuple(line))
+
+    def set_daily_summary(self, hour: int) -> None:
+        if hour in persona.SUMMARY_HOURS:
+            self.config.daily_summary_hour = hour
+            self._save()
+
     # ---- updates -------------------------------------------------------------
     def _check_updates_if_due(self) -> None:
         if not self.config.check_updates or self.update_checking or self._clock() < self._update_from:
@@ -1293,7 +1340,145 @@ class PetController(QObject):
         if not seen or updates.is_newer(self.update_available, seen):  # the record only goes up
             self.config.update_seen = self.update_available
         self._save()
-        self.window.say("happy", f"主人，我有新版本 v{self.update_available} 啦～在设置 → 关于里可以打开下载页。")
+        where = "点「下载并更新」就能换上" if self._exe_path() else "可以打开下载页"
+        self.window.say("happy", f"主人，我有新版本 v{self.update_available} 啦～在设置 → 关于里{where}。")
+
+    # ---- self-update (the packaged exe only) --------------------------------
+    @staticmethod
+    def _exe_path() -> Path | None:
+        return Path(sys.executable) if getattr(sys, "frozen", False) else None
+
+    @property
+    def can_self_update(self) -> bool:
+        return self._exe_path() is not None and bool(self.update_available or self.download_state)
+
+    def _remove_update_leftovers(self) -> None:
+        exe = self._exe_path()
+        if exe is None:
+            return
+        try:
+            result = updates.remove_leftovers(exe.parent)
+            if result:
+                log.info("last update: %s", result)
+            self.download_text = UPDATE_RESULTS.get(result, "").format(version=__version__)
+        except OSError:
+            log.exception("could not remove an old update download")
+        # The restart helper waits for its note to go (that is how it knows this copy is up): if it is held
+        # open right now, keep trying while she runs.
+        self._update_note_retry = (exe.parent / updates.RESULT_NAME).exists()
+
+    def _retry_update_note(self) -> None:
+        exe = self._exe_path()
+        if not self._update_note_retry or exe is None or self._clock() < self._update_note_retry_at:
+            return
+        self._update_note_retry_at = self._clock() + UPDATE_NOTE_RETRY_SEC
+        self._update_note_retry = not updates.remove_note(exe.parent)
+
+    def update_action(self) -> None:
+        """The about page's button: download, cancel, or restart into the downloaded version."""
+        if self.download_state == "downloading":
+            self._download_cancel.set()
+        elif self.download_state == "ready":
+            self._offer_restart()
+        elif self.update_available and self._exe_path() is not None:
+            self._start_download()
+
+    def _start_download(self) -> None:
+        folder = self._exe_path().parent
+        self.download_state, self.download_text, self._download_percent = "downloading", "正在准备下载…", -1
+        self._download_cancel = cancel = threading.Event()
+
+        def run() -> None:
+            try:
+                asset = updates.fetch_asset()
+                if asset is None:
+                    self.download_done.emit(None, "读不到新版的下载信息，请稍后再试，或到下载页手动下载。")
+                    return
+                if not updates.is_newer(asset.version):
+                    self.download_done.emit(None, f"已是最新版（{__version__}）。")
+                    return
+                path = updates.download(asset, folder, cancel.is_set, self.download_progress.emit)
+                self._download_sha = asset.sha256
+            except updates.Cancelled:
+                self.download_done.emit(None, "已取消下载。")
+            except PermissionError:
+                self.download_done.emit(None, "exe 所在的文件夹不能写入，请到下载页手动下载。")
+            except ValueError as exc:
+                log.warning("update download refused: %s", exc)
+                self.download_done.emit(None, "下载的文件和 GitHub 公布的大小或校验值不一致，已删除。")
+            except Exception as exc:  # network and anything else: never leave the button stuck
+                log.warning("update download failed: %s", exc)
+                self.download_done.emit(None, "下载失败（网络中断？），请稍后再试。")
+            else:
+                self.download_done.emit(path, asset.version)
+
+        self._spawn(run)
+        self._sync_settings()
+
+    def _on_download_progress(self, got: int, total: int) -> None:
+        percent = got * 100 // max(1, total)
+        if self.download_state != "downloading" or percent == self._download_percent:
+            return
+        self._download_percent = percent
+        self.download_text = f"正在下载 {percent}%（{got / 1048576:.1f} / {total / 1048576:.1f} MB）"
+        self._sync_settings()
+
+    def _on_download_done(self, path, text: str) -> None:
+        if path is not None and self._download_cancel.is_set():  # cancelled while the result was on its way
+            text = "已取消下载。"
+            try:
+                Path(path).unlink(missing_ok=True)
+            except OSError:  # held open (a virus scan?): removed at the next start
+                log.warning("could not remove a cancelled update download", exc_info=True)
+                text = "已取消下载（下载的文件暂时删不掉，下次启动时会清理）。"
+            path = None
+        if path is None:
+            self.download_state, self.download_text = "", text
+            self._sync_settings()
+            return
+        self.download_state, self._download_path = "ready", Path(path)
+        self.download_text = f"v{text} 已下载并校验好。"
+        self._sync_settings()
+        self._offer_restart()
+
+    def _offer_restart(self) -> None:
+        if self.quit_pending:
+            return
+        if self._confirm("更新 Desk Sister", "新版已下载并校验好。现在重启换成新版吗？\n她会先退出，几秒后自己回来。"):
+            self._apply_update()
+        else:
+            self.download_text = "新版已下载好，点「重启并更新」就会换上。"
+            self._sync_settings()
+
+    def _apply_update(self) -> None:
+        exe, path = self._exe_path(), self._download_path
+        try:
+            intact = exe is not None and path is not None and updates.file_sha256(path) == self._download_sha
+        except OSError:
+            intact = False
+        if not intact:  # gone or changed since it was checked: never installed
+            if path is not None:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    log.exception("could not remove a changed update download")
+            self.download_state, self.download_text = "", "下载的文件不见了或被改动过，请重新下载。"
+            self._sync_settings()
+            return
+        wait = [os.getpid()]
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass and Path(meipass) != exe.parent:  # one-file: the launcher process holds the exe too
+            wait.append(os.getppid())
+        try:
+            self._launch_restart(updates.restart_env(claude_client.environ_snapshot(), exe, path,
+                                                     self._download_sha, wait))
+        except OSError as exc:
+            log.warning("could not start the update helper: %s", exc)
+            self.download_text = "没能启动更新程序，请到下载页手动下载。"
+            self._sync_settings()
+            return
+        log.info("restarting into the downloaded update")
+        self.request_quit()
 
     def set_check_updates(self, enabled: bool) -> None:
         self.config.check_updates = bool(enabled)

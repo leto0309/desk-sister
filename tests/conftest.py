@@ -33,3 +33,6 @@ def _no_update_checks(monkeypatch):
 
     real = updates.fetch_latest
     monkeypatch.setattr(updates, "fetch_latest", offline)
+    real_asset = updates.fetch_asset
+    monkeypatch.setattr(updates, "fetch_asset", lambda opener=None: None if opener is None else real_asset(opener))
+    monkeypatch.setattr(updates, "launch_restart", lambda _env: pytest.fail("no test may start the update helper"))

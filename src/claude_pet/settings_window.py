@@ -24,6 +24,7 @@ from .bedtime import MODE_LABELS as BEDTIME_LABELS
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .config import BLINK_CHOICES, INTERVAL_CHOICES, MODEL_CHOICES
+from .persona import SUMMARY_HOURS
 from .providers import CLAUDE_CLI, CODEX_CLI, PROVIDERS, model_label
 
 if TYPE_CHECKING:
@@ -44,6 +45,7 @@ SERIF = '"Noto Serif SC", "Source Han Serif SC", "SimSun", "Georgia", serif'
 SANS = '"Microsoft YaHei UI", "Microsoft YaHei", sans-serif'
 
 INTERVAL_LABELS = {30: "30 秒", 60: "1 分钟", 90: "90 秒", 120: "2 分钟", 300: "5 分钟", 600: "10 分钟"}
+UPDATE_BUTTON = {"downloading": "取消下载", "ready": "重启并更新"}
 PAGES = ("常规", "调用方式", "观察范围", "陪伴", "外观", "关于")
 HEAD = (0.2575, 0.047, 0.46, 0.39)  # her face in the idle sprite, as fractions (see devtools/make_icon.py)
 
@@ -509,9 +511,20 @@ class SettingsWindow(QDialog):
         memory_row = QHBoxLayout()
         memory_row.addWidget(self.memory_box, 1)
         memory_row.addWidget(forget)
+        summary = QHBoxLayout()
+        self.summary_combo = QComboBox()
+        for hour in SUMMARY_HOURS:
+            self.summary_combo.addItem(f"{hour}:00 以后" if hour else "关闭", hour)
+        self.summary_combo.currentIndexChanged.connect(
+            lambda _i: self._apply(lambda: self.ctrl.set_daily_summary(self.summary_combo.currentData())))
+        summary.addWidget(QLabel("每日小结"))
+        summary.addWidget(self.summary_combo)
+        summary.addWidget(_hint("（需要陪伴记忆：说说今天各类活动花了多久，一天一次）"))
+        summary.addStretch(1)
         layout.addWidget(self.self_talk_box)
         layout.addLayout(talk)
         layout.addLayout(memory_row)
+        layout.addLayout(summary)
         layout.addWidget(self.link_box)
         layout.addLayout(sleep)
         layout.addLayout(night)
@@ -586,6 +599,9 @@ class SettingsWindow(QDialog):
         self.check_now.clicked.connect(self.ctrl.check_updates_now)
         updates_row.addWidget(self.updates_box)
         updates_row.addWidget(self.check_now)
+        self.update_button = QPushButton("下载并更新")
+        self.update_button.clicked.connect(self.ctrl.update_action)
+        updates_row.addWidget(self.update_button)
         updates_row.addStretch(1)
         self.update_label = QLabel()
         self.update_label.setWordWrap(True)
@@ -691,6 +707,8 @@ class SettingsWindow(QDialog):
             for spin in (self.talk_min, self.talk_max):
                 spin.setEnabled(cfg.self_talk)
             self.memory_box.setChecked(cfg.companion_memory)
+            self.summary_combo.setCurrentIndex(max(0, self.summary_combo.findData(cfg.daily_summary_hour)))
+            self.summary_combo.setEnabled(cfg.companion_memory)
             self.link_box.setChecked(cfg.claude_link)
             self.link_box.setText(LINK_LABEL + ("（hook 未找到或 settings.json 异常）" if self.ctrl.claude_link_broken() else ""))
             birthday = cfg.birthday
@@ -712,7 +730,11 @@ class SettingsWindow(QDialog):
             status = html.escape(self.ctrl.update_status)
             if self.ctrl.update_available:
                 status += f" · <a style='color:#B5531F' href='{RELEASES_PAGE}'>打开下载页</a>"
+            if self.ctrl.download_text:
+                status += "<br>" + html.escape(self.ctrl.download_text)
             self.update_label.setText(status)
+            self.update_button.setVisible(self.ctrl.can_self_update)
+            self.update_button.setText(UPDATE_BUTTON.get(self.ctrl.download_state, "下载并更新"))
             if not self.size_slider.isSliderDown():  # a drag in progress is the user's, not the config's
                 self.size_slider.setValue(cfg.sprite_height)
                 self.size_value.setText(f"{cfg.sprite_height} 像素")

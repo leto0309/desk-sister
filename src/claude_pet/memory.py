@@ -80,8 +80,11 @@ def _valid_look(item: object) -> dict | None:
     return {"ts": ts, "process": item["process"], "activity": item["activity"]}
 
 
-def _hours(seconds: float) -> str:
+def duration_text(seconds: float) -> str:
     return f"{seconds / 3600:.1f} 小时" if seconds >= 3600 else f"{max(1, round(seconds / 60))} 分钟"
+
+
+_hours = duration_text
 
 
 class CompanionMemory:
@@ -164,6 +167,10 @@ class CompanionMemory:
         if ranked and ranked[0][1] >= minimum_seconds:
             return ranked[0]
         return None
+
+    def today_seconds(self) -> dict[str, float]:
+        self._roll_day()
+        return dict(self.seconds)
 
     def context(self, current_activity: str | None) -> str:
         """A short line for the prompt: what changed since the last look, and today's main activities."""
