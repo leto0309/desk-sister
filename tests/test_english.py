@@ -345,3 +345,21 @@ def test_afternoon_lines_only_in_the_afternoon(lang):
     for hour, expected in ((13, False), (14, True), (16, True), (17, False)):
         said = {persona.self_talk_line(hour, False, [], random.Random(seed)).text for seed in range(400)}
         assert bool(said & afternoon) is expected, hour
+
+
+
+@pytest.mark.parametrize("lines_of", [persona, persona_en], ids=["zh", "en"])
+def test_plenty_of_different_reactions(lines_of):
+    for kind, lines in lines_of.INTERACTION_TALK.items():
+        assert len(lines) >= (3 if kind in ("max", "min") else 5), kind
+        texts = [t for _m, t in lines]
+        assert len(texts) == len(set(texts)), kind
+        assert not [t for t in texts if bedtime.mentions(t)], kind
+
+
+def test_new_reactions_do_not_claim_to_see_what_the_user_does():
+    """Reactions come from local tables: she has not looked at the screen, so no line says what the user is doing."""
+    old = {"哇，视野变高了！主人屏幕上的每个像素都看得清～", "Wow, I can see further now! Every pixel on your screen~"}
+    for table in (persona.INTERACTION_TALK, persona_en.INTERACTION_TALK):
+        texts = [t for lines in table.values() for _m, t in lines if t not in old]
+        assert [t for t in texts if re.search(r"在忙什么|在做什么|what you're (up to|doing)", t)] == []
