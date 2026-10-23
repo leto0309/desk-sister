@@ -773,49 +773,138 @@ def test_a_left_installer_download_is_cleaned_up(tmp_path):
     assert updates.remove_leftovers(tmp_path) == "restored" and list(tmp_path.iterdir()) == []
 
 
-def setup_stand_in(folder, exit_code):
-    """A stand-in installer: a script that records its arguments and exits with `exit_code`."""
+def setup_stand_in(folder, new_exe):
+    """A stand-in installer: like Inno Setup, it sets the old version aside (kept as .previous with /KEEPPREVIOUS=1),
+    then puts the new exe and libraries in. DS_TEST_SETUP=fail makes it fail without touching anything."""
     pythonw = Path(sys.executable).with_name("pythonw.exe")
     setup = folder / updates.SETUP_UPDATE_NAME
     shutil.copyfile(pythonw if pythonw.is_file() else sys.executable, setup)
-    venv = Path(sys.prefix, "pyvenv.cfg")
-    if venv.is_file():
-        shutil.copyfile(venv, folder / "pyvenv.cfg")
-    return setup
+    runner = folder / "installer_main"
+    runner.mkdir()
+    (runner / "__main__.py").write_text(f"""import os, shutil, sys
+args = sys.argv[1:]
+open({str(folder / "setup-args.txt")!r}, "w").write(" ".join(args))
+if os.environ.get("DS_TEST_SETUP") == "fail":
+    sys.exit(3)
+target = next(a[len("/DIR="):] for a in args if a.startswith("/DIR="))
+keep = "/KEEPPREVIOUS=1" in args and not os.environ.get("DS_TEST_NOKEEP")
+for name in ("desk-sister.exe", "_internal"):
+    path = os.path.join(target, name)
+    if os.path.exists(path):
+        if keep and not (name == "_internal" and os.environ.get("DS_TEST_LOSE_LIBS")):
+            os.replace(path, path + ".previous")
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+shutil.copyfile({str(new_exe)!r}, os.path.join(target, "desk-sister.exe"))
+os.makedirs(os.path.join(target, "_internal"))
+open(os.path.join(target, "_internal", "version.txt"), "w").write("new")
+""", encoding="utf-8")
+    return setup, runner
+
+
+def run_setup_script(folder, exe, setup, runner, sha=None, **env):
+    environment = updates.restart_env(dict(os.environ), exe, setup, sha or updates.file_sha256(setup), [])
+    script = updates.SETUP_SCRIPT.replace(  # the stand-in installer runs its own folder's __main__.py, and so does she
+        "'/VERYSILENT', '/SUPPRESSMSGBOXES'", "('\"' + $env:DS_RUNNER + '\"'), '/VERYSILENT', '/SUPPRESSMSGBOXES'").replace(
+        "Start-Process -FilePath $env:DS_EXE", "Start-Process -FilePath $env:DS_EXE -ArgumentList ('\"' + $env:DS_DIR + '\"')")
+    assert script.count("DS_RUNNER") == 1 and script.count("DS_DIR") == 1
+    script = script.replace("Start-Sleep -Seconds 1", "Start-Sleep -Milliseconds 20")
+    proc = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+                           script], env={**environment, "DS_DIR": str(folder), "DS_RUNNER": str(runner), **env},
+                          capture_output=True, timeout=180)
+    assert proc.returncode == 0, proc.stderr
+
+
+def installed_stand_ins(tmp_path, single_file=False):
+    folder, exe, new, marker = stand_ins(tmp_path)
+    new_exe = tmp_path / "new.exe"
+    shutil.move(new, new_exe)  # the stand-in installer copies it in; it is not a download here
+    if not single_file:
+        (folder / "_internal").mkdir()
+        (folder / "_internal" / "version.txt").write_text("old")
+    setup, runner = setup_stand_in(folder, new_exe)
+    return folder, exe, setup, runner, marker
+
+
+def lib_version(folder):
+    path = folder / "_internal" / "version.txt"
+    return path.read_text() if path.exists() else None
+
+
+def kept(folder):
+    return sorted(p.name for p in folder.iterdir() if p.name.endswith(".previous"))
 
 
 @windows_only
-@pytest.mark.parametrize(("exit_code", "result"), [(0, "updated"), (3, "restored")])
-def test_the_setup_script_runs_the_installer_quietly_then_starts_her(tmp_path, exit_code, result):
-    folder, exe, _new, marker = stand_ins(tmp_path)
-    setup = setup_stand_in(folder, exit_code)
-    runner = folder / "installer_main"
-    runner.mkdir()
-    args_file = folder / "setup-args.txt"
-    (runner / "__main__.py").write_text(
-        f"import sys\nopen({str(args_file)!r}, 'w').write(' '.join(sys.argv[1:]))\nsys.exit({exit_code})\n",
-        encoding="utf-8")
-    env = updates.restart_env(dict(os.environ), exe, setup, updates.file_sha256(setup), [])
-    script = updates.SETUP_SCRIPT.replace(  # the stand-in installer runs its folder's __main__.py, and so does she
-        "-ArgumentList '/VERYSILENT'", "-ArgumentList ('\"' + $env:DS_RUNNER + '\"'), '/VERYSILENT'").replace(
-        "Start-Process -FilePath $env:DS_EXE", "Start-Process -FilePath $env:DS_EXE -ArgumentList ('\"' + $env:DS_DIR + '\"')")
-    proc = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
-                           script], env={**env, "DS_DIR": str(folder), "DS_RUNNER": str(runner)}, capture_output=True,
-                          timeout=120)
-    assert proc.returncode == 0, proc.stderr
-    assert args_file.read_text().split()[0:4] == ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"]
-    assert f"/DIR={folder}" in args_file.read_text()
-    assert not setup.exists() and started(marker) == b"old version" and note(folder) == result
+def test_an_installed_update_that_comes_up_drops_the_kept_version(tmp_path):
+    folder, exe, setup, runner, marker = installed_stand_ins(tmp_path)
+    run_setup_script(folder, exe, setup, runner)
+    args = (folder / "setup-args.txt").read_text().split()
+    assert args[0:5] == ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/KEEPPREVIOUS=1"]
+    assert f"/DIR={folder}" in (folder / "setup-args.txt").read_text()
+    assert started(marker) == b"new version" and note(folder) == "updated"
+    for _ in range(50):  # the kept version goes once she is up
+        if not kept(folder):
+            break
+        time.sleep(0.1)
+    assert kept(folder) == [] and lib_version(folder) == "new" and not setup.exists()
+
+
+@windows_only
+def test_a_failed_install_leaves_the_old_version_running(tmp_path):
+    folder, exe, setup, runner, marker = installed_stand_ins(tmp_path)
+    run_setup_script(folder, exe, setup, runner, DS_TEST_SETUP="fail")
+    assert started(marker) == b"old version" and note(folder) == "restored"
+    assert exe.read_bytes().endswith(b"old version") and lib_version(folder) == "old" and not setup.exists()
+
+
+@windows_only
+def test_a_new_version_that_will_not_come_up_is_rolled_back(tmp_path):
+    folder, exe, setup, runner, marker = installed_stand_ins(tmp_path)
+    run_setup_script(folder, exe, setup, runner, DS_TEST_CRASH="new version")
+    assert exe.read_bytes().endswith(b"old version") and lib_version(folder) == "old" and kept(folder) == []
+    assert started(marker) == b"old version" and note(folder) == "restored"
+
+
+@windows_only
+def test_rolling_back_a_switch_from_the_single_file_exe(tmp_path):
+    folder, exe, setup, runner, marker = installed_stand_ins(tmp_path, single_file=True)
+    run_setup_script(folder, exe, setup, runner, DS_TEST_CRASH="new version")
+    assert exe.read_bytes().endswith(b"old version") and not (folder / "_internal").exists() and kept(folder) == []
+    assert started(marker) == b"old version" and note(folder) == "restored"
+
+
+@windows_only
+def test_without_a_kept_version_the_new_one_is_never_removed(tmp_path):
+    folder, exe, setup, runner, marker = installed_stand_ins(tmp_path)
+    run_setup_script(folder, exe, setup, runner, DS_TEST_CRASH="new version", DS_TEST_NOKEEP="1")
+    assert exe.read_bytes().endswith(b"new version") and lib_version(folder) == "new"
+    assert started(marker) is None and note(folder) == "failed"
 
 
 @windows_only
 def test_the_setup_script_never_runs_a_changed_installer(tmp_path):
-    folder, exe, _new, marker = stand_ins(tmp_path)
-    setup = setup_stand_in(folder, 0)
-    env = updates.restart_env(dict(os.environ), exe, setup, "0" * 64, [])
-    script = updates.SETUP_SCRIPT.replace(
-        "Start-Process -FilePath $env:DS_EXE", "Start-Process -FilePath $env:DS_EXE -ArgumentList ('\"' + $env:DS_DIR + '\"')")
-    proc = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
-                           script], env={**env, "DS_DIR": str(folder)}, capture_output=True, timeout=120)
-    assert proc.returncode == 0, proc.stderr
+    folder, exe, setup, runner, marker = installed_stand_ins(tmp_path)
+    run_setup_script(folder, exe, setup, runner, sha="0" * 64)
     assert not (folder / "setup-args.txt").exists() and note(folder) == "restored" and started(marker) == b"old version"
+    assert lib_version(folder) == "old"
+
+
+def test_the_kept_version_is_cleared_once_she_has_taken_the_note(tmp_path):
+    (tmp_path / updates.RESULT_NAME).write_text("updated", encoding="ascii")
+    (tmp_path / "desk-sister.exe.previous").write_bytes(b"x")
+    (tmp_path / "_internal.previous").mkdir()
+    (tmp_path / "_internal.previous" / "a.dll").write_bytes(b"x")
+    assert updates.remove_leftovers(tmp_path) == "updated"
+    assert list(tmp_path.iterdir()) == []
+
+
+
+@windows_only
+def test_without_the_kept_libraries_the_new_version_is_never_removed(tmp_path):
+    folder, exe, setup, runner, marker = installed_stand_ins(tmp_path)
+    run_setup_script(folder, exe, setup, runner, DS_TEST_CRASH="new version", DS_TEST_LOSE_LIBS="1")
+    assert exe.read_bytes().endswith(b"new version") and lib_version(folder) == "new"  # untouched
+    assert started(marker) is None and note(folder) == "failed"

@@ -164,8 +164,12 @@ begin
     ExeAside := SetAside('desk-sister.exe');
   end else if CurStep = ssPostInstall then begin
     InstallDone := True;
-    Forget('_internal');
-    Forget('desk-sister.exe');
+    // The in-app update passes /KEEPPREVIOUS=1 and deletes the kept version itself once the new one is up
+    // (or puts it back if the new one will not start). A manual install deletes it now.
+    if ExpandConstant('{param:KEEPPREVIOUS|0}') <> '1' then begin
+      Forget('_internal');
+      Forget('desk-sister.exe');
+    end;
   end;
 end;
 

@@ -146,8 +146,13 @@ production deployments need authorisation. Secrets are configured only in GitHub
   downloads `DeskSister-Setup.exe` instead, likewise accepted only from this repository's release and checked against
   GitHub's size and SHA-256, and saved as `DeskSister-Setup.update.exe`. On restart the hidden script waits for this
   process to quit, computes the SHA-256 once more, and only if it matches runs it with
-  `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR=<the same folder>` (the installer closes anything still holding the
-  files and rolls itself back on failure); then it notes the outcome, deletes the installer and starts the pet.
+  `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /KEEPPREVIOUS=1 /DIR=<the same folder>` (the installer closes anything
+  still holding the files and rolls itself back on failure); afterwards the old exe and libraries are kept as
+  `desk-sister.exe.previous` and `_internal.previous`. Then it starts the new version and waits until it is up (it takes
+  the result note): once up, the kept version is deleted; if it will not start or quits before it is up, the new files
+  are removed and the old version put back (on a switch from the single-file exe, that exe is put back and the new
+  libraries removed), noted as restored and started; without a whole kept version the new one is never removed. A
+  manual run of the installer deletes the kept version as soon as it finishes.
 - The installer (Inno Setup, per user, no administrator) writes only to `%LOCALAPPDATA%\Programs\DeskSister`, the Start
   menu (and an optional desktop shortcut) and the current user's uninstall entry. Uninstalling first closes a pet running
   from that folder and removes the program files and update leftovers; the start-with-Windows shortcut is removed only

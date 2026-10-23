@@ -97,7 +97,10 @@
 - 安装版（文件夹版，或放在 `%LOCALAPPDATA%\Programs\DeskSister` 的单文件版）下载的是 `DeskSister-Setup.exe`，
   同样只认本仓库 release 里的这个文件、按 GitHub 的大小和 SHA-256 校验，存为 `DeskSister-Setup.update.exe`。
   重启时隐藏脚本等本进程退出，再算一次 SHA-256，一致才以 `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR=<原目录>`
-  运行它（安装程序会关掉仍占用文件的程序；失败时自行回滚），然后记下结果、删掉安装包、启动桌宠。
+  并加 `/KEEPPREVIOUS=1` 运行它（安装程序会关掉仍占用文件的程序；失败时自行回滚），装好后旧版 exe 和程序库保留为
+  `desk-sister.exe.previous`、`_internal.previous`。然后启动新版并等它就绪（取走结果文件）：就绪后删掉保留的旧版；
+  启动不了或就绪前退出，就删掉新文件、换回旧版（从单文件版迁移时换回单文件 exe 并移除新程序库），记为已恢复并启动旧版；
+  没有完整的旧版可换回时不删新版。手动运行安装包时装完即删除保留的旧版。
 - 安装程序（Inno Setup，按当前用户安装，不需要管理员）只写入 `%LOCALAPPDATA%\Programs\DeskSister`、开始菜单（和可选的
   桌面快捷方式）以及当前用户的卸载登记。卸载先关掉从该目录运行的桌宠，删除程序文件和更新残留；开机自启快捷方式只在
   指向本安装的 exe 时才删除；`%APPDATA%\ClaudePet` 的配置和记忆保留。云端构建使用固定版本的 Inno Setup 官方安装包，

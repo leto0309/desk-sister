@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -219,12 +220,24 @@ def _remove(path: Path) -> bool:
         return False
 
 
+KEPT_NAMES = ("desk-sister.exe.previous", "_internal.previous")  # the installer's kept version (see SETUP_SCRIPT)
+
+
 def remove_note(folder: Path) -> bool:
-    """Take the restart helper's note, then the backup it may still need; True once the note is gone.
+    """Take the restart helper's note, then the backups it may still need; True once the note is gone.
     Downloads are left alone: one may be waiting for its restart."""
     if not _remove(folder / RESULT_NAME):
         return False
     _remove(folder / OLD_NAME)
+    for name in KEPT_NAMES:
+        path = folder / name
+        if path.is_dir() and not path.is_symlink():
+            try:
+                shutil.rmtree(path)
+            except OSError:
+                log.warning("could not remove %s; tried again at the next start", name)
+        else:
+            _remove(path)
     return True
 
 
@@ -311,27 +324,80 @@ def restart_env(base: dict[str, str], exe: Path, new: Path, sha256: str, wait: l
     return env
 
 
-# The installer's turn: wait for her to quit, check the downloaded installer, run it silently into the same folder
-# (it closes anything still holding her files and rolls itself back if it fails), note the outcome, start her.
+# The installer's turn: wait for her to quit, check the downloaded installer and run it silently into the same folder,
+# telling it to keep the previous version aside (it closes anything still holding her files and rolls itself back if it
+# fails). Then start the new version and wait until it is up (it takes the outcome note as it starts): the kept version
+# is deleted then. If the new version will not start, or quits before it is up, it is taken out and the kept version
+# put back and started. Without a whole kept version, the new one is never removed.
 SETUP_SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
+function Retry([scriptblock]$Step, [int]$Times) {
+    for ($i = 0; $i -lt $Times; $i++) { try { & $Step; return $true } catch { Start-Sleep -Seconds 1 } }
+    return $false
+}
 function Write-Result([string]$Text) {
     try { Set-Content -LiteralPath $env:DS_RESULT -Value $Text -Encoding Ascii; return $true } catch { return $false }
 }
+$state = @{ proc = $null; wasFolder = $false }
+function Start-Exe {
+    Retry { $state.proc = Start-Process -FilePath $env:DS_EXE -WorkingDirectory (Split-Path -LiteralPath $env:DS_EXE) -PassThru } 5
+}
+function Start-Checked {  # true once the new copy has taken the note; false if it never starts or quits first
+    if (-not (Start-Exe)) { return $false }
+    while ($true) {
+        if (-not (Test-Path -LiteralPath $env:DS_RESULT)) { return $true }
+        if ($state.proc.HasExited) { return $false }
+        Start-Sleep -Milliseconds 500
+    }
+}
+$dir = Split-Path -LiteralPath $env:DS_EXE
+$lib = Join-Path $dir '_internal'
+$oldExe = $env:DS_EXE + '.previous'
+$oldLib = $lib + '.previous'
+function Remove-Gone([string]$Path) {  # done once it is gone, also when something else took it away
+    Retry { if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Recurse -Force } } 10
+}
+function Put-Back {  # the kept version in place of the new one; nothing is removed unless the whole of it is kept
+    if (-not (Test-Path -LiteralPath $oldExe)) { return $false }
+    if ($state.wasFolder -and -not (Test-Path -LiteralPath $oldLib)) { return $false }  # its libraries are gone
+    if (-not (Remove-Gone $env:DS_EXE)) { return $false }
+    if (-not (Retry { Move-Item -LiteralPath $oldExe -Destination $env:DS_EXE } 10)) { return $false }
+    if (Test-Path -LiteralPath $oldLib) {
+        if (-not ((Remove-Gone $lib) -and (Retry { Move-Item -LiteralPath $oldLib -Destination $lib } 10))) { return $false }
+    } else {
+        $null = Remove-Gone $lib  # it was the single-file exe before: the new libraries are not its
+    }
+    return $true
+}
+function Forget-Kept {
+    $null = Remove-Gone $oldExe
+    $null = Remove-Gone $oldLib
+}
 $waiting = foreach ($id in ($env:DS_WAIT -split ',')) { if ($id) { try { Get-Process -Id ([int]$id) } catch {} } }
 foreach ($process in $waiting) { $process.WaitForExit() }
-$ok = $false
+$state.wasFolder = Test-Path -LiteralPath $lib  # the one-folder build: putting it back needs its libraries too
+$installed = $false
 try {
     if ((Get-FileHash -LiteralPath $env:DS_NEW -Algorithm SHA256).Hash -eq $env:DS_SHA) {
-        $dir = Split-Path -LiteralPath $env:DS_EXE
-        $setup = Start-Process -FilePath $env:DS_NEW -Wait -PassThru `
-            -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', ('/DIR="' + $dir + '"')
-        $ok = $setup.ExitCode -eq 0
+        $setup = Start-Process -FilePath $env:DS_NEW -Wait -PassThru -ArgumentList `
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/KEEPPREVIOUS=1', ('/DIR="' + $dir + '"')
+        $installed = $setup.ExitCode -eq 0
     }
 } catch {}
-$null = Write-Result $(if ($ok) { 'updated' } else { 'restored' })
 try { Remove-Item -LiteralPath $env:DS_NEW } catch {}
-try { Start-Process -FilePath $env:DS_EXE -WorkingDirectory (Split-Path -LiteralPath $env:DS_EXE) } catch {}
+if (-not $installed) {  # the installer rolled itself back: this is still the old version
+    $null = Write-Result 'restored'
+    $null = Start-Exe
+} elseif ((Write-Result 'updated') -and (Start-Checked)) {
+    Forget-Kept
+} else {  # the new version will not start (blocked?) or quit before it was up
+    $null = Write-Result 'failed'
+    if ($state.proc -and -not $state.proc.HasExited) { $null = $state.proc.WaitForExit(10000) }
+    if (Put-Back) {
+        $null = Write-Result 'restored'
+        $null = Start-Exe
+    }
+}
 """
 
 
