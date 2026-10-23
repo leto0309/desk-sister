@@ -37,6 +37,8 @@ production deployments need authorisation. Secrets are configured only in GitHub
 - In allowlist mode (watch_mode=allowlist) only allowlisted programs' windows are captured, poking her included; the
   blocklist still applies on top. Allowlist rules match the process name by default; matching the window title needs an
   explicit title: prefix; a damaged allowlist counts as empty (no window is captured).
+- Her voice is synthesised locally with the standard library: nothing online, no model; the temporary audio goes only
+  under %APPDATA%/ClaudePet/voice/, keeping just the file playing now (leftovers are cleared at start).
 - The companion memory (%APPDATA%/ClaudePet/memory.json) keeps only process names, kinds of activity, timestamps and
   today's time per kind; window titles are used only to classify locally and are never written to the file or the log;
   windows refused by the blocklist or the allowlist are neither recorded nor timed. A summary of the memory goes to the

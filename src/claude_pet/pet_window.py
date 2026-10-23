@@ -146,6 +146,8 @@ PAT_STROKE = 12  # ... each after a stroke of at least this many pixels
 
 
 class PetWindow(QWidget):
+    spoke = Signal(str, str, int)  # (mood, line, milliseconds per character) as a line starts
+    hushed = Signal()  # the bubble went away
     poked = Signal()
     context_menu_requested = Signal(QPoint)
     moved = Signal(int, int)
@@ -282,6 +284,7 @@ class PetWindow(QWidget):
         self.update()
 
     def say(self, mood: str, text: str, hold_ms: int | None = None) -> None:
+        """Show a line, typed out; `spoke` tells her voice what to say and how fast."""
         self.last_said_at = self.clock()
         self.set_mood(mood)
         self.full_text = text
@@ -292,10 +295,12 @@ class PetWindow(QWidget):
         self._typer.setInterval(max(1, round(TYPE_MS * units / max(1, len(text)))))  # English types faster
         self._typer.start()
         self._hide_bubble.start(hold_ms if hold_ms is not None else round(HOLD_MS + HOLD_PER_CHAR_MS * units))
+        self.spoke.emit(mood, text, self._typer.interval())
         self.start_head("nod")  # a little nod as she starts to talk
 
     def clear_bubble(self) -> None:
         self._typer.stop()
+        self.hushed.emit()
         self.mouth = None
         self.full_text = ""
         self.shown_chars = 0

@@ -121,6 +121,10 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   while talking, asleep, being dragged, in full-screen quiet or with watching paused. While it is on, she drops to the
   bottom from any height when let go; to keep her elsewhere on the screen, switch strolling off on the "Appearance"
   page first.
+- "Voice (Animalese)" (Appearance page, off by default): as she talks, every character gets a little synthesised
+  babble syllable, like the villagers in Animal Crossing, in step with the text in her bubble and pitched by her mood.
+  Choose Squeaky (default) / Bright / Soft / Low, set the volume, and "Preview" a line any time. It is not real speech:
+  nothing online, no model. Silent while asleep or in full-screen quiet, and it stops when the bubble goes.
 - "Late-night rest reminder": by default at most once a night (after midnight still counts as the same night), shared
   by screen comments and self-talk; change it to every 2 hours or off on the "Companion" page, and choose when the
   night starts (20:00 to 2:00, 23:00 by default; it ends at 5 in the morning).

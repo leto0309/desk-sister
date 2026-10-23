@@ -340,6 +340,16 @@ TEXT = {
     "（hook 未找到或 settings.json 异常）": " (hooks not found, or settings.json is not as expected)",
     "已保存（在 Windows 凭据管理器里）": "saved (in the Windows Credential Manager)",
     "还没有保存": "not saved yet",
+    "说话声音（动物语）": "Voice (Animalese)",
+    "试听": "Preview",
+    "音量": "Volume",
+    "尖细可爱": "Squeaky",
+    "清亮": "Bright",
+    "柔和": "Soft",
+    "低沉": "Low",
+    "她说话时，每个字配一声程序合成的「嘟噜」小音节，像动物森友会里的角色（不是真的语音，不联网）。睡着、全屏免打扰时不出声。":
+        "As she talks, every character gets a little synthesised babble syllable, like the villagers in Animal Crossing "
+        "(not real speech, nothing online). Silent while asleep or in full-screen quiet.",
     # ---- activities (companion memory) ---------------------------------------------------------------
     "写代码": "coding",
     "和 AI 一起干活": "working with AI",

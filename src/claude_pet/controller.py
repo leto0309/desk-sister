@@ -19,7 +19,7 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
 from .i18n import N_, tr
-from . import __version__, agent_link, i18n, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers, updates
+from . import __version__, agent_link, i18n, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers, updates, voice
 from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
@@ -231,6 +231,9 @@ class PetController(QObject):
         self.window.set_blink(config.blink)
         self.window.set_talk_mouth(config.talk_mouth)
         self.window.set_head_motion(config.head_motion)
+        self.voice = voice.Player(app_data_dir() / "voice")
+        self.window.spoke.connect(self._speak)
+        self.window.hushed.connect(self.voice.stop)
         self.recent: deque[str] = deque(maxlen=6)
         self.busy = False
         self.asleep = False
@@ -376,6 +379,7 @@ class PetController(QObject):
 
     def shutdown(self) -> None:
         self._cancel_inflight()
+        self.voice.stop()
         self._download_cancel.set()
         self.walker.set_enabled(False)
         if codex_client.has_pending():
@@ -1191,6 +1195,40 @@ class PetController(QObject):
             self.config.blink = rate
             self.window.set_blink(rate)
             self._save()
+
+    def _hushed(self) -> bool:
+        """Asleep, in full-screen quiet or quitting: no voice at all, not even a preview."""
+        return self.asleep or self.quiet or self.quit_pending
+
+    def _speak(self, mood: str, text: str, char_ms: int) -> None:
+        """Her Animalese babble for a line, if chosen; never while asleep, muted or quitting."""
+        if not self.config.voice or mood == "sleep" or self._hushed():
+            self.voice.stop()
+            return
+        self.voice.say(text, mood, self.config.voice_style, self.config.voice_volume, char_ms)
+
+    def set_voice(self, enabled: bool) -> None:
+        self.config.voice = bool(enabled)
+        if not self.config.voice:
+            self.voice.stop()
+        self._save()
+
+    def set_voice_style(self, style: str) -> None:
+        if style in voice.STYLES:
+            self.config.voice_style = style
+            self._save()
+
+    def set_voice_volume(self, volume: int) -> None:
+        self.config.voice_volume = min(max(int(volume), 0), 100)
+        self._save()
+
+    def preview_voice(self) -> None:
+        """The settings' 「试听」: a sample line in the chosen voice, even while her voice is off (but not while hushed)."""
+        if self._hushed():
+            self.voice.stop()
+            return
+        self.voice.say(tr("主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。"), "happy",
+                       self.config.voice_style, self.config.voice_volume, 35)
 
     def set_head_motion(self, enabled: bool) -> None:
         self.config.head_motion = bool(enabled)

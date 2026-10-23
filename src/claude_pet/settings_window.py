@@ -26,6 +26,8 @@ from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .config import BLINK_CHOICES, INTERVAL_CHOICES, MODEL_CHOICES
 from .persona import SUMMARY_HOURS
+from .voice import STYLE_NAMES as VOICE_STYLE_NAMES
+from .voice import STYLES as VOICE_STYLES
 from .providers import CLAUDE_CLI, CODEX_CLI, PROVIDERS, model_label
 
 if TYPE_CHECKING:
@@ -576,6 +578,31 @@ class SettingsWindow(QDialog):
         face.addWidget(self.head_box)
         face.addStretch(1)
         layout.addLayout(face)
+        sound = QHBoxLayout()
+        self.voice_box = QCheckBox(tr("说话声音（动物语）"))
+        self.voice_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_voice(on)))
+        self.voice_combo = QComboBox()
+        for style in VOICE_STYLES:
+            self.voice_combo.addItem(tr(VOICE_STYLE_NAMES[style]), style)
+        self.voice_combo.currentIndexChanged.connect(
+            lambda _i: self._apply(lambda: self.ctrl.set_voice_style(self.voice_combo.currentData())))
+        self.voice_volume = QSlider(Qt.Orientation.Horizontal)
+        self.voice_volume.setRange(0, 100)
+        self.voice_volume.setFixedWidth(140)
+        self.voice_volume.sliderReleased.connect(lambda: self._apply(lambda: self.ctrl.set_voice_volume(self.voice_volume.value())))
+        self.voice_volume.actionTriggered.connect(lambda _a: None if self.voice_volume.isSliderDown() else self._apply(
+            lambda: self.ctrl.set_voice_volume(self.voice_volume.sliderPosition())))
+        preview = QPushButton(tr("试听"))
+        preview.setObjectName("quiet")
+        preview.clicked.connect(self.ctrl.preview_voice)
+        sound.addWidget(self.voice_box)
+        sound.addWidget(self.voice_combo)
+        sound.addWidget(QLabel(tr("音量")))
+        sound.addWidget(self.voice_volume)
+        sound.addWidget(preview)
+        sound.addStretch(1)
+        layout.addLayout(sound)
+        layout.addWidget(_hint(tr("她说话时，每个字配一声程序合成的「嘟噜」小音节，像动物森友会里的角色（不是真的语音，不联网）。睡着、全屏免打扰时不出声。")))
         self.walking_box = QCheckBox(tr("沿屏幕底部溜达"))
         self.walking_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_walking(on)))
         layout.addWidget(self.walking_box)
@@ -724,6 +751,10 @@ class SettingsWindow(QDialog):
             self.blink_combo.setCurrentIndex(max(0, self.blink_combo.findData(cfg.blink)))
             self.mouth_box.setChecked(cfg.talk_mouth)
             self.head_box.setChecked(cfg.head_motion)
+            self.voice_box.setChecked(cfg.voice)
+            self.voice_combo.setCurrentIndex(max(0, self.voice_combo.findData(cfg.voice_style)))
+            if not self.voice_volume.isSliderDown():
+                self.voice_volume.setValue(cfg.voice_volume)
             self.updates_box.setChecked(cfg.check_updates)
             self.language_combo.setCurrentIndex(max(0, self.language_combo.findData(cfg.language)))
             self.check_now.setEnabled(not self.ctrl.update_checking)

@@ -54,3 +54,12 @@ def _chinese_by_default():
     yield
     i18n.system_language = real
     i18n.set_language("zh")
+
+
+
+@pytest.fixture(autouse=True)
+def _silent(monkeypatch):
+    """No test makes a sound: her voice player plays nothing."""
+    from claude_pet import voice
+
+    monkeypatch.setattr(voice, "_winsound_play", lambda path: None)

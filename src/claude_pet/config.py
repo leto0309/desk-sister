@@ -12,6 +12,7 @@ from .bedtime import NIGHT_STARTS
 from .days import clean_birthday
 from .i18n import CHOICES as LANGUAGES
 from .persona import SUMMARY_HOURS
+from .voice import STYLES as VOICE_STYLES
 from .updates import parse_version
 from .providers import BACKENDS, clean_custom_models  # every way she can think
 
@@ -68,6 +69,9 @@ class Config:
     walking: bool = True  # strolls along the bottom of the screen now and then
     blink: str = "normal"  # off | few | normal | often
     talk_mouth: bool = True  # her mouth moves while her words appear
+    voice: bool = False  # Animalese babble as she talks (off unless chosen)
+    voice_style: str = "squeaky"
+    voice_volume: int = 60  # 0-100
     head_motion: bool = False  # off unless chosen: a nod as she starts to talk, a tilt now and then, a duck when patted
     birthday: str = ""  # "MM-DD" for a birthday wish, "" for none
     check_updates: bool = True  # look for a newer release on GitHub, at most once a day
@@ -125,6 +129,13 @@ class Config:
             self.greeted_on = ""
         if not isinstance(self.head_motion, bool):
             self.head_motion = False
+        if not isinstance(self.voice, bool):
+            self.voice = False
+        if not isinstance(self.voice_style, str) or self.voice_style not in VOICE_STYLES:
+            self.voice_style = "squeaky"
+        if isinstance(self.voice_volume, bool) or not isinstance(self.voice_volume, int):
+            self.voice_volume = 60
+        self.voice_volume = min(max(self.voice_volume, 0), 100)
         if not isinstance(self.talk_mouth, bool):  # null, 0, ""... are not a choice: back to the default
             self.talk_mouth = True
         if self.bedtime_reminder not in BEDTIME_MODES:
