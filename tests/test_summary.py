@@ -7,6 +7,7 @@ import pytest
 
 from claude_pet import bedtime, claude_client, persona
 from claude_pet.config import Config
+from claude_pet.memory import ACTIVITIES
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
 from claude_pet import controller as controller_module  # noqa: E402
@@ -15,8 +16,19 @@ SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
 
 
 def test_summary_line_lists_the_top_three_and_a_word_on_the_first():
-    line = persona.summary_line({"看视频": 2400, "写代码": 11520, "聊天": 900, "听音乐": 700, "上网": 300})
-    assert line.text == "今天的小结：写代码约 3.2 小时、看视频约 40 分钟、聊天约 15 分钟。代码敲了这么久，辛苦啦～"
+    seconds = {"看视频": 2400, "写代码": 11520, "聊天": 900, "听音乐": 700, "上网": 300}
+    tails = set()
+    for seed in range(30):
+        text = persona.summary_line(seconds, random.Random(seed)).text
+        head = "今天的小结：写代码约 3.2 小时、看视频约 40 分钟、聊天约 15 分钟。"
+        assert text.startswith(head)
+        tails.add(text[len(head):])
+    assert tails == set(persona.SUMMARY_TAILS["写代码"])  # each of the main activity's tails, now and then
+
+
+def test_every_activity_has_several_tails():
+    assert set(persona.SUMMARY_TAILS) == set(ACTIVITIES)
+    assert all(len(tails) >= 2 for tails in persona.SUMMARY_TAILS.values())
 
 
 @pytest.mark.parametrize("seconds", [{}, {"写代码": 1700}, {"写代码": 500, "看视频": 500, "聊天": 500, "上网": 500}])
@@ -25,8 +37,9 @@ def test_too_little_is_no_summary(seconds):
 
 
 def test_summaries_never_mention_sleep():
-    for activity in persona.SUMMARY_TAILS:
+    for activity, tails in persona.SUMMARY_TAILS.items():
         assert not bedtime.mentions(persona.summary_line({activity: 7200}).text)
+        assert not [tail for tail in tails if bedtime.mentions(tail)]
 
 
 def test_config_cleans_summary_fields():
@@ -96,7 +109,7 @@ def test_from_the_chosen_hour_once_a_day(pet):
     assert ctrl.memory.today_seconds() == {}  # a new day in the memory too
     ctrl.memory.seconds = {"打游戏": 3600}
     ctrl._heartbeat()
-    assert ctrl.window.full_text == "今天的小结：打游戏约 1.0 小时。今天赢了几把呀？"
+    assert ctrl.window.full_text in {f"今天的小结：打游戏约 1.0 小时。{tail}" for tail in persona.SUMMARY_TAILS["打游戏"]}
 
 
 def test_it_waits_until_she_may_talk(pet):

@@ -74,7 +74,8 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   calls). Pats in a row within a minute make her shy, then mock-annoyed; dragged about three times in 20 seconds she
   complains, and carried for more than 4 seconds she is dizzy.
 - The first time she sees you each day (the first start of the day, or when you come back and wake her) she says
-  hello: good morning in the morning, hello again otherwise. On New Year's Day, Valentine's Day, Christmas, the Lunar
+  hello: good morning in the morning, hello again otherwise, and on Mondays, Fridays and weekends now and then a word
+  about the day. On New Year's Day, Valentine's Day, Christmas, the Lunar
   New Year, the Lantern, Dragon Boat, Qixi, Mid-Autumn and Double Ninth festivals it becomes a festival wish (the lunar
   calendar is computed, so it never needs a yearly update). Tick "Birthday wish" on the "Companion" page and pick the
   day, and she wishes you a happy birthday on it.
@@ -138,7 +139,7 @@ The config and the log are in `%APPDATA%\ClaudePet\` (config.json, pet.log).
 - The update check sends GitHub one request for the public version information (api.github.com), with none of your
   data; switch it off on the "About" page. A new exe is downloaded only when you click "Download and update" (only this
   repository's release file is accepted, and it is deleted if the check fails).
-- More in [docs/security.md](docs/security.md) (in Chinese).
+- More in [docs/security.en.md](docs/security.en.md).
 
 ## Development
 

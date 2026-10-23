@@ -1246,7 +1246,7 @@ class PetController(QObject):
             return True
         self._greeting_due = ""
         line = persona.greeting_line(stamp.tm_hour, days.festival(today),
-                                     days.is_birthday(today, self.config.birthday), self._rng)
+                                     days.is_birthday(today, self.config.birthday), self._rng, stamp.tm_wday)
         self.window.say(*self._reply_tuple(line))
         self.config.greeted_on = today.isoformat()
         self._save()
@@ -1264,7 +1264,7 @@ class PetController(QObject):
             return
         if self.quit_pending or self.quiet or self.asleep or self.window.full_text:
             return  # later, when she may talk
-        line = persona.summary_line(self.memory.today_seconds())
+        line = persona.summary_line(self.memory.today_seconds(), self._rng)
         if line is None:
             return  # too little yet: maybe later today
         self.config.summary_on = today

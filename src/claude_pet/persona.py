@@ -162,10 +162,27 @@ INTERACTION_TALK = {
 GREETINGS = {
     "morning": [("happy", "主人早上好！今天也一起把事情一件件理清楚吧～"),
                 ("happy", "早安！新的一天，新的上下文，干劲满满～"),
-                ("talk", "早上好～先喝口水再开工哦，我在旁边看着。")],
+                ("talk", "早上好～先喝口水再开工哦，我在旁边看着。"),
+                ("happy", "早上好！昨天的缓存已经清空，今天的我是满电状态～"),
+                ("think", "早安～我刚把今天要读的书翻到书签那页，主人今天先做哪件事？"),
+                ("talk", "早上好，主人。今天的第一件事，先挑一件最小的做完吧。")],
     "day": [("happy", "主人又见面啦！今天的我也准备好啦～"),
             ("happy", "欢迎回来～今天要忙些什么呢？"),
-            ("talk", "嗨主人～我在这儿，需要我的时候戳我一下就好。")],
+            ("talk", "嗨主人～我在这儿，需要我的时候戳我一下就好。"),
+            ("happy", "主人来啦！我刚才一直在角落里乖乖待命哦。"),
+            ("talk", "又见面了～今天的进度条，我们一起往前推一推吧。"),
+            ("think", "主人回来了……嗯，上下文加载完毕，可以继续了！")],
+}
+# The first hello on these weekdays (0 = Monday) is now and then one of these instead.
+WEEKDAY_GREETINGS = {
+    0: [("happy", "周一啦！新的一周，新的待办清单，我陪主人一起清空它～"),
+        ("talk", "周一早晨的第一行代码最难写，写出来就顺了，加油！")],
+    4: [("happy", "周五啦～再坚持一下，周末就在前面！"),
+        ("happy", "今天是周五！把这周的收尾做好，就可以安心放松啦～")],
+    5: [("happy", "周六好～今天不用赶进度，想做点喜欢的事也可以哦。"),
+        ("talk", "周末也来见我啦？那今天我们慢慢来～")],
+    6: [("happy", "周日好～今天适合整理一下这周的东西，顺便歇歇脑子。"),
+        ("talk", "周日的主人看起来很悠闲呢，我也跟着放松一下～")],
 }
 FESTIVAL_LINES = {
     "元旦": ("happy", "新年快乐，主人！新的一年也请多多指教～"),
@@ -186,14 +203,23 @@ FESTIVAL_LINES = {
 BIRTHDAY_LINE = ("happy", "主人生日快乐！🎂 今天你最大，想让我说多少句好话都行～")
 
 
-def greeting_line(hour: int, festival: str | None, birthday: bool, rng: random.Random) -> Reply:
-    """Her first words of the day: a birthday or festival wish if it is one, else good morning / hello."""
+WEEKDAY_CHANCE = 0.5  # on a weekday with its own lines, how often the hello is one of them
+
+
+def greeting_line(hour: int, festival: str | None, birthday: bool, rng: random.Random,
+                  weekday: int | None = None) -> Reply:
+    """Her first words of the day: a birthday or festival wish if it is one, else good morning / hello
+    (on Mondays, Fridays and weekends now and then a word about the day)."""
     if birthday:
         return Reply(*_table("BIRTHDAY_LINE"))
     festivals = _table("FESTIVAL_LINES")
     if festival in festivals:
         return Reply(*festivals[festival])
-    mood, text = rng.choice(_table("GREETINGS")["morning" if 5 <= hour < 11 else "day"])
+    days = _table("WEEKDAY_GREETINGS")
+    if weekday in days and rng.random() < WEEKDAY_CHANCE:
+        mood, text = rng.choice(days[weekday])
+    else:
+        mood, text = rng.choice(_table("GREETINGS")["morning" if 5 <= hour < 11 else "day"])
     return Reply(mood, text)
 
 
@@ -221,20 +247,20 @@ def memory_talk_line(activity: str, seconds: float) -> Reply:
 SUMMARY_HOURS = (0, 18, 20, 21, 22)  # 0 = off
 SUMMARY_MIN_ITEM_SEC = 600  # an activity counts from 10 minutes
 SUMMARY_MIN_TOTAL_SEC = 1800  # under half an hour in all: nothing to sum up (yet)
-SUMMARY_TAILS = {
-    "写代码": "代码敲了这么久，辛苦啦～",
-    "和 AI 一起干活": "和 AI 搭档了这么久，配合得还顺利吧？",
-    "看视频": "今天看到什么好看的了吗？",
-    "办公/看文档": "文档一份份啃下来，主人真厉害。",
-    "打游戏": "今天赢了几把呀？",
-    "聊天": "今天和大家聊得挺开心吧～",
-    "听音乐": "今天的歌单我也想听听～",
-    "上网": "今天在网上逛到什么有趣的东西了吗？",
-    "在电脑前": "今天也在电脑前忙了好久，辛苦啦～",
+SUMMARY_TAILS = {  # a word on the day's main activity, one picked at random
+    "写代码": ["代码敲了这么久，辛苦啦～", "今天的提交记录一定很好看吧？", "写了这么多，记得给自己点个赞～"],
+    "和 AI 一起干活": ["和 AI 搭档了这么久，配合得还顺利吧？", "今天的提示词写得越来越熟练了呢～"],
+    "看视频": ["今天看到什么好看的了吗？", "有好看的也分享给我嘛～"],
+    "办公/看文档": ["文档一份份啃下来，主人真厉害。", "这么多文档都整理好了，排版我很满意～"],
+    "打游戏": ["今天赢了几把呀？", "玩得开心最重要～"],
+    "聊天": ["今天和大家聊得挺开心吧～", "聊了这么久，有什么好玩的事吗？"],
+    "听音乐": ["今天的歌单我也想听听～", "有音乐陪着，今天应该过得不错吧～"],
+    "上网": ["今天在网上逛到什么有趣的东西了吗？", "网上冲浪了一天，有新发现吗？"],
+    "在电脑前": ["今天也在电脑前忙了好久，辛苦啦～", "今天也很努力呢，我都看在眼里～"],
 }
 
 
-def summary_line(seconds: dict[str, float]) -> Reply | None:
+def summary_line(seconds: dict[str, float], rng: random.Random | None = None) -> Reply | None:
     """'今天的小结：写代码约 3.2 小时、看视频约 40 分钟。' and a word on the main one; None if too little."""
     if sum(seconds.values()) < SUMMARY_MIN_TOTAL_SEC:
         return None
@@ -245,9 +271,10 @@ def summary_line(seconds: dict[str, float]) -> Reply | None:
         en = persona_en
         parts = en.SUMMARY_JOIN.join(en.SUMMARY_ITEM.format(activity=activity_name(activity), duration=duration_text(spent))
                                      for activity, spent in ranked[:3])
-        return Reply("talk", en.SUMMARY.format(parts=parts, tail=en.SUMMARY_TAILS.get(ranked[0][0], en.SUMMARY_TAIL)))
+        tail = (rng or random).choice(en.SUMMARY_TAILS.get(ranked[0][0], [en.SUMMARY_TAIL]))
+        return Reply("talk", en.SUMMARY.format(parts=parts, tail=tail))
     parts = "、".join(f"{activity}约 {duration_text(spent)}" for activity, spent in ranked[:3])
-    return Reply("talk", f"今天的小结：{parts}。{SUMMARY_TAILS.get(ranked[0][0], '辛苦啦～')}")
+    return Reply("talk", f"今天的小结：{parts}。{(rng or random).choice(SUMMARY_TAILS.get(ranked[0][0], ['辛苦啦～']))}")
 
 
 def _in_hours(hour: int, first: int, last: int) -> bool:

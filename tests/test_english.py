@@ -43,7 +43,7 @@ def test_every_marked_text_has_english_with_the_same_fields():
 
 def test_the_english_has_no_chinese():
     assert [v for k, v in i18n_en.TEXT.items() if CJK.search(v) and k != "语言 / Language"] == []
-    for name in ("FALLBACK", "INTERACTION_TALK", "GREETINGS", "FESTIVAL_LINES", "SUMMARY_TAILS"):
+    for name in ("FALLBACK", "INTERACTION_TALK", "GREETINGS", "FESTIVAL_LINES", "SUMMARY_TAILS", "WEEKDAY_GREETINGS"):
         table = getattr(persona_en, name)
         for value in table.values():
             assert not CJK.search(repr(value)), (name, value)
@@ -65,7 +65,8 @@ def shape(value):
 
 
 @pytest.mark.parametrize("name", ["FALLBACK", "WAKE_LINES", "SLEEP_LINES", "SELF_TALK", "TIME_TALK", "NIGHT_TALK",
-                                  "INTERACTION_TALK", "GREETINGS", "SLEEP_TALK", "BIRTHDAY_LINE", "SUMMARY_TAILS"])
+                                  "INTERACTION_TALK", "GREETINGS", "SLEEP_TALK", "BIRTHDAY_LINE", "SUMMARY_TAILS",
+                                  "WEEKDAY_GREETINGS"])
 def test_english_lines_mirror_the_chinese(name):
     assert shape(getattr(persona_en, name)) == shape(getattr(persona, name))
 
@@ -127,8 +128,9 @@ def test_her_lines_and_prompts_in_english():
     assert persona.greeting_line(8, "春节", False, rng) == persona.Reply(*persona_en.FESTIVAL_LINES["春节"])
     assert persona.greeting_line(8, "国庆节", False, rng).text in {t for _m, t in persona_en.GREETINGS["morning"]}
     assert persona.greeting_line(8, "春节", True, rng) == persona.Reply(*persona_en.BIRTHDAY_LINE)
-    assert persona.summary_line({"写代码": 11520, "看视频": 2400}).text == (
-        "Today's summary: coding about 3.2 hours, watching videos about 40 minutes. That's a lot of typing. Well done~")
+    text = persona.summary_line({"写代码": 11520, "看视频": 2400}, rng).text
+    head = "Today's summary: coding about 3.2 hours, watching videos about 40 minutes. "
+    assert text.startswith(head) and text[len(head):] in persona_en.SUMMARY_TAILS["写代码"]
     assert persona.memory_talk_line("写代码", 7200).text.startswith("You've spent 2.0 hours on \"coding\"")
     assert persona.self_talk_line(14, False, [], rng).text in {t for _m, t in persona_en.SELF_TALK}
     assert persona.lines("WAKE_LINES") == persona_en.WAKE_LINES
@@ -305,3 +307,11 @@ def test_preparing_a_download_follows_a_switch(pet, monkeypatch):
     assert ctrl.download_state == "downloading" and ctrl.download_text == "正在准备下载…"
     ctrl.set_language("en")
     assert ctrl.download_text == "Preparing the download…"
+
+
+
+def test_new_english_greetings_and_tails_never_mention_sleep():
+    texts = [t for part in persona_en.GREETINGS.values() for _m, t in part]
+    texts += [t for part in persona_en.WEEKDAY_GREETINGS.values() for _m, t in part]
+    texts += [t for tails in persona_en.SUMMARY_TAILS.values() for t in tails]
+    assert [t for t in texts if bedtime.mentions(t)] == []

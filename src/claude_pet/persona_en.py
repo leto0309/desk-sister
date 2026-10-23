@@ -118,10 +118,26 @@ INTERACTION_TALK = {
 GREETINGS = {
     "morning": [("happy", "Good morning! Let's sort things out one at a time today too~"),
                 ("happy", "Morning! A new day, a fresh context, full of energy~"),
-                ("talk", "Good morning~ Have some water before you start. I'll be right here.")],
+                ("talk", "Good morning~ Have some water before you start. I'll be right here."),
+                ("happy", "Good morning! Yesterday's cache is cleared; I'm fully charged today~"),
+                ("think", "Morning~ I've opened my book at the bookmark. What will you do first today?"),
+                ("talk", "Good morning. For the first thing today, pick the smallest task and finish it.")],
     "day": [("happy", "There you are again! I'm ready for today too~"),
             ("happy", "Welcome back~ What are we working on today?"),
-            ("talk", "Hi~ I'm here. Poke me whenever you need me.")],
+            ("talk", "Hi~ I'm here. Poke me whenever you need me."),
+            ("happy", "You're here! I've been waiting quietly in my corner."),
+            ("talk", "Hello again~ Let's push today's progress bar forward together."),
+            ("think", "You're back... context loaded. We can carry on!")],
+}
+WEEKDAY_GREETINGS = {
+    0: [("happy", "It's Monday! A new week, a new to-do list. Let's clear it together~"),
+        ("talk", "Monday morning's first line of code is the hardest. After that it flows. You can do it!")],
+    4: [("happy", "It's Friday~ Hang in there a little longer, the weekend is right ahead!"),
+        ("happy", "Friday! Wrap up this week nicely and then you can relax~")],
+    5: [("happy", "Happy Saturday~ No deadlines today. Do something you enjoy."),
+        ("talk", "Coming to see me at the weekend too? Let's take it slow today~")],
+    6: [("happy", "Happy Sunday~ A good day to tidy up the week and give your mind a breather."),
+        ("talk", "You look relaxed this Sunday. I'll unwind with you~")],
 }
 # Keyed by the festival names in days.py. The Chinese public holidays have no English wish: an ordinary hello then.
 FESTIVAL_LINES = {
@@ -150,15 +166,18 @@ SLEEP_TALK = [
 MEMORY_TALK = "You've spent {hours:.1f} hours on \"{activity}\" today. Remember to get up, walk about and drink some water~"
 
 SUMMARY_TAILS = {
-    "写代码": "That's a lot of typing. Well done~",
-    "和 AI 一起干活": "That's a long session with your AI partner. Did it go smoothly?",
-    "看视频": "See anything good today?",
-    "办公/看文档": "Working through all those documents, you're amazing.",
-    "打游戏": "How many games did you win?",
-    "聊天": "Sounds like a good chat with everyone today~",
-    "听音乐": "I'd like to hear today's playlist too~",
-    "上网": "Find anything interesting online today?",
-    "在电脑前": "Another long day at the computer. Well done~",
+    "写代码": ["That's a lot of typing. Well done~", "Today's commit history must look great.",
+             "So much code. Give yourself a pat on the back~"],
+    "和 AI 一起干活": ["That's a long session with your AI partner. Did it go smoothly?",
+                   "Your prompts are getting better and better~"],
+    "看视频": ["See anything good today?", "If you found something good, share it with me~"],
+    "办公/看文档": ["Working through all those documents, you're amazing.",
+                "All those documents sorted. I'm pleased with the layout~"],
+    "打游戏": ["How many games did you win?", "Having fun is what matters~"],
+    "聊天": ["Sounds like a good chat with everyone today~", "All that chatting, anything fun happen?"],
+    "听音乐": ["I'd like to hear today's playlist too~", "With music along, it must have been a good day~"],
+    "上网": ["Find anything interesting online today?", "A whole day of browsing. Any discoveries?"],
+    "在电脑前": ["Another long day at the computer. Well done~", "You worked hard today too. I saw it all~"],
 }
 SUMMARY = "Today's summary: {parts}. {tail}"
 SUMMARY_JOIN = ", "

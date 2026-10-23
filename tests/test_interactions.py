@@ -421,5 +421,37 @@ def test_new_lines_never_mention_sleep():
     texts = [text for kind in ("pat_shy", "pat_annoyed", "drag_many", "carry_long")
              for _mood, text in persona.INTERACTION_TALK[kind]]
     texts += [text for part in persona.GREETINGS.values() for _mood, text in part]
+    texts += [text for part in persona.WEEKDAY_GREETINGS.values() for _mood, text in part]
     texts += [text for _mood, text in persona.FESTIVAL_LINES.values()] + [persona.BIRTHDAY_LINE[1]]
     assert not [text for text in texts if bedtime.mentions(text)]
+
+
+
+def weekday_lines(day):
+    return {text for _mood, text in persona.WEEKDAY_GREETINGS[day]}
+
+
+def test_mondays_fridays_and_weekends_get_a_word_about_the_day_now_and_then():
+    for day in (0, 4, 5, 6):
+        said = {persona.greeting_line(9, None, False, random.Random(seed), day).text for seed in range(60)}
+        assert said & weekday_lines(day) and said & greetings("morning")  # both, depending on the draw
+        assert said <= weekday_lines(day) | greetings("morning")
+    for day in (1, 2, 3, None):
+        said = {persona.greeting_line(15, None, False, random.Random(seed), day).text for seed in range(30)}
+        assert said <= greetings("day")
+    birthday = persona.greeting_line(9, "春节", True, random.Random(1), 0)
+    assert birthday.text == persona.BIRTHDAY_LINE[1]  # wishes still come first
+
+
+def test_the_greeting_knows_the_weekday(pet):
+    ctrl, _clock = pet
+    ctrl._now = at(2026, 10, 26, 9)  # a Monday
+    for seed in range(20):
+        ctrl._rng = random.Random(seed)
+        ctrl.config.greeted_on = ""
+        ctrl.window.clear_bubble()
+        ctrl.start()
+        if ctrl.window.full_text in weekday_lines(0):
+            break
+    else:
+        pytest.fail("never a Monday line")

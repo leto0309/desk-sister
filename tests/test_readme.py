@@ -8,6 +8,7 @@ from claude_pet import i18n_en
 
 ROOT = Path(__file__).resolve().parents[1]
 ZH, EN = ROOT / "README.md", ROOT / "README.en.md"
+SEC_ZH, SEC_EN = ROOT / "docs" / "security.md", ROOT / "docs" / "security.en.md"
 CJK = re.compile(r"[一-鿿]+")
 NAMES = {"中文", "冬冰"}  # the language switch's own name; a creator's name, given in English too
 
@@ -17,15 +18,22 @@ def test_they_link_to_each_other():
     assert "[中文](README.md)" in EN.read_text(encoding="utf-8").splitlines()[2]
 
 
-def test_the_english_readme_is_in_english():
-    assert set(CJK.findall(EN.read_text(encoding="utf-8"))) <= NAMES
+def test_the_security_notes_link_to_each_other_and_from_the_english_readme():
+    assert "[English](security.en.md)" in SEC_ZH.read_text(encoding="utf-8").splitlines()[2]
+    assert "[中文](security.md)" in SEC_EN.read_text(encoding="utf-8").splitlines()[2]
+    assert "(docs/security.en.md)" in EN.read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("readme", [ZH, EN], ids=["zh", "en"])
-def test_relative_links_exist(readme):
-    for target in re.findall(r"\]\(([^)#]+)\)", readme.read_text(encoding="utf-8")):
+@pytest.mark.parametrize("doc", [EN, SEC_EN], ids=["readme", "security"])
+def test_the_english_docs_are_in_english(doc):
+    assert set(CJK.findall(doc.read_text(encoding="utf-8"))) <= NAMES
+
+
+@pytest.mark.parametrize("doc", [ZH, EN, SEC_ZH, SEC_EN], ids=["zh", "en", "security-zh", "security-en"])
+def test_relative_links_exist(doc):
+    for target in re.findall(r"\]\(([^)#]+)\)", doc.read_text(encoding="utf-8")):
         if not re.match(r"[a-z]+:", target):
-            assert (ROOT / target).exists(), target
+            assert (doc.parent / target).exists(), target
 
 
 def test_setting_names_match_the_english_interface():
