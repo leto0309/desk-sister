@@ -79,6 +79,9 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   can switch the moving mouth off.
 - Small head movements (off by default): a little nod as she starts to talk, a tilt now and then while idle, and a duck
   when patted; switch them on in the "Appearance" page.
+- Small body movements (on by default): she swings a little as she is carried and squashes and springs back when she
+  lands; a little hop when happy, a stamp when angry, a tremble when panicked, a slow slump when sad. All made from the
+  existing drawings; still while asleep, strolling or in full-screen quiet. Switch them off in the "Appearance" page if you prefer.
 - Moving the mouse back and forth over her head without a button pressed is a head pat; she looks flustered while
   carried; after a resize, at the edge of the screen or on landing she says something (all local lines, no model
   calls). Pats in a row within a minute make her shy, then mock-annoyed; dragged about three times in 20 seconds she

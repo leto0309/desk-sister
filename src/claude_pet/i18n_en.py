@@ -275,6 +275,10 @@ TEXT = {
     "生日祝福": "Birthday wish",
     "说话时动嘴": "Move her mouth while talking",
     "头部小动作": "Small head movements",
+    "身体小动作": "Small body movements",
+    "被拎起来时轻轻摆动，落地时压扁再弹回，开心、生气、慌张、难过时身体动一下。":
+        "She swings a little when carried, squashes and springs back when she lands, and moves a little when happy, "
+        "angry, panicked or sad.",
     "沿屏幕底部溜达": "Stroll along the bottom of the screen",
     "<p style='font-size:12pt'><b>Desk Sister</b> {0}</p><p>非官方粉丝作品，与 Anthropic 无任何关联。</p><p>代码：MIT 许可。角色立绘与图标：参考 B 站 UP 主 <b>ZipZipPipe</b> 的原设（BV1tE9XBbErS）用 AI 生成，经原作者同意<b>仅限非商业使用</b>。人设参考 leto0309/ai-girl-desktop-pet-prompts 中的 Claude 角色卡。</p><p>隐私：她只看当前前台窗口，截图不写日志；黑名单里的窗口不截图；Ctrl+Alt+P 随时暂停。截图只在内存中处理——唯一的例外是 Codex 模式：Codex CLI 只能从文件读图，截图会短暂写入你自己的临时文件夹，调用结束后删除（文件被占用时稍后重试）。</p><p><a style='color:#B5531F' href='https://github.com/leto0309/desk-sister'>github.com/leto0309/desk-sister</a></p>":
         "<p style='font-size:12pt'><b>Desk Sister</b> {0}</p><p>An unofficial fan work, not affiliated with Anthropic "

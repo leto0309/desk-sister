@@ -231,6 +231,7 @@ class PetController(QObject):
         self.window.set_blink(config.blink)
         self.window.set_talk_mouth(config.talk_mouth)
         self.window.set_head_motion(config.head_motion)
+        self.window.set_body_motion(config.body_motion)
         self.voice = voice.Player(app_data_dir() / "voice")
         self.window.spoke.connect(self._speak)
         self.window.hushed.connect(self.voice.stop)
@@ -763,6 +764,7 @@ class PetController(QObject):
         if quiet == self.quiet:
             return
         self.quiet = quiet
+        self.window.calm = quiet
         log.info("quiet mode %s", "on (full screen)" if quiet else "off")
 
     def _flush_deferred(self) -> None:
@@ -1230,6 +1232,11 @@ class PetController(QObject):
         self.voice.say(tr("主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。"), "happy",
                        self.config.voice_style, self.config.voice_volume, 35)
 
+    def set_body_motion(self, enabled: bool) -> None:
+        self.config.body_motion = bool(enabled)
+        self.window.set_body_motion(self.config.body_motion)
+        self._save()
+
     def set_head_motion(self, enabled: bool) -> None:
         self.config.head_motion = bool(enabled)
         self.window.set_head_motion(self.config.head_motion)
@@ -1595,6 +1602,7 @@ class PetController(QObject):
         self._save()
 
     def _on_landed(self) -> None:
+        self.window.start_body("land")  # first: a reaction that follows waits for the squash to settle
         if not self.window.full_text:
             self._react("land", 0.5)
 

@@ -72,6 +72,7 @@ class Config:
     voice: bool = False  # Animalese babble as she talks (off unless chosen)
     voice_style: str = "squeaky"
     voice_volume: int = 60  # 0-100
+    body_motion: bool = True  # a swing when carried, a landing squash, a little mood reaction (can be switched off)
     head_motion: bool = False  # off unless chosen: a nod as she starts to talk, a tilt now and then, a duck when patted
     birthday: str = ""  # "MM-DD" for a birthday wish, "" for none
     check_updates: bool = True  # look for a newer release on GitHub, at most once a day
@@ -129,6 +130,8 @@ class Config:
             self.greeted_on = ""
         if not isinstance(self.head_motion, bool):
             self.head_motion = False
+        if not isinstance(self.body_motion, bool):
+            self.body_motion = True
         if not isinstance(self.voice, bool):
             self.voice = False
         if not isinstance(self.voice_style, str) or self.voice_style not in VOICE_STYLES:

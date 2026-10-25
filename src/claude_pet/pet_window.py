@@ -7,11 +7,11 @@ import random
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import QWidget
 
-from . import head
+from . import body, head
 from .persona import MOODS
 
 log = logging.getLogger("claude_pet")
@@ -199,6 +199,15 @@ class PetWindow(QWidget):
         self._head: tuple[str, float, int] | None = None  # (movement, started, direction) while one plays
         self._next_tilt = self.clock() + self._rng.uniform(*head.TILT_EVERY)
         self._head_mask: QImage | None = None
+        self.body_motion = False  # off until the settings switch it on
+        self.calm = False  # full-screen quiet (set by the controller): no body movements
+        self._body: tuple[str, float, int] | None = None  # (movement, started, direction) while one plays
+        self._body_next: str | None = None  # a mood reaction waiting for a landing to finish
+        self.swing = 0.0  # degrees she hangs at while carried (and while it settles after)
+        self._swing_speed = 0.0
+        self._swing_x: int | None = None
+        self._swing_at = 0.0
+        self._hand = QPointF(0, 0)  # where she is held, in window coordinates
         self._blink_at = self.clock() + self._rng.uniform(*BLINK_EVERY)
         sprite_width = max(p.width() for p in self.sprites.values())
         self.bubble_area = 150
@@ -222,6 +231,7 @@ class PetWindow(QWidget):
         self.parts = load_parts(self.sprite_folder, height)
         self._mirrored = {}
         self._head, self._head_mask = None, None  # a new size: a new mask, no movement
+        self._body, self._body_next = None, None
         sprite_width = max(p.width() for p in self.sprites.values())
         self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + height + 8)
         place = QPoint(round(centre - self.width() / 2), old.y() + old.height() - self.height())
@@ -234,6 +244,7 @@ class PetWindow(QWidget):
         self.walking = direction
         if direction:
             self._head = None  # walking hops already: a head movement under way ends here
+            self._body, self._body_next = None, None
         self.update()
 
     @property
@@ -280,7 +291,10 @@ class PetWindow(QWidget):
         return f"{self.mood}_{name}"
 
     def set_mood(self, mood: str) -> None:
+        before = self.mood
         self.mood = mood if mood in self.sprites else "talk"
+        if self.mood != before:
+            self._react_body()
         self.update()
 
     def say(self, mood: str, text: str, hold_ms: int | None = None) -> None:
@@ -297,6 +311,7 @@ class PetWindow(QWidget):
         self._hide_bubble.start(hold_ms if hold_ms is not None else round(HOLD_MS + HOLD_PER_CHAR_MS * units))
         self.spoke.emit(mood, text, self._typer.interval())
         self.start_head("nod")  # a little nod as she starts to talk
+        self._react_body()
 
     def clear_bubble(self) -> None:
         self._typer.stop()
@@ -372,6 +387,97 @@ class PetWindow(QWidget):
         if self._head is None and not self.full_text and self.mood in ("idle", "talk", "happy", "think"):
             self.start_head("tilt")  # now and then, while she has nothing to say
 
+    # ---- body ----------------------------------------------------------
+    def set_body_motion(self, enabled: bool) -> None:
+        self.body_motion = bool(enabled)
+        if not self.body_motion:
+            self._body, self._body_next = None, None
+            self.swing, self._swing_speed = 0.0, 0.0
+        self.update()
+
+    def start_body(self, kind: str) -> None:
+        """A landing or a mood reaction, unless she is walking, asleep, held or in full-screen quiet."""
+        if self._body_still():
+            return
+        self._body = (kind, self.clock(), self._rng.choice((-1, 1)))
+        self._body_next = None
+        self.update()
+
+    def _react_body(self) -> None:
+        """Her mood shows in her body once; after a landing that is still settling."""
+        kind = body.REACTIONS.get(self.mood)
+        if kind is None or self._body_still():
+            return
+        if self._body is not None and self._body[0] == "land" and self.body_pose() is not None:
+            self._body_next = kind
+        else:
+            self.start_body(kind)
+
+    def _body_still(self) -> bool:
+        return (not self.body_motion or self.walking or self.mood == "sleep" or self._press_pos is not None
+                or self.calm)
+
+    def body_pose(self) -> tuple[float, float, float, float, float] | None:
+        if self._body is not None and self._body_still():
+            self._body, self._body_next = None, None
+        if self._body is None:
+            return None
+        kind, started, sign = self._body
+        sprite = self.sprites[self.mood]
+        return body.pose(kind, self.clock() - started, sprite.width(), sprite.height(), sign)
+
+    def _move_body(self, now: float) -> None:
+        if self._body is not None and self.body_pose() is None:
+            self._body = None
+            if self._body_next:
+                self.start_body(self._body_next)
+        dt, self._swing_at = min(max(now - self._swing_at, 0.0), 0.1), now
+        if not self.body_motion or self.walking or self.calm or self.mood == "sleep":
+            self.swing, self._swing_speed, self._swing_x = 0.0, 0.0, None
+            return
+        if self._dragging:
+            x = self.x()
+            vx = 0.0 if self._swing_x is None or dt <= 0 else (x - self._swing_x) / dt
+            self._swing_x = x
+            self.swing, self._swing_speed = body.swing_step(self.swing, self._swing_speed, vx, dt, self._swing_limit())
+        elif self.swing or self._swing_speed:
+            self._swing_x = None
+            self.swing, self._swing_speed = body.swing_step(self.swing, self._swing_speed, 0.0, dt, self._swing_limit())
+            if body.settled(self.swing, self._swing_speed):
+                self.swing, self._swing_speed = 0.0, 0.0
+
+    def _sprite_rect(self) -> QRectF:
+        sprite = self.sprites[self.mood]
+        return QRectF((self.width() - sprite.width()) // 2, self.height() - sprite.height() - 4,
+                      sprite.width(), sprite.height())
+
+    def _clamped_hand(self, at: QPointF) -> QPointF:
+        """Held by the bubble or the empty space beside her, she still hangs from a point of her own."""
+        rect = self._sprite_rect()
+        return QPointF(min(max(at.x(), rect.left()), rect.right()), min(max(at.y(), rect.top()), rect.bottom()))
+
+    def _swing_limit(self) -> float:
+        sprite = self.sprites[self.mood]
+        return body.swing_limit(self.width(), sprite.width(), sprite.height())
+
+    def body_transform(self) -> QTransform | None:
+        """How her whole frame is moved now: a mood or landing movement, and the swing when carried."""
+        moved = None
+        pose = self.body_pose()
+        if pose is not None:
+            dx, dy, angle, sx, sy = pose
+            sx = min(sx, max(1.0, self.width() / self.sprites[self.mood].width()))  # never wider than the window
+            moved = body.about_feet(QPointF(self.width() / 2, self.height() - 4), dx, dy, angle, sx, sy)
+        if self.swing and not (self.calm or self.mood == "sleep"):
+            hang = body.about_hand(self._hand, self.swing)
+            # Swung, one lower corner dips: lift her (and keep her sides in) so nothing leaves the window.
+            box = hang.mapRect(self._sprite_rect())
+            up = min(0.0, self.height() - 1 - box.bottom())
+            side = max(0.0, -box.left()) + min(0.0, self.width() - box.right())
+            hang = hang * QTransform.fromTranslate(side, up)
+            moved = hang if moved is None else moved * hang
+        return moved
+
     def set_talk_mouth(self, enabled: bool) -> None:
         self.talk_mouth = bool(enabled)
         if not self.talk_mouth:
@@ -412,6 +518,7 @@ class PetWindow(QWidget):
         self._phase = (self._phase + 0.12) % (2 * math.pi)
         self._blink(self.clock())
         self._move_head(self.clock())
+        self._move_body(self.clock())
         self.update()
 
     # ---- painting ----------------------------------------------------
@@ -446,12 +553,18 @@ class PetWindow(QWidget):
             bob = 0 if self.mood == "sleep" else round(2 * math.sin(self._phase))
             y = self.height() - sprite.height() - 4 + bob
             moved = self.head_pose()
+            whole = self.body_transform()
+            if whole is not None:
+                p.save()
+                p.setTransform(whole, True)
             if moved is None:
                 for layer in layers:
                     p.drawPixmap(x, y, layer)
             else:  # the head turns on its own: put the frame together off screen first
                 frame = head.compose(layers, self._mask(), head.transform(sprite.width(), sprite.height(), *moved))
                 p.drawImage(x, y, frame)
+            if whole is not None:
+                p.restore()
         if self.full_text:
             self._paint_bubble(p, self.full_text, self.visible_text)
         if self.status:
@@ -506,6 +619,7 @@ class PetWindow(QWidget):
             self._press_pos = event.globalPosition().toPoint()
             self._origin = self.pos()
             self._dragging = False
+            self._hand = self._clamped_hand(event.position())
         elif event.button() == Qt.MouseButton.RightButton:
             self.context_menu_requested.emit(event.globalPosition().toPoint())
 
@@ -561,13 +675,14 @@ class PetWindow(QWidget):
             if self.mood == "panic" and not self.full_text:
                 self.set_mood(self._lift_mood)  # put down again
             self._lift_mood = None
-        if self._dragging:
+        dragged = self._dragging
+        self._press_pos = None  # let go before anyone hears of it: her reaction to a poke is not "held"
+        self._dragging = False
+        if dragged:
             self.carried_for = self.clock() - self._carried_since  # read by whoever handles the drop
             self.moved.emit(self.x(), self.y())
         else:
             self.poked.emit()
-        self._press_pos = None
-        self._dragging = False
 
     def wheelEvent(self, event) -> None:
         if not event.modifiers() & Qt.KeyboardModifier.ControlModifier:
