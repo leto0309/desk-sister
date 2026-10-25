@@ -218,6 +218,32 @@ FESTIVAL_LINES = {
 }
 BIRTHDAY_LINE = ("happy", "Happy birthday! 🎂 Today is all about you. I'll say as many nice things as you like~")
 
+TIMER_TALK = {
+    "start": [
+        ("happy", "Right, {0} minutes of focus, starting now! I'll keep you company, quietly~"),
+        ("talk", "Timer's running~ I'll call you in {0} minutes."),
+    ],
+    "focus_done": [
+        ("happy", "{0} minutes of focus done! Stand up, stretch, have some water; I'll call you again in {1} minutes~"),
+        ("happy", "Pomodoro number {2} done! Roll your shoulders, look at something far away; back to it in {1} minutes~"),
+    ],
+    "break_done": [
+        ("talk", "Break's over~ Let's focus for {0} more minutes!"),
+        ("happy", "Back? Next pomodoro, {0} minutes. You've got this!"),
+    ],
+    "stopped": [
+        ("talk", "Pomodoro stopped. {2} done this time~"),
+    ],
+    "reminder": [
+        ("happy", "Ding~ Reminder time: {0}"),
+        ("talk", "You asked me to remind you: {0}"),
+    ],
+    "missed": [
+        ("talk", "There was a reminder for {1} I couldn't say in time: {0}"),
+    ],
+}
+
+
 SLEEP_TALK = [
     ("sleep", "(talking in her sleep) Tokens... so many tokens... I can't eat them all... Zzz"),
     ("sleep", "(talking in her sleep) Indentation... all aligned... so neat... Zzz"),

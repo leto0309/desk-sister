@@ -66,7 +66,7 @@ def shape(value):
 
 @pytest.mark.parametrize("name", ["FALLBACK", "WAKE_LINES", "SLEEP_LINES", "SELF_TALK", "TIME_TALK", "NIGHT_TALK",
                                   "INTERACTION_TALK", "GREETINGS", "SLEEP_TALK", "BIRTHDAY_LINE", "SUMMARY_TAILS",
-                                  "WEEKDAY_GREETINGS"])
+                                  "WEEKDAY_GREETINGS", "TIMER_TALK"])
 def test_english_lines_mirror_the_chinese(name):
     assert shape(getattr(persona_en, name)) == shape(getattr(persona, name))
 

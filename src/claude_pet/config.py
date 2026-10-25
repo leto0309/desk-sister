@@ -12,6 +12,7 @@ from .bedtime import NIGHT_STARTS
 from .days import clean_birthday
 from .i18n import CHOICES as LANGUAGES
 from .persona import SUMMARY_HOURS
+from .timers import BREAK_RANGE, FOCUS_RANGE
 from .voice import STYLES as VOICE_STYLES
 from .updates import parse_version
 from .providers import BACKENDS, clean_custom_models  # every way she can think
@@ -72,6 +73,8 @@ class Config:
     voice: bool = False  # Animalese babble as she talks (off unless chosen)
     voice_style: str = "squeaky"
     voice_volume: int = 60  # 0-100
+    focus_min: int = 25  # the focus timer: minutes of focus, then of a break
+    break_min: int = 5
     body_motion: bool = True  # a swing when carried, a landing squash, a little mood reaction (can be switched off)
     head_motion: bool = False  # off unless chosen: a nod as she starts to talk, a tilt now and then, a duck when patted
     birthday: str = ""  # "MM-DD" for a birthday wish, "" for none
@@ -132,6 +135,11 @@ class Config:
             self.head_motion = False
         if not isinstance(self.body_motion, bool):
             self.body_motion = True
+        for name, default, (low, high) in (("focus_min", 25, FOCUS_RANGE), ("break_min", 5, BREAK_RANGE)):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                value = default
+            setattr(self, name, min(max(value, low), high))
         if not isinstance(self.voice, bool):
             self.voice = False
         if not isinstance(self.voice_style, str) or self.voice_style not in VOICE_STYLES:

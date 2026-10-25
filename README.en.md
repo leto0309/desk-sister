@@ -136,6 +136,12 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
 - "Daily summary" (Companion page, after 21:00 by default): once a day, the first time she may talk after that hour,
   she sums up your day from the companion memory, such as "coding about 3.2 hours, watching videos about 40 minutes".
   Change the hour or switch it off; without companion memory there is no summary either.
+- "Focus timer and reminders" (right-click menu): "Start focusing" gives 25 minutes of focus, then she tells you to get
+  up and take a 5-minute break, then calls you back for the next round; pause, resume or stop it there, and change the
+  minutes on the "Companion" page. "Add a reminder…" sets a line of your own (drink some water, the meeting) for "in so
+  many minutes" or "at" a time of day; there can be several, cancelled from the same menu, and one missed while the
+  pet was closed is said at the next start. While a timer runs, the time left shows at her feet. All local, no model;
+  in full-screen quiet she waits until you leave full screen, and a reminder wakes her if she dozed off.
 - "Claude Code link" (off by default): asks first, then adds a few hooks to ~/.claude/settings.json (an existing file is
   first backed up as `settings.json.claude-pet-backup-<timestamp>`; the last 5 are kept). From then on she shows what
   Claude Code is doing while it thinks, edits files or runs commands, and tells you when it needs your approval, waits
@@ -162,7 +168,9 @@ The config and the log are in `%APPDATA%\ClaudePet\` (config.json, pet.log).
 
 ## Development
 
-PowerShell 7: `./scripts/verify.ps1` runs the tests (pytest, compileall, ruff, `app.py --self-test`),
+PowerShell 7: `./scripts/verify.ps1` runs the tests (pytest, compileall, ruff, `app.py --self-test`);
+before a release, `python devtools/run_tests_at_times.py` runs them at different hours and holidays and `--seeds 20` with
+20 different random draws, to find tests that fail only at some times or by chance;
 `./scripts/build.ps1` builds, `./scripts/package.ps1` makes the single-file `dist/desk-sister.exe` with PyInstaller,
 and `./devtools/build_installer.ps1` makes the one-folder build and wraps it with Inno Setup 6 into
 `dist/DeskSister-Setup.exe` (the script is in installer/; the Simplified Chinese wizard text is the translation from the

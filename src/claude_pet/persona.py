@@ -278,6 +278,39 @@ def interaction_line(kind: str, rng: random.Random) -> Reply:
     return Reply(mood, text)
 
 
+# The focus timer and reminders. Fields: {0} focus minutes, {1} break minutes, {2} periods done; {0} a reminder's
+# text and {1} the time it was for. Never about sleep or rest (the night reminder has its own rules).
+TIMER_TALK = {
+    "start": [
+        ("happy", "好，专注 {0} 分钟，开始！我在旁边安安静静陪着～"),
+        ("talk", "计时开始～{0} 分钟后我叫主人。"),
+    ],
+    "focus_done": [
+        ("happy", "{0} 分钟专注完成！起来伸个懒腰、喝口水吧，{1} 分钟后我再叫你～"),
+        ("happy", "第 {2} 个番茄完成啦！活动活动肩膀，看看远处，{1} 分钟后继续～"),
+    ],
+    "break_done": [
+        ("talk", "放松时间到～我们继续专注 {0} 分钟吧！"),
+        ("happy", "回来啦？下一个番茄开始，{0} 分钟，加油！"),
+    ],
+    "stopped": [
+        ("talk", "番茄钟结束啦，这次完成了 {2} 个～"),
+    ],
+    "reminder": [
+        ("happy", "叮～提醒时间到：{0}"),
+        ("talk", "主人，说好的提醒：{0}"),
+    ],
+    "missed": [
+        ("talk", "刚才 {1} 有个提醒，我没来得及说：{0}"),
+    ],
+}
+
+
+def timer_line(kind: str, rng: random.Random, *fields) -> Reply:
+    mood, text = rng.choice(_table("TIMER_TALK")[kind])
+    return Reply(mood, text.format(*fields))
+
+
 SLEEP_TALK = [
     ("sleep", "（梦话）Token……好多 Token……吃不完了……Zzz"),
     ("sleep", "（梦话）缩进……对齐了……好整齐……Zzz"),

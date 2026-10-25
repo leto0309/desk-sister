@@ -19,7 +19,7 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
 from .i18n import N_, tr
-from . import __version__, agent_link, i18n, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers, updates, voice
+from . import __version__, agent_link, i18n, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers, reminder_dialog, timers, updates, voice
 from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
@@ -41,6 +41,7 @@ UPDATE_RESULTS = {  # what the about page says after a swap, by the restart help
 UPDATE_NOTE_RETRY_SEC = 2.0  # the restart helper's note, held open at start: tried again this often
 UPDATE_FIRST_DELAY_SEC = 30.0  # the first update check, a little after start
 PAT_MEMORY_SEC = 60.0  # pats this close together count as one petting session
+TIMER_HOLD_MS = 20000  # a due timer or reminder stays on screen this long
 DROP_MEMORY_SEC = 20.0  # drops this close together are being dragged about
 DROPS_TO_COMPLAIN = 3
 LONG_CARRY_SEC = 4.0  # carried at least this long: dizzy
@@ -235,6 +236,10 @@ class PetController(QObject):
         self.voice = voice.Player(app_data_dir() / "voice")
         self.window.spoke.connect(self._speak)
         self.window.hushed.connect(self.voice.stop)
+        self.pomodoro = timers.Pomodoro()
+        self.reminders = timers.Reminders(app_data_dir() / "reminders.json")
+        self._focus_event: str | None = None  # the timer's latest news, waiting for her to be free to say it
+        self._ask_reminder = reminder_dialog.ask
         self.recent: deque[str] = deque(maxlen=6)
         self.busy = False
         self.asleep = False
@@ -575,6 +580,7 @@ class PetController(QObject):
                 self._greet_if_new_day()  # one that had to wait (full screen, quitting) comes now
             else:
                 self._greeting_due = ""  # owed for a day that is over: wait for the next meeting
+        self._update_timers()
         self._summarize_day_if_due()
         self._retry_update_note()
         self._check_updates_if_due()
@@ -989,12 +995,154 @@ class PetController(QObject):
     def _reply_tuple(reply: persona.Reply) -> tuple[str, str]:
         return reply.mood, reply.text
 
+    # ---- focus timer and reminders ---------------------------------------
+    def _update_timers(self) -> None:
+        """Each second. The timer moves on to its next period on time; what is due is said once her bubble is free,
+        one line at a time. In full-screen quiet it waits; a due line wakes her, so it is there when 主人 looks back.
+        A reminder stays saved until it is said, and whether it was missed is judged when it is said."""
+        now = self._now()
+        event = self.pomodoro.due(now, self.config.focus_min * 60, self.config.break_min * 60)
+        if event:
+            log.info("focus timer: %s", event)
+            self._focus_event = event  # a newer one replaces one never said
+        if self.quiet or self.quit_pending or self.window.full_text:
+            return
+        reply = self._focus_reply(now)
+        self._focus_event = None
+        while reply is None:
+            reminder = self.reminders.due_now(now)
+            if reminder is None:
+                return
+            self.reminders.finish(reminder.id)
+            late = now - reminder.due
+            if late > timers.FORGET_AFTER_SEC:
+                log.info("dropped a reminder missed by %.0f hours", late / 3600)
+                continue
+            reply = persona.timer_line("missed" if late > timers.MISSED_AFTER_SEC else "reminder", self._rng,
+                                       reminder.text, timers.clock_text(reminder.due))
+        if self.asleep:
+            self._wake(announce=False)
+        self.window.say(reply.mood, reply.text, hold_ms=TIMER_HOLD_MS)
+
+    def _focus_reply(self, now: float) -> persona.Reply | None:
+        """Worded when said, from the time really left: a line held back a while still tells the truth."""
+        event = self._focus_event
+        if event is None or not self.pomodoro.running or self.pomodoro.paused:
+            return None  # (paused: her pause line already told the time left; "in N minutes" would not come true)
+        left = max(1, -int(-self.pomodoro.left(now) // 60))  # whole minutes, rounded up
+        if event == "focus_done":
+            return persona.timer_line(event, self._rng, self.config.focus_min, left, self.pomodoro.done)
+        return persona.timer_line(event, self._rng, left, self.config.break_min, self.pomodoro.done)
+
+    def _timer_status(self) -> str:
+        now = self._now()
+        if self.pomodoro.running:
+            left = timers.left_text(self.pomodoro.left(now))
+            text = tr("专注 {0}", left) if self.pomodoro.phase == "focus" else tr("放松 {0}", left)
+            return text + (tr("（暂停）") if self.pomodoro.paused else "")
+        upcoming = self.reminders.next()
+        if upcoming is None:
+            return ""
+        count = len(self.reminders.items)
+        when = timers.clock_text(upcoming.due)
+        return tr("提醒 {0}", when) if count == 1 else tr("提醒 {0}（共 {1} 个）", when, count)
+
+    def _fill_timer_menu(self) -> None:
+        menu = self.timer_menu
+        menu.clear()
+        if not self.pomodoro.running:
+            menu.addAction(tr("开始专注（{0} 分钟）", self.config.focus_min), self.start_focus)
+        else:
+            menu.addAction(tr("继续计时") if self.pomodoro.paused else tr("暂停计时"), self.toggle_focus_pause)
+            menu.addAction(tr("结束番茄钟"), self.stop_focus)
+        menu.addSeparator()
+        menu.addAction(tr("添加提醒…"), self.add_reminder)
+        for reminder in self.reminders.items:
+            text = reminder.text if len(reminder.text) <= 18 else reminder.text[:17] + "…"
+            menu.addAction(tr("取消提醒：{0} {1}", timers.clock_text(reminder.due), text),
+                           lambda _checked=False, ident=reminder.id: self.cancel_reminder(ident))
+
+    def start_focus(self) -> None:
+        self.pomodoro.start(self._now(), self.config.focus_min * 60)
+        self._focus_event = None
+        self.window.say(*self._reply_tuple(persona.timer_line("start", self._rng, self.config.focus_min)))
+        self._refresh_status()
+
+    def toggle_focus_pause(self) -> None:
+        if not self.pomodoro.running:
+            return
+        now = self._now()
+        if self.pomodoro.paused:
+            self.pomodoro.resume(now)
+            self.window.say("happy", tr("继续计时～还剩 {0}。", timers.left_text(self.pomodoro.left(now))))
+        else:
+            self.pomodoro.pause(now)
+            self.window.say("talk", tr("好，先暂停，还剩 {0}。", timers.left_text(self.pomodoro.left(now))))
+        self._refresh_status()
+
+    def stop_focus(self) -> None:
+        if not self.pomodoro.running:
+            return
+        done = self.pomodoro.stop()
+        self._focus_event = None  # its unsaid "back in 5 minutes" would not come true now
+        self.window.say(*self._reply_tuple(persona.timer_line("stopped", self._rng, self.config.focus_min,
+                                                              self.config.break_min, done)))
+        self._refresh_status()
+
+    def add_reminder(self) -> None:
+        chosen = self._ask_reminder(self._now)
+        if chosen is None:
+            return
+        due, text = chosen
+        try:
+            reminder = self.reminders.add(due, text)
+        except OSError as exc:
+            log.warning("could not save a reminder: %s", exc)
+            self.window.say("sad", tr("提醒没存上（{0}），这次没有设好……", exc.strerror or type(exc).__name__))
+            return
+        if reminder is None:
+            self.window.say("think", tr("提醒已经有 {0} 个了，先取消几个吧～", timers.MAX_REMINDERS))
+            return
+        when = timers.clock_text(due)
+        today = datetime.date.fromtimestamp(self._now())
+        day = datetime.date.fromtimestamp(due)
+        if day == today:
+            self.window.say("happy", tr("好，{0} 提醒主人：{1}", when, reminder.text))
+        elif day == today + datetime.timedelta(days=1):
+            self.window.say("happy", tr("好，明天 {0} 提醒主人：{1}", when, reminder.text))
+        else:
+            self.window.say("happy", tr("好，{0} 月 {1} 日 {2} 提醒主人：{3}", day.month, day.day, when, reminder.text))
+        self._refresh_status()
+
+    def cancel_reminder(self, ident: str) -> None:
+        try:
+            reminder = self.reminders.cancel(ident)
+        except OSError as exc:
+            log.warning("could not save reminders: %s", exc)
+            self.window.say("sad", tr("没能取消（{0}），提醒还在……", exc.strerror or type(exc).__name__))
+            return
+        if reminder is not None:
+            self.window.say("talk", tr("好，{0} 的提醒取消了。", timers.clock_text(reminder.due)))
+        self._refresh_status()
+
+    def set_focus_minutes(self, minutes: int) -> None:
+        """Takes effect from the next focus period."""
+        self.config.focus_min = min(max(int(minutes), timers.FOCUS_RANGE[0]), timers.FOCUS_RANGE[1])
+        self._save()
+
+    def set_break_minutes(self, minutes: int) -> None:
+        self.config.break_min = min(max(int(minutes), timers.BREAK_RANGE[0]), timers.BREAK_RANGE[1])
+        self._save()
+
     # ---- menus -------------------------------------------------------
     def _build_menu(self) -> QMenu:
         """Only what is wanted at hand; everything else lives in the settings window."""
         menu = QMenu()
         menu.addAction(tr("戳她一下（立即评论）"), self.poke)
         menu.addAction(tr("和她说话…"), self.chat)
+        self.timer_menu = menu.addMenu(tr("番茄钟与提醒"))
+        self.timer_menu.aboutToShow.connect(self._fill_timer_menu)
+        self._fill_timer_menu()
         menu.addAction(tr("设置…"), self.open_settings)
         self.pause_action = QAction(tr("暂停观察 (Ctrl+Alt+P)"), menu, checkable=True, checked=self.config.paused)
         self.pause_action.triggered.connect(lambda _checked: self.toggle_pause())
@@ -1838,6 +1986,9 @@ class PetController(QObject):
             self.window.set_status(tr("睡着了…动一下鼠标叫醒她"))
         else:
             self.window.set_status("")
+        timer = self._timer_status()
+        if timer:
+            self.window.set_status(f"{timer}｜{self.window.status}" if self.window.status else timer)
 
     def open_log_folder(self) -> None:
         folder = app_data_dir()

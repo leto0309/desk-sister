@@ -312,11 +312,13 @@ def test_invalid_text_put_back_by_qt_changes_nothing(pet, typed):
 def test_the_menu_keeps_only_what_is_wanted_at_hand(pet):
     ctrl, _window, _vault, _saved = pet
     labels = [a.text() for a in ctrl.tray.contextMenu().actions() if not a.isSeparator()]
-    assert labels[:4] == ["戳她一下（立即评论）", "和她说话…", "设置…", "暂停观察 (Ctrl+Alt+P)"] and labels[-1] == "退出"
+    assert labels[:5] == ["戳她一下（立即评论）", "和她说话…", "番茄钟与提醒", "设置…", "暂停观察 (Ctrl+Alt+P)"]
+    assert labels[-1] == "退出"
     for gone in ("观察范围", "Claude Code 联动", "陪伴记忆", "自言自语", "沿屏幕底部溜达", "评论间隔", "调用方式", "模型",
                  "开机自启", "打开日志文件夹"):
         assert not any(label.startswith(gone) for label in labels), gone
-    assert all(not a.menu() for a in ctrl.tray.contextMenu().actions())  # no submenus left
+    submenus = [a.text() for a in ctrl.tray.contextMenu().actions() if a.menu()]
+    assert submenus == ["番茄钟与提醒"]  # the only one: the timer's actions change with its state
 
 
 

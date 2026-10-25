@@ -26,6 +26,7 @@ from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .config import BLINK_CHOICES, INTERVAL_CHOICES, MODEL_CHOICES
 from .persona import SUMMARY_HOURS
+from .timers import BREAK_RANGE, FOCUS_RANGE
 from .voice import STYLE_NAMES as VOICE_STYLE_NAMES
 from .voice import STYLES as VOICE_STYLES
 from .providers import CLAUDE_CLI, CODEX_CLI, PROVIDERS, model_label
@@ -530,8 +531,25 @@ class SettingsWindow(QDialog):
         summary.addWidget(self.summary_combo)
         summary.addWidget(_hint(tr("（需要陪伴记忆：说说今天各类活动花了多久，一天一次）")))
         summary.addStretch(1)
+        focus = QHBoxLayout()
+        self.focus_spin = QSpinBox()
+        self.focus_spin.setRange(*FOCUS_RANGE)
+        self.break_spin = QSpinBox()
+        self.break_spin.setRange(*BREAK_RANGE)
+        for spin in (self.focus_spin, self.break_spin):
+            spin.setSuffix(tr(" 分钟"))
+            spin.setKeyboardTracking(False)
+        self.focus_spin.valueChanged.connect(lambda v: self._apply(lambda: self.ctrl.set_focus_minutes(v)))
+        self.break_spin.valueChanged.connect(lambda v: self._apply(lambda: self.ctrl.set_break_minutes(v)))
+        focus.addWidget(QLabel(tr("番茄钟：专注")))
+        focus.addWidget(self.focus_spin)
+        focus.addWidget(QLabel(tr("，放松")))
+        focus.addWidget(self.break_spin)
+        focus.addWidget(_hint(tr("（右键菜单「番茄钟与提醒」开始；也可以在那里添加提醒）")))
+        focus.addStretch(1)
         layout.addWidget(self.self_talk_box)
         layout.addLayout(talk)
+        layout.addLayout(focus)
         layout.addLayout(memory_row)
         layout.addLayout(summary)
         layout.addWidget(self.link_box)
@@ -738,6 +756,8 @@ class SettingsWindow(QDialog):
             for spin in (self.talk_min, self.talk_max):
                 spin.setEnabled(cfg.self_talk)
             self.memory_box.setChecked(cfg.companion_memory)
+            self._show_value(self.focus_spin, cfg.focus_min)
+            self._show_value(self.break_spin, cfg.break_min)
             self.summary_combo.setCurrentIndex(max(0, self.summary_combo.findData(cfg.daily_summary_hour)))
             self.summary_combo.setEnabled(cfg.companion_memory)
             self.link_box.setChecked(cfg.claude_link)
