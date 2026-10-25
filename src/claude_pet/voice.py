@@ -6,9 +6,11 @@ time; her mood moves the pitch and the spread.
 """
 from __future__ import annotations
 
+import array
 import io
 import logging
 import math
+import random
 import sys
 import threading
 import time
@@ -129,6 +131,82 @@ def _wav(pcm: bytes, skip_ms: float = 0) -> bytes:
     return buffer.getvalue()
 
 
+# ---- little sounds for what happens to her (same switch, style and volume as her voice) ----------------------
+EFFECTS = ("pat", "lift", "land", "snore")
+EFFECT_SLACK_MS = 40  # an effect made later than this starts part way in, like a line
+EFFECT_GAIN = 0.45
+EFFECT_LEVEL = {"pat": 0.85, "lift": 0.8, "land": 0.6, "snore": 1.0}  # each just under her voice at the same volume
+
+
+def _glide(f_start: float, f_end: float, seconds: float, harmonics=((1, 1.0), (2, 0.3), (3, 0.1)),
+           attack: float = 0.006, fall: float = 1.5) -> list[float]:
+    """A tone sliding from one pitch to another: a quick start, a soft end."""
+    count = max(1, int(RATE * seconds))
+    attack_n = max(1, int(RATE * attack))
+    total = sum(g for _, g in harmonics)
+    out, phase = [], 0.0
+    for n in range(count):
+        t = n / count
+        phase += 2 * math.pi * (f_start + (f_end - f_start) * t) / RATE
+        value = sum(g * math.sin(k * phase) for k, g in harmonics) / total
+        out.append(value * min(1.0, n / attack_n) * (1.0 - t) ** fall)
+    return out
+
+
+def _silence(seconds: float) -> list[float]:
+    return [0.0] * int(RATE * seconds)
+
+
+def _overlay(base: list[float], extra: list[float], at: int = 0) -> list[float]:
+    out = base + [0.0] * max(0, at + len(extra) - len(base))
+    for i, v in enumerate(extra):
+        out[at + i] += v
+    return out
+
+
+def _effect_shape(name: str, base: float) -> list[float]:
+    if name == "pat":  # two happy little chirps
+        return _glide(base * 1.3, base * 1.6, 0.09) + _silence(0.04) + _glide(base * 1.4, base * 1.9, 0.12)
+    if name == "lift":  # whoop! up she goes
+        return _glide(base * 1.0, base * 2.2, 0.17, attack=0.004, fall=0.8)
+    if name == "land":  # a soft bump and a tiny tick
+        bump = _glide(150, 70, 0.14, harmonics=((1, 1.0), (2, 0.15)), attack=0.002, fall=2.0)
+        return _overlay(bump, [0.35 * v for v in _glide(base * 2, base * 2, 0.025, attack=0.001)])
+    # snore: a slow low breath in, and a little whistle out (zzz~pyu)
+    rng = random.Random(7)
+    count = int(RATE * 0.9)
+    breath, smooth = [], 0.0
+    for n in range(count):
+        smooth += 0.08 * (rng.uniform(-1, 1) - smooth)  # soft, low noise
+        swell = math.sin(math.pi * n / count)
+        breath.append(swell * (0.6 * smooth + 0.4 * math.sin(2 * math.pi * 90 * n / RATE)))
+    return breath + _silence(0.08) + [0.6 * v for v in _glide(base * 1.8, base * 1.2, 0.28, fall=1.2)]
+
+
+@lru_cache(maxsize=64)
+def effect_pcm(name: str, style: str = "squeaky", volume: int = 60) -> bytes:
+    """One of EFFECTS as 16-bit samples, pitched by her voice style; empty when unknown or silent."""
+    if name not in EFFECTS:
+        return b""
+    base, _brightness = STYLES.get(style, STYLES["squeaky"])
+    gain = EFFECT_GAIN * EFFECT_LEVEL[name] * max(0, min(volume, 100)) / 100
+    frames = bytearray()
+    for v in _effect_shape(name, base):
+        frames += int(max(-1.0, min(1.0, v * gain)) * 32767).to_bytes(2, "little", signed=True)
+    return bytes(frames) if frames.strip(b"\x00") else b""
+
+
+def _mix(first: bytes, second: bytes) -> bytes:
+    """Two 16-bit sample runs played together (the longer one sets the length)."""
+    a = array.array("h", first)
+    b = array.array("h", second)
+    if len(a) < len(b):
+        a, b = b, a
+    for i, v in enumerate(b):
+        a[i] = max(-32768, min(32767, a[i] + v))
+    return a.tobytes()
+
+
 class Player:
     """Plays one line at a time, made on a worker thread; a newer line or stop() cuts the current one at once.
 
@@ -144,6 +222,8 @@ class Player:
         self._lock = threading.Lock()
         self._serial = 0
         self._current: Path | None = None
+        self._effect: tuple[bytes, float] | None = None  # the last little sound and when it began
+        self._line: tuple[tuple, float] | None = None  # the last line (what to render it from) and when it began
         for old in folder.glob("voice-*.wav"):  # left from last time
             _remove(old)
 
@@ -152,14 +232,47 @@ class Player:
             self._serial += 1
             serial = self._serial
             self._quiet()  # the last line stops now, not when this one is ready
-        begun = self._clock()  # the typing starts now; the sound catches up to it
-        (spawn or self._spawn)(lambda: self._make_and_play(serial, begun, text, mood, style, volume, char_ms))
+            effect = self._effect
+            begun = self._clock()  # the typing starts now; the sound catches up to it
+            self._line = ((text, mood, style, volume, char_ms), begun)
 
-    def _make_and_play(self, serial, begun, text, mood, style, volume, char_ms) -> None:
+        def make() -> bytes:
+            pcm = _pcm(text, mood, style, volume, char_ms)
+            if pcm and effect is not None:  # a little sound still ringing goes on under her words
+                sound, started = effect
+                rest = sound[int((begun - started) * RATE) * 2:] if begun >= started else b""
+                pcm = _mix(pcm, rest) if rest else pcm
+            return pcm
+
+        (spawn or self._spawn)(lambda: self._make_and_play(serial, begun, make, char_ms))
+
+    def effect(self, name: str, style: str, volume: int, spawn=None) -> None:
+        """A little sound for what just happened to her. One sound plays at a time, so they share: a line she
+        starts meanwhile carries the rest of it on, and the rest of a line she is saying goes on under it."""
+        sound = effect_pcm(name, style, volume)
+        if not sound:
+            return
+        with self._lock:
+            self._serial += 1
+            serial = self._serial
+            begun = self._clock()
+            self._effect = (sound, begun)
+            line = self._line
+
+        def make() -> bytes:
+            if line is None:
+                return sound
+            args, started = line
+            rest = _pcm(*args)[max(0, int((begun - started) * RATE)) * 2:]
+            return _mix(sound, rest) if rest else sound
+
+        (spawn or self._spawn)(lambda: self._make_and_play(serial, begun, make, EFFECT_SLACK_MS))
+
+    def _make_and_play(self, serial, begun, make, char_ms) -> None:
         if serial != self._serial:
             return
         path = self.folder / f"voice-{serial}.wav"
-        pcm = _pcm(text, mood, style, volume, char_ms)
+        pcm = make()
         written = False
         data = b""
         for _attempt in range(2):  # once more if the write itself put her a character or more behind
@@ -202,6 +315,7 @@ class Player:
     def stop(self) -> None:
         with self._lock:
             self._serial += 1
+            self._effect = self._line = None  # stopped means stopped: nothing comes back with the next sound
             self._quiet()
             done, self._current = self._current, None
         if done is not None:

@@ -154,6 +154,7 @@ class PetWindow(QWidget):
     hotkey_pressed = Signal()
     resize_wheel = Signal(int)  # Ctrl + wheel over her: whole notches, + is bigger
     patted = Signal()  # the mouse rubbed back and forth over her head (no button held)
+    lifted = Signal()  # picked up: a drag just began
 
     def __init__(self, sprite_folder: Path, sprite_height: int = 220) -> None:
         # DoesNotAcceptFocus: clicking the pet must not steal the foreground from the window it comments on.
@@ -636,6 +637,7 @@ class PetWindow(QWidget):
         if self._dragging or delta.manhattanLength() > DRAG_THRESHOLD:
             if not self._dragging:
                 self._carried_since = self.clock()
+                self.lifted.emit()
             if not self._dragging and not self.full_text:
                 self._lift_mood = self.mood
                 self.set_mood("panic")  # picked up: legs dangling

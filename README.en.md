@@ -128,6 +128,8 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   babble syllable, like the villagers in Animal Crossing, in step with the text in her bubble and pitched by her mood.
   Choose Squeaky (default) / Bright / Soft / Low, set the volume, and "Preview" a line any time. It is not real speech:
   nothing online, no model. Silent while asleep or in full-screen quiet, and it stops when the bubble goes.
+  While it is on, a pat, being picked up, a landing and dozing off (one little snore) get a little sound too, in the
+  same style and volume.
 - "Late-night rest reminder": by default at most once a night (after midnight still counts as the same night), shared
   by screen comments and self-talk; change it to every 2 hours or off on the "Companion" page, and choose when the
   night starts (20:00 to 2:00, 23:00 by default; it ends at 5 in the morning).

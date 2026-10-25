@@ -384,9 +384,10 @@ TEXT = {
     "清亮": "Bright",
     "柔和": "Soft",
     "低沉": "Low",
-    "她说话时，每个字配一声程序合成的「嘟噜」小音节，像动物森友会里的角色（不是真的语音，不联网）。睡着、全屏免打扰时不出声。":
+    "她说话时，每个字配一声程序合成的「嘟噜」小音节，像动物森友会里的角色（不是真的语音，不联网）；摸头、拎起来、落地和睡着时也有个小声音。全屏免打扰时不出声。":
         "As she talks, every character gets a little synthesised babble syllable, like the villagers in Animal Crossing "
-        "(not real speech, nothing online). Silent while asleep or in full-screen quiet.",
+        "(not real speech, nothing online); a pat, being picked up, a landing and dozing off get a little sound too. "
+        "Silent in full-screen quiet.",
     # ---- activities (companion memory) ---------------------------------------------------------------
     "写代码": "coding",
     "和 AI 一起干活": "working with AI",

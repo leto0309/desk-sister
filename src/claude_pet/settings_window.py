@@ -625,7 +625,7 @@ class SettingsWindow(QDialog):
         sound.addWidget(preview)
         sound.addStretch(1)
         layout.addLayout(sound)
-        layout.addWidget(_hint(tr("她说话时，每个字配一声程序合成的「嘟噜」小音节，像动物森友会里的角色（不是真的语音，不联网）。睡着、全屏免打扰时不出声。")))
+        layout.addWidget(_hint(tr("她说话时，每个字配一声程序合成的「嘟噜」小音节，像动物森友会里的角色（不是真的语音，不联网）；摸头、拎起来、落地和睡着时也有个小声音。全屏免打扰时不出声。")))
         self.walking_box = QCheckBox(tr("沿屏幕底部溜达"))
         self.walking_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_walking(on)))
         layout.addWidget(self.walking_box)

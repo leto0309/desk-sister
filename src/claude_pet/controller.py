@@ -236,6 +236,7 @@ class PetController(QObject):
         self.voice = voice.Player(app_data_dir() / "voice")
         self.window.spoke.connect(self._speak)
         self.window.hushed.connect(self.voice.stop)
+        self.window.lifted.connect(lambda: self._effect("lift"))
         self.pomodoro = timers.Pomodoro()
         self.reminders = timers.Reminders(app_data_dir() / "reminders.json")
         self._focus_event: str | None = None  # the timer's latest news, waiting for her to be free to say it
@@ -800,6 +801,7 @@ class PetController(QObject):
                 self.window.set_mood(reply.mood)
             else:
                 self.window.say(reply.mood, reply.text)
+                self._effect("snore")  # once, as she drops off (after her line, which has no voice asleep)
         elif self.asleep and idle < WAKE_IDLE_SEC:
             # A held-back reply doubles as the greeting (said by _flush_deferred right after).
             self._wake(announce=not self.quiet and self.deferred is None)
@@ -1357,6 +1359,11 @@ class PetController(QObject):
             return
         self.voice.say(text, mood, self.config.voice_style, self.config.voice_volume, char_ms)
 
+    def _effect(self, name: str) -> None:
+        """A little sound for what happened to her: with her voice switched on, never in full-screen quiet."""
+        if self.config.voice and not self.quiet and not self.quit_pending:
+            self.voice.effect(name, self.config.voice_style, self.config.voice_volume)
+
     def set_voice(self, enabled: bool) -> None:
         self.config.voice = bool(enabled)
         if not self.config.voice:
@@ -1422,6 +1429,7 @@ class PetController(QObject):
         self.window.say(*self._reply_tuple(persona.interaction_line(kind, self._rng)))
 
     def _on_patted(self) -> None:
+        self._effect("pat")  # every pat; what she says has its own cooldown
         now = self._clock()
         since = now - self._last_pat
         if since < PAT_COOLDOWN_SEC:
@@ -1751,6 +1759,7 @@ class PetController(QObject):
 
     def _on_landed(self) -> None:
         self.window.start_body("land")  # first: a reaction that follows waits for the squash to settle
+        self._effect("land")  # before her words, which carry it on
         if not self.window.full_text:
             self._react("land", 0.5)
 

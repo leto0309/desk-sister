@@ -1,4 +1,5 @@
 """Her Animalese voice: synthesised babble in step with her typing, only when chosen and never while asleep."""
+import array
 import io
 import random
 import wave
@@ -224,13 +225,118 @@ def test_a_slow_disk_never_holds_up_stop(tmp_path, monkeypatch):
     assert played == [None, None] and list(tmp_path.iterdir()) == []  # the old line never played
 
 
+# ---- little sounds ---------------------------------------------------------------------------------------
+@pytest.mark.parametrize("name", voice.EFFECTS)
+def test_each_effect_is_short_audible_and_follows_the_style(name):
+    pcm = voice.effect_pcm(name, "squeaky", 60)
+    seconds = len(pcm) / 2 / voice.RATE
+    assert 0.1 < seconds < 1.5 and max(abs(v) for v in array.array("h", pcm)) > 1000
+    if name != "land":  # (the bump is the same for everyone; its tick and the others follow her pitch)
+        assert voice.effect_pcm(name, "low", 60) != pcm
+    assert voice.effect_pcm(name, "squeaky", 0) == b"" and voice.effect_pcm("nonsense") == b""
+
+
+def test_effects_are_softer_than_her_voice_at_the_same_volume():
+    loudest = max(abs(v) for v in array.array("h", voice._pcm("啦啦啦", "talk", "squeaky", 100, 35)))
+    for name in voice.EFFECTS:
+        assert max(abs(v) for v in array.array("h", voice.effect_pcm(name, "squeaky", 100))) <= loudest
+
+
+def test_mixing_adds_and_keeps_the_longer():
+    a = array.array("h", [1000, 2000, 30000]).tobytes()
+    b = array.array("h", [10, 20000]).tobytes()
+    assert array.array("h", voice._mix(a, b)).tolist() == [1010, 22000, 30000]
+    assert array.array("h", voice._mix(b, a)).tolist() == [1010, 22000, 30000]
+
+
+def test_an_effect_plays_on_its_own(tmp_path):
+    played = []
+    player = voice.Player(tmp_path, play=played.append, clock=now())
+    player.effect("pat", "squeaky", 60, spawn=lambda fn: fn())
+    assert samples(played[-1].read_bytes()) == array.array("h", voice.effect_pcm("pat", "squeaky", 60)).tolist()
+
+
+def test_a_line_right_after_an_effect_carries_it_on(tmp_path):
+    played = []
+    clock = Clock()
+    player = voice.Player(tmp_path, play=played.append, clock=clock)
+    player.effect("pat", "squeaky", 60, spawn=lambda fn: fn())
+    clock.t = 0.05  # she answers 50 ms into the chirp
+    later = Deferred()
+    player.say("嘿嘿", "happy", "squeaky", 60, 35, spawn=later)
+    assert played[-1] is None  # the chirp file stops for the line...
+    later.jobs[0]()
+    line = voice._pcm("嘿嘿", "happy", "squeaky", 60, 35)
+    rest = voice.effect_pcm("pat", "squeaky", 60)[int(0.05 * voice.RATE) * 2:]
+    assert samples(played[-1].read_bytes()) == array.array("h", voice._mix(line, rest)).tolist()  # ...and goes on in it
+
+
+def test_a_stopped_effect_does_not_come_back_with_the_next_line(tmp_path):
+    played = []
+    player = voice.Player(tmp_path, play=played.append, clock=now())
+    player.effect("snore", "squeaky", 60, spawn=lambda fn: fn())
+    player.stop()
+    player.say("醒啦", "happy", "squeaky", 60, 35, spawn=lambda fn: fn())
+    assert samples(played[-1].read_bytes()) == array.array("h", voice._pcm("醒啦", "happy", "squeaky", 60, 35)).tolist()
+
+
+def test_an_effect_mid_line_keeps_the_rest_of_the_line(tmp_path):
+    played = []
+    clock = Clock()
+    player = voice.Player(tmp_path, play=played.append, clock=clock)
+    player.say("一二三四五六七八", "talk", "squeaky", 60, 35, spawn=lambda fn: fn())
+    clock.t = 0.1  # picked up while she talks
+    player.effect("lift", "squeaky", 60, spawn=lambda fn: fn())
+    line = voice._pcm("一二三四五六七八", "talk", "squeaky", 60, 35)
+    rest = line[int(0.1 * voice.RATE) * 2:]
+    assert samples(played[-1].read_bytes()) == array.array("h", voice._mix(voice.effect_pcm("lift", "squeaky", 60), rest)).tolist()
+
+
+def test_an_effect_while_the_line_is_still_being_made_keeps_it_too(tmp_path):
+    played = []
+    clock = Clock()
+    player = voice.Player(tmp_path, play=played.append, clock=clock)
+    later = Deferred()
+    player.say("一二三四五六", "talk", "squeaky", 60, 35, spawn=later)
+    player.effect("pat", "squeaky", 60, spawn=lambda fn: fn())
+    later.jobs[0]()  # superseded: the effect's sound already holds the line
+    line = voice._pcm("一二三四五六", "talk", "squeaky", 60, 35)
+    assert samples(played[-1].read_bytes()) == array.array("h", voice._mix(voice.effect_pcm("pat", "squeaky", 60), line)).tolist()
+    assert len([p for p in played if p]) == 1
+
+
+def test_after_stop_an_effect_is_only_itself(tmp_path):
+    played = []
+    player = voice.Player(tmp_path, play=played.append, clock=now())
+    player.say("还在说", "talk", "squeaky", 60, 35, spawn=lambda fn: fn())
+    player.stop()  # the bubble went
+    player.effect("land", "squeaky", 60, spawn=lambda fn: fn())
+    assert samples(played[-1].read_bytes()) == array.array("h", voice.effect_pcm("land", "squeaky", 60)).tolist()
+
+
+def test_a_line_long_after_an_effect_is_just_the_line(tmp_path):
+    played = []
+    clock = Clock()
+    player = voice.Player(tmp_path, play=played.append, clock=clock)
+    player.effect("lift", "squeaky", 60, spawn=lambda fn: fn())
+    clock.t = 30.0
+    later = Deferred()
+    player.say("嗯", "talk", "squeaky", 60, 35, spawn=later)
+    clock.t = 30.0
+    later.jobs[0]()
+    assert samples(played[-1].read_bytes()) == array.array("h", voice._pcm("嗯", "talk", "squeaky", 60, 35)).tolist()
+
+
 # ---- the pet ---------------------------------------------------------------------------------------------
 class FakeVoice:
     def __init__(self):
-        self.said, self.stops = [], 0
+        self.said, self.stops, self.effects = [], 0, []
 
     def say(self, text, mood, style, volume, char_ms):
         self.said.append((text, mood, style, volume, char_ms))
+
+    def effect(self, name, style, volume):
+        self.effects.append((name, style, volume))
 
     def stop(self):
         self.stops += 1
@@ -409,3 +515,65 @@ def test_a_line_still_behind_after_rewriting_is_dropped(tmp_path, monkeypatch):
     player = voice.Player(tmp_path, play=played.append, clock=clock)
     player.say("一二三四五六七八", "talk", "squeaky", 60, 35, spawn=lambda fn: fn())
     assert len(writes) == 2 and played == [None] and list(tmp_path.iterdir()) == []
+
+
+def test_little_sounds_for_what_happens_to_her(pet):
+    ctrl, fake = pet
+    ctrl.window.lifted.emit()
+    ctrl._on_patted()
+    ctrl._on_landed()
+    assert fake.effects == []  # her voice is off: so are the sounds
+    ctrl.set_voice(True)
+    ctrl.set_voice_style("low")
+    ctrl.window.lifted.emit()
+    ctrl._on_patted()
+    ctrl._on_patted()  # every pat sounds, though she answers only now and then
+    ctrl._on_landed()
+    assert [name for name, *_ in fake.effects] == ["lift", "pat", "pat", "land"]
+    assert fake.effects[0][1:] == ("low", 60)
+
+
+def test_a_snore_once_as_she_dozes_off(pet, monkeypatch):
+    ctrl, fake = pet
+    ctrl.set_voice(True)
+    monkeypatch.setattr(controller_module.capture, "idle_seconds", lambda: 10_000.0)
+    ctrl._update_sleep()
+    ctrl._update_sleep()
+    assert ctrl.asleep and [name for name, *_ in fake.effects] == ["snore"]
+
+
+def test_no_sounds_in_full_screen_quiet(pet, monkeypatch):
+    ctrl, fake = pet
+    ctrl.set_voice(True)
+    monkeypatch.setattr(controller_module, "full_screen_now", lambda _h=0: True)
+    ctrl._update_quiet()
+    ctrl._on_patted()
+    ctrl._on_landed()
+    ctrl.window.lifted.emit()
+    monkeypatch.setattr(controller_module.capture, "idle_seconds", lambda: 10_000.0)
+    ctrl._update_sleep()
+    assert fake.effects == []
+
+
+def test_the_window_tells_when_she_is_picked_up(app):
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+
+    from claude_pet.pet_window import PetWindow
+
+    window = PetWindow(SPRITES, 220)
+    lifts = []
+    window.lifted.connect(lambda: lifts.append(1))
+    window.show()
+    at = QPointF(window.width() / 2, window.height() - 100)
+    glob = QPointF(window.mapToGlobal(at.toPoint()))
+
+    def event(kind, where, buttons):
+        return QMouseEvent(kind, at, where, Qt.MouseButton.LeftButton, buttons, Qt.KeyboardModifier.NoModifier)
+
+    window.mousePressEvent(event(QEvent.Type.MouseButtonPress, glob, Qt.MouseButton.LeftButton))
+    for dx in (2, 30, 60):
+        window.mouseMoveEvent(event(QEvent.Type.MouseMove, glob + QPointF(dx, 0), Qt.MouseButton.LeftButton))
+    window.mouseReleaseEvent(event(QEvent.Type.MouseButtonRelease, glob, Qt.MouseButton.NoButton))
+    assert lifts == [1]  # once per pick-up, not per move (and not for a plain click)
+    window.close()
