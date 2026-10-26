@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from claude_pet import bedtime, claude_client, persona
+from claude_pet import bedtime, claude_client, i18n, persona, persona_en
 from claude_pet.config import Config
 from claude_pet.memory import ACTIVITIES
 
@@ -174,4 +174,36 @@ def test_settings_row(pet):
     window.summary_combo.setCurrentIndex(window.summary_combo.findData(0))
     assert ctrl.config.daily_summary_hour == 0
     window.memory_box.setChecked(False)
-    assert not window.summary_combo.isEnabled()
+    assert window.summary_combo.isEnabled()  # the focus timer's part needs no memory
+
+
+# ---- the focus timer's part ------------------------------------------------------------------------------
+def test_the_summary_tells_the_pomodoros_too():
+    line = persona.summary_line({"写代码": 3 * 3600.0}, random.Random(1), (4, 100 * 60.0))
+    assert line.text.startswith("今天的小结：写代码约 3.0 小时；专注了 4 个番茄（约 1.7 小时）。")
+
+
+def test_a_day_with_only_pomodoros_still_has_a_summary():
+    assert persona.summary_line({}, random.Random(1)) is None
+    line = persona.summary_line({"写代码": 60.0}, random.Random(1), (1, 25 * 60.0))  # too little activity to tell
+    assert line.text.startswith("今天的小结：专注了 1 个番茄（约 25 分钟）。")
+    assert line.text.split("。", 1)[1] in persona.SUMMARY_FOCUS_TAILS
+
+
+def test_the_pomodoro_part_in_english():
+    i18n.set_language("en")
+    line = persona.summary_line({"写代码": 3 * 3600.0}, random.Random(1), (1, 25 * 60.0))
+    assert "coding about 3.0 hours, 1 pomodoro of focus (about 25 minutes)" in line.text
+    line = persona.summary_line({}, random.Random(1), (3, 80 * 60.0))
+    assert line.text.startswith("Today's summary: 3 pomodoros of focus (about 1.3 hours).")
+    assert line.text.split(". ", 1)[1] in persona_en.SUMMARY_FOCUS_TAILS
+
+
+def test_without_memory_only_the_pomodoros_are_told(pet):
+    ctrl, wall = pet
+    wall.now = at(23, 23)
+    ctrl.config.companion_memory = False
+    ctrl.focus_log.add(wall.now - 3600, 25 * 60.0)
+    ctrl._heartbeat()
+    assert ctrl.window.full_text.startswith("今天的小结：专注了 1 个番茄")
+    assert "写代码" not in ctrl.window.full_text  # the memory's numbers stay out when it is off

@@ -460,3 +460,150 @@ def test_a_held_timer_line_is_dropped_if_the_timer_is_paused(pet):
     pet.window.clear_bubble()
     beat(pet)
     assert pet.window.full_text == ""
+
+
+# ---- the focus log ---------------------------------------------------------------------------------------
+def test_the_log_counts_each_day_and_keeps_sixty(tmp_path):
+    path = tmp_path / "focus.json"
+    log = timers.FocusLog(path)
+    log.add(T0, 1500)
+    log.add(T0 + 600, 1500)
+    day = datetime.date(2026, 11, 3)
+    assert log.on(day) == (2, 3000.0) and log.on(day + datetime.timedelta(days=1)) == (0, 0.0)
+    assert timers.FocusLog(path).on(day) == (2, 3000.0)  # kept across a restart
+    log.add(T0 + 61 * 86400, 1500)  # two months later: the old days go
+    assert timers.FocusLog(path).on(day) == (0, 0.0)
+
+
+def test_a_period_counts_for_the_day_it_ends(tmp_path):
+    log = timers.FocusLog(tmp_path / "focus.json")
+    midnight = datetime.datetime(2026, 11, 4, 0, 5).timestamp()
+    log.add(midnight, 1500)  # began before midnight, finished after it
+    assert log.on(datetime.date(2026, 11, 4)) == (1, 1500.0)
+
+
+@pytest.mark.parametrize("content", ["oops", "[1, 2]", '{"2026-11-03": {"count": "x"}, "nope": {"count": 1, "seconds": 1}}',
+                                     '{"2026-11-03": {"count": -1, "seconds": 5}}'])
+def test_a_damaged_log_starts_afresh(tmp_path, content):
+    path = tmp_path / "focus.json"
+    path.write_text(content, encoding="utf-8")
+    assert timers.FocusLog(path).on(datetime.date(2026, 11, 3)) == (0, 0.0)
+
+
+def test_an_unreadable_log_is_not_written_over(tmp_path, monkeypatch):
+    path = tmp_path / "focus.json"
+    timers.FocusLog(path).add(T0, 1500)
+    real = Path.read_bytes
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(PermissionError(32, "in use"))
+                        if self == path else real(self))
+    log = timers.FocusLog(path)
+    log.add(T0 + 60, 1500)
+    monkeypatch.setattr(Path, "read_bytes", real)
+    assert timers.FocusLog(path).on(datetime.date(2026, 11, 3)) == (1, 1500.0)
+
+
+def test_finished_focus_periods_are_logged_and_shown_in_the_menu(pet):
+    pet.set_focus_minutes(30)
+    pet.start_focus()
+    pet.window.clear_bubble()
+    beat(pet, 30 * 60)  # one done
+    pet.window.clear_bubble()
+    beat(pet, 5 * 60)  # the break: not counted
+    pet.window.clear_bubble()
+    pet.toggle_focus_pause()
+    pet.stop_focus()  # a period stopped half way: not counted
+    assert pet.focus_log.on(datetime.date(2026, 11, 3)) == (1, 1800.0)
+    pet._fill_timer_menu()
+    first = pet.timer_menu.actions()[0]
+    assert first.text() == "今天已完成 1 个番茄" and not first.isEnabled()
+
+
+def test_the_menu_shows_no_count_on_a_day_without_pomodoros(pet):
+    pet._fill_timer_menu()
+    assert pet.timer_menu.actions()[0].text() == "开始专注（25 分钟）"
+
+
+def test_a_period_that_ran_out_while_the_pc_slept_counts_for_its_own_day(pet):
+    pet._now.now = datetime.datetime(2026, 11, 3, 23, 30).timestamp()
+    pet.start_focus()
+    pet.window.clear_bubble()
+    beat(pet, 9 * 3600)  # due at 23:55, but the PC slept until morning
+    assert pet.focus_log.on(datetime.date(2026, 11, 3)) == (1, 1500.0)
+    assert pet.focus_log.on(datetime.date(2026, 11, 4)) == (0, 0.0)
+
+
+def test_what_is_finished_while_the_log_is_locked_is_saved_once_it_is_free(tmp_path, monkeypatch):
+    path = tmp_path / "focus.json"
+    timers.FocusLog(path).add(T0, 1500)  # one from before
+    real = Path.read_bytes
+    held = {"on": True}
+
+    def read(self):
+        if held["on"] and self == path:
+            raise PermissionError(32, "in use")
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", read)
+    log = timers.FocusLog(path)
+    log.add(T0 + 60, 1500)  # still locked: kept in memory, the file untouched
+    held["on"] = False
+    assert timers.FocusLog(path).on(datetime.date(2026, 11, 3)) == (1, 1500.0)
+    log.add(T0 + 120, 1500)  # free again: the old one, the waiting one and this one
+    assert timers.FocusLog(path).on(datetime.date(2026, 11, 3)) == (3, 4500.0)
+    assert log.on(datetime.date(2026, 11, 3)) == (3, 4500.0)
+
+
+def test_the_last_period_is_saved_once_the_log_is_free_without_another(pet, tmp_path, monkeypatch):
+    path = tmp_path / "focus.json"
+    real = Path.read_bytes
+    held = {"on": True}
+
+    def read(self):
+        if held["on"] and self == path:
+            raise PermissionError(32, "in use")
+        return real(self)
+
+    path.write_text('{"2026-11-02": {"count": 2, "seconds": 3000}}', encoding="utf-8")
+    monkeypatch.setattr(Path, "read_bytes", read)
+    pet.focus_log = timers.FocusLog(path)
+    pet.start_focus()
+    pet.window.clear_bubble()
+    beat(pet, 25 * 60)  # finished while the file is locked
+    pet.stop_focus()  # and no more periods today
+    held["on"] = False
+    beat(pet, timers.RETRY_READ_SEC + 1)  # the heartbeat tries again by itself
+    saved = timers.FocusLog(path)
+    assert saved.on(datetime.date(2026, 11, 3)) == (1, 1500.0) and saved.on(datetime.date(2026, 11, 2)) == (2, 3000.0)
+    beat(pet, timers.RETRY_READ_SEC + 1)
+    assert timers.FocusLog(path).on(datetime.date(2026, 11, 3)) == (1, 1500.0)  # saved once, not twice
+
+
+def test_quitting_makes_a_last_try(pet, tmp_path, monkeypatch):
+    path = tmp_path / "focus.json"
+    real = Path.read_bytes
+    held = {"on": True}
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(PermissionError(32, "in use"))
+                        if held["on"] and self == path else real(self))
+    path.write_text("{}", encoding="utf-8")
+    pet.focus_log = timers.FocusLog(path)
+    pet.focus_log.add(T0, 1500)
+    held["on"] = False
+    pet.shutdown()
+    assert timers.FocusLog(path).on(datetime.date(2026, 11, 3)) == (1, 1500.0)
+
+
+def test_a_log_locked_at_start_comes_back_by_itself(pet, tmp_path, monkeypatch):
+    path = tmp_path / "focus.json"
+    path.write_text('{"2026-11-03": {"count": 3, "seconds": 4500}}', encoding="utf-8")
+    real = Path.read_bytes
+    held = {"on": True}
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(PermissionError(32, "in use"))
+                        if held["on"] and self == path else real(self))
+    pet.focus_log = timers.FocusLog(path)
+    assert pet.focus_log.on(datetime.date(2026, 11, 3)) == (0, 0.0)
+    held["on"] = False
+    beat(pet, timers.RETRY_READ_SEC + 1)  # no new period: the heartbeat reads it again anyway
+    assert pet.focus_log.on(datetime.date(2026, 11, 3)) == (3, 4500.0)
+    pet._fill_timer_menu()
+    assert pet.timer_menu.actions()[0].text() == "今天已完成 3 个番茄"
+    assert path.read_text(encoding="utf-8") == '{"2026-11-03": {"count": 3, "seconds": 4500}}'  # read, not rewritten

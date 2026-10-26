@@ -239,6 +239,7 @@ class PetController(QObject):
         self.window.lifted.connect(lambda: self._effect("lift"))
         self.pomodoro = timers.Pomodoro()
         self.reminders = timers.Reminders(app_data_dir() / "reminders.json")
+        self.focus_log = timers.FocusLog(app_data_dir() / "focus.json")
         self._focus_event: str | None = None  # the timer's latest news, waiting for her to be free to say it
         self._ask_reminder = reminder_dialog.ask
         self.recent: deque[str] = deque(maxlen=6)
@@ -386,6 +387,7 @@ class PetController(QObject):
 
     def shutdown(self) -> None:
         self._cancel_inflight()
+        self.focus_log.flush(float("inf"))  # one last try for anything a locked file kept from being saved
         self.voice.stop()
         self._download_cancel.set()
         self.walker.set_enabled(False)
@@ -1003,7 +1005,11 @@ class PetController(QObject):
         one line at a time. In full-screen quiet it waits; a due line wakes her, so it is there when 主人 looks back.
         A reminder stays saved until it is said, and whether it was missed is judged when it is said."""
         now = self._now()
+        ended = self.pomodoro.ends_at  # when the period really ran out (the PC may have slept past it)
         event = self.pomodoro.due(now, self.config.focus_min * 60, self.config.break_min * 60)
+        if event == "focus_done":
+            self.focus_log.add(ended, self.pomodoro.focus_sec)
+        self.focus_log.flush(now)  # (a locked file: tried again now and then)
         if event:
             log.info("focus timer: %s", event)
             self._focus_event = event  # a newer one replaces one never said
@@ -1052,6 +1058,9 @@ class PetController(QObject):
     def _fill_timer_menu(self) -> None:
         menu = self.timer_menu
         menu.clear()
+        done, _seconds = self.focus_log.on(datetime.date.fromtimestamp(self._now()))
+        if done:
+            menu.addAction(tr("今天已完成 {0} 个番茄", done)).setEnabled(False)
         if not self.pomodoro.running:
             menu.addAction(tr("开始专注（{0} 分钟）", self.config.focus_min), self.start_focus)
         else:
@@ -1475,9 +1484,10 @@ class PetController(QObject):
         return True
 
     def _summarize_day_if_due(self) -> None:
-        """Once a day from the chosen hour, the first time she may talk: today's time per activity."""
+        """Once a day from the chosen hour, the first time she may talk: today's time per activity (from the
+        companion memory) and the focus timer's periods (said even with the memory off)."""
         hour = self.config.daily_summary_hour
-        if not hour or not self.config.companion_memory:
+        if not hour:
             return
         if time.localtime(self._now()).tm_hour < hour:
             return
@@ -1486,7 +1496,8 @@ class PetController(QObject):
             return
         if self.quit_pending or self.quiet or self.asleep or self.window.full_text:
             return  # later, when she may talk
-        line = persona.summary_line(self.memory.today_seconds(), self._rng)
+        activities = self.memory.today_seconds() if self.config.companion_memory else {}
+        line = persona.summary_line(activities, self._rng, self.focus_log.on(self._today()))
         if line is None:
             return  # too little yet: maybe later today
         self.config.summary_on = today

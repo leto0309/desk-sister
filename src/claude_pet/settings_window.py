@@ -529,7 +529,7 @@ class SettingsWindow(QDialog):
             lambda _i: self._apply(lambda: self.ctrl.set_daily_summary(self.summary_combo.currentData())))
         summary.addWidget(QLabel(tr("每日小结")))
         summary.addWidget(self.summary_combo)
-        summary.addWidget(_hint(tr("（需要陪伴记忆：说说今天各类活动花了多久，一天一次）")))
+        summary.addWidget(_hint(tr("（说说今天各类活动花了多久、完成了几个番茄，一天一次；活动时长需要陪伴记忆）")))
         summary.addStretch(1)
         focus = QHBoxLayout()
         self.focus_spin = QSpinBox()
@@ -759,7 +759,6 @@ class SettingsWindow(QDialog):
             self._show_value(self.focus_spin, cfg.focus_min)
             self._show_value(self.break_spin, cfg.break_min)
             self.summary_combo.setCurrentIndex(max(0, self.summary_combo.findData(cfg.daily_summary_hour)))
-            self.summary_combo.setEnabled(cfg.companion_memory)
             self.link_box.setChecked(cfg.claude_link)
             self.link_box.setText(tr(LINK_LABEL) + (tr("（hook 未找到或 settings.json 异常）") if self.ctrl.claude_link_broken() else ""))
             birthday = cfg.birthday

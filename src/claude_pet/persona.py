@@ -330,6 +330,7 @@ def memory_talk_line(activity: str, seconds: float) -> Reply:
 SUMMARY_HOURS = (0, 18, 20, 21, 22)  # 0 = off
 SUMMARY_MIN_ITEM_SEC = 600  # an activity counts from 10 minutes
 SUMMARY_MIN_TOTAL_SEC = 1800  # under half an hour in all: nothing to sum up (yet)
+SUMMARY_FOCUS_TAILS = ["专注力满分，辛苦啦～", "一个番茄一个番茄地完成，真棒！"]  # a day with only the focus timer to tell
 SUMMARY_TAILS = {  # a word on the day's main activity, one picked at random
     "写代码": ["代码敲了这么久，辛苦啦～", "今天的提交记录一定很好看吧？", "写了这么多，记得给自己点个赞～"],
     "和 AI 一起干活": ["和 AI 搭档了这么久，配合得还顺利吧？", "今天的提示词写得越来越熟练了呢～"],
@@ -343,21 +344,33 @@ SUMMARY_TAILS = {  # a word on the day's main activity, one picked at random
 }
 
 
-def summary_line(seconds: dict[str, float], rng: random.Random | None = None) -> Reply | None:
-    """'今天的小结：写代码约 3.2 小时、看视频约 40 分钟。' and a word on the main one; None if too little."""
-    if sum(seconds.values()) < SUMMARY_MIN_TOTAL_SEC:
+def summary_line(seconds: dict[str, float], rng: random.Random | None = None,
+                 focus: tuple[int, float] = (0, 0.0)) -> Reply | None:
+    """'今天的小结：写代码约 3.2 小时、看视频约 40 分钟；专注了 4 个番茄（约 1.7 小时）。' and a word on the day;
+    None if too little. `focus` is (periods, seconds) of the focus timer: said even when there is no activity time."""
+    ranked = []
+    if sum(seconds.values()) >= SUMMARY_MIN_TOTAL_SEC:
+        ranked = sorted(((a, s) for a, s in seconds.items() if s >= SUMMARY_MIN_ITEM_SEC), key=lambda i: i[1],
+                        reverse=True)
+    periods, focused = focus
+    if not ranked and periods <= 0:
         return None
-    ranked = sorted(((a, s) for a, s in seconds.items() if s >= SUMMARY_MIN_ITEM_SEC), key=lambda i: i[1], reverse=True)
-    if not ranked:
-        return None
+    pick_from = (rng or random).choice
     if i18n.english():
         en = persona_en
-        parts = en.SUMMARY_JOIN.join(en.SUMMARY_ITEM.format(activity=activity_name(activity), duration=duration_text(spent))
-                                     for activity, spent in ranked[:3])
-        tail = (rng or random).choice(en.SUMMARY_TAILS.get(ranked[0][0], [en.SUMMARY_TAIL]))
-        return Reply("talk", en.SUMMARY.format(parts=parts, tail=tail))
-    parts = "、".join(f"{activity}约 {duration_text(spent)}" for activity, spent in ranked[:3])
-    return Reply("talk", f"今天的小结：{parts}。{(rng or random).choice(SUMMARY_TAILS.get(ranked[0][0], ['辛苦啦～']))}")
+        parts = [en.SUMMARY_ITEM.format(activity=activity_name(activity), duration=duration_text(spent))
+                 for activity, spent in ranked[:3]]
+        if periods > 0:
+            parts.append(en.SUMMARY_FOCUS.format(count=periods, duration=duration_text(focused),
+                                                  s="" if periods == 1 else "s"))
+        tail = pick_from(en.SUMMARY_TAILS.get(ranked[0][0], [en.SUMMARY_TAIL]) if ranked else en.SUMMARY_FOCUS_TAILS)
+        return Reply("talk", en.SUMMARY.format(parts=en.SUMMARY_JOIN.join(parts), tail=tail))
+    text = "、".join(f"{activity}约 {duration_text(spent)}" for activity, spent in ranked[:3])
+    if periods > 0:
+        focus_part = f"专注了 {periods} 个番茄（约 {duration_text(focused)}）"
+        text = f"{text}；{focus_part}" if text else focus_part
+    tail = pick_from(SUMMARY_TAILS.get(ranked[0][0], ["辛苦啦～"]) if ranked else SUMMARY_FOCUS_TAILS)
+    return Reply("talk", f"今天的小结：{text}。{tail}")
 
 
 def _in_hours(hour: int, first: int, last: int) -> bool:

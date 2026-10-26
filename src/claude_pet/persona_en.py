@@ -271,6 +271,8 @@ SUMMARY = "Today's summary: {parts}. {tail}"
 SUMMARY_JOIN = ", "
 SUMMARY_ITEM = "{activity} about {duration}"
 SUMMARY_TAIL = "Well done today~"
+SUMMARY_FOCUS = "{count} pomodoro{s} of focus (about {duration})"
+SUMMARY_FOCUS_TAILS = ["Full marks for focus, well done~", "One pomodoro after another. Great work!"]
 
 # The per-turn prompt.
 TURN_TIME = "The time is now {clock}."

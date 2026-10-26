@@ -39,6 +39,8 @@ production deployments need authorisation. Secrets are configured only in GitHub
   explicit title: prefix; a damaged allowlist counts as empty (no window is captured).
 - Her voice is synthesised locally with the standard library: nothing online, no model; the temporary audio goes only
   under %APPDATA%/ClaudePet/voice/, keeping just the file playing now (leftovers are cleared at start).
+- The focus log (%APPDATA%/ClaudePet/focus.json) keeps only how many focus periods were finished each day and for
+  how long, on this PC only.
 - Reminders (%APPDATA%/ClaudePet/reminders.json) keep only their times and the text you wrote; they stay on this
   PC and are never sent to a model.
 - The companion memory (%APPDATA%/ClaudePet/memory.json) keeps only process names, kinds of activity, timestamps and

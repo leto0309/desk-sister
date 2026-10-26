@@ -318,7 +318,6 @@ TEXT = {
     "深夜提醒休息": "Late-night rest reminder",
     "几点算深夜": "Night starts at",
     "每日小结": "Daily summary",
-    "（需要陪伴记忆：说说今天各类活动花了多久，一天一次）": "(needs companion memory: how long today went on each activity, once a day)",
     "每天第一次见到主人时她会打个招呼；节日和主人生日那天会换成祝福。":
         "She says hello the first time she sees you each day; on festivals and your birthday it becomes a wish.",
     "深夜指从这个时间到早上 5 点。看屏幕的评论和自言自语共用这个次数，提过一次就等下一晚（或 2 小时后）。":
@@ -347,6 +346,10 @@ TEXT = {
     "说话声音（动物语）": "Voice (Animalese)",
     # ---- focus timer and reminders
     "番茄钟与提醒": "Focus timer and reminders",
+    "今天已完成 {0} 个番茄": "{0} pomodoros done today",
+    "（说说今天各类活动花了多久、完成了几个番茄，一天一次；活动时长需要陪伴记忆）":
+        "(how long today went on each activity and how many pomodoros you finished, once a day; activity times need "
+        "the companion memory)",
     "开始专注（{0} 分钟）": "Start focusing ({0} minutes)",
     "继续计时": "Resume the timer",
     "暂停计时": "Pause the timer",

@@ -32,6 +32,7 @@ class Pomodoro:
         self.ends_at = 0.0
         self.paused_left: float | None = None
         self.done = 0  # focus periods finished since the start
+        self.focus_sec = 0.0  # the length of the focus period now running (or last finished)
 
     @property
     def running(self) -> bool:
@@ -43,6 +44,7 @@ class Pomodoro:
 
     def start(self, now: float, focus_sec: float) -> None:
         self.phase, self.ends_at, self.paused_left, self.done = "focus", now + focus_sec, None, 0
+        self.focus_sec = focus_sec
 
     def stop(self) -> int:
         """Ends it; returns how many focus periods were finished."""
@@ -70,7 +72,7 @@ class Pomodoro:
             self.done += 1
             self.phase, self.ends_at = "break", now + break_sec
             return "focus_done"
-        self.phase, self.ends_at = "focus", now + focus_sec
+        self.phase, self.ends_at, self.focus_sec = "focus", now + focus_sec, focus_sec
         return "break_done"
 
 
@@ -186,6 +188,97 @@ class Reminders:
 
     def next(self) -> Reminder | None:
         return self.items[0] if self.items else None
+
+
+class FocusLog:
+    """How many focus periods were finished each day, and for how long: a small JSON file, the last 60 days.
+
+    A file that is there but cannot be read (another program holds it) is never written over: what is finished
+    meanwhile waits in memory and is merged in as soon as the file can be read again."""
+
+    KEEP_DAYS = 60
+
+    def __init__(self, path: Path | None) -> None:
+        self.path = path
+        self.days: dict[str, dict[str, float]] = {}
+        self.unreadable = False
+        self._unsaved: list[tuple[str, float]] = []  # (day, seconds) finished and not saved yet
+        self._retry_at = 0.0
+        self._load()
+
+    def _load(self) -> None:
+        if self.path is None:
+            return
+        try:
+            data = json.loads(self.path.read_bytes().decode("utf-8"))
+        except FileNotFoundError:
+            data = {}
+        except OSError as exc:
+            log.warning("could not read the focus log: %s", exc)
+            self.unreadable = True
+            return
+        except ValueError as exc:
+            log.warning("damaged focus log, starting afresh: %s", exc)
+            data = {}
+        self.unreadable = False
+        days = {}
+        for day, entry in (data.items() if isinstance(data, dict) else ()):
+            try:
+                datetime.date.fromisoformat(day)
+                count, seconds = int(entry["count"]), float(entry["seconds"])
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+            if count > 0 and 0 <= seconds < 86400 * 2:
+                days[day] = {"count": count, "seconds": seconds}
+        self.days = days
+        for day, seconds in self._unsaved:
+            self._count(day, seconds)
+
+    def _count(self, day: str, seconds: float) -> None:
+        entry = self.days.setdefault(day, {"count": 0, "seconds": 0.0})
+        entry["count"] += 1
+        entry["seconds"] += max(0.0, seconds)
+
+    def add(self, when: float, seconds: float) -> None:
+        """One more focus period, finished at `when` (wall clock), counted for that day and saved if it can be."""
+        day = datetime.date.fromtimestamp(when).isoformat()
+        if self.unreadable:
+            self._load()  # perhaps it can be read now; then what waited is merged in
+        self._unsaved.append((day, seconds))
+        self._count(day, seconds)
+        self._retry_at = 0.0
+        self.flush(when)
+
+    def flush(self, now: float) -> None:
+        """Saves what is not saved yet. Called each second too: a file that could not be read or written is
+        tried again every RETRY_READ_SEC, so nothing waits for the next period (or is lost at the next start)."""
+        if self.path is None:
+            self._unsaved = []
+            return
+        if not (self._unsaved or self.unreadable) or now < self._retry_at:
+            return
+        self._retry_at = now + RETRY_READ_SEC
+        if self.unreadable:
+            self._load()  # also with nothing to save: the days it holds come back for the menu and summary
+            if self.unreadable or not self._unsaved:
+                return
+        newest = max(self.days) if self.days else datetime.date.fromtimestamp(now).isoformat()
+        oldest = (datetime.date.fromisoformat(newest) - datetime.timedelta(days=self.KEEP_DAYS)).isoformat()
+        self.days = {d: e for d, e in self.days.items() if d > oldest}
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temp = self.path.with_name(self.path.name + ".tmp")
+            temp.write_text(json.dumps(self.days, indent=1, sort_keys=True), encoding="utf-8")
+            os.replace(temp, self.path)
+            self._unsaved = []
+        except OSError as exc:
+            log.warning("could not save the focus log: %s", exc)
+            self.unreadable = True  # (re-read before the next try, so nothing is counted twice)
+
+    def on(self, day: datetime.date) -> tuple[int, float]:
+        """(periods, seconds) finished that day."""
+        entry = self.days.get(day.isoformat())
+        return (int(entry["count"]), float(entry["seconds"])) if entry else (0, 0.0)
 
 
 def due_in(now: float, minutes: int) -> float:
