@@ -9,7 +9,20 @@
 一个住在 Windows 桌面角落的 Q 版少女，隔一会儿看一眼你当前的窗口，用一句话吐槽或关心你。可以在设置的「角色」页
 选择陪你的 AI 娘：Claude（默认）、DeepSeek、GPT、Gemini、通义千问、GLM，各有自己的人设、立绘和设置窗口配色。
 
-![8 种表情](docs/images/moods.png)
+![六位 AI 娘](docs/images/girls.png)
+
+![Claude 的 8 种表情](docs/images/moods.png)
+
+<details>
+<summary>其他 AI 娘的 8 种表情</summary>
+
+![DeepSeek 的 8 种表情](docs/images/moods-deepseek.png)
+![GPT 的 8 种表情](docs/images/moods-gpt.png)
+![Gemini 的 8 种表情](docs/images/moods-gemini.png)
+![通义千问的 8 种表情](docs/images/moods-qwen.png)
+![GLM 的 8 种表情](docs/images/moods-glm.png)
+
+</details>
 
 ## 需要什么
 
@@ -140,7 +153,8 @@ PowerShell 7：`./scripts/verify.ps1` 运行测试（pytest、compileall、ruff�
 需求与验收条件见 docs/requirements.md，架构见 docs/architecture.md。
 重新生成立绘后执行 `python devtools/process_sprites.py assets/raw assets/sprites`，
 再执行 `python devtools/embed_sprites.py` 更新内嵌立绘（否则测试会提示过期），
-`python devtools/make_icon.py` 更新程序图标 assets/icon.ico。
+`python devtools/make_icon.py` 更新程序图标 assets/icon.ico，`python devtools/make_previews.py` 更新 README 里的
+预览图（docs/images/ 中的 girls*.png 和 moods-*.png，中英文各一套）。
 维护者从开发仓库同步到公开仓库：`./devtools/Sync-PublicRepo.ps1`（先列出变化，加 `-Push` 才提交、核对、扫描密钥并推送）。
 
 ## 致谢与许可

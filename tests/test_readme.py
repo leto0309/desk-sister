@@ -1,10 +1,13 @@
 """The two READMEs: linked both ways, the English one in English, its links and setting names real."""
+import importlib.util
 import re
 from pathlib import Path
 
 import pytest
 
 from claude_pet import i18n_en
+from claude_pet.characters import CHARACTERS
+from claude_pet.persona import MOODS
 
 ROOT = Path(__file__).resolve().parents[1]
 ZH, EN = ROOT / "README.md", ROOT / "README.en.md"
@@ -34,6 +37,27 @@ def test_relative_links_exist(doc):
     for target in re.findall(r"\]\(([^)#]+)\)", doc.read_text(encoding="utf-8")):
         if not re.match(r"[a-z]+:", target):
             assert (doc.parent / target).exists(), target
+
+
+def test_every_girl_is_shown_with_previews_in_the_readmes_language():
+    zh, en = ZH.read_text(encoding="utf-8"), EN.read_text(encoding="utf-8")
+    assert "(docs/images/girls.png)" in zh and "(docs/images/moods.png)" in zh
+    assert "(docs/images/girls-en.png)" in en
+    for girl in CHARACTERS:
+        if girl != "claude":
+            assert f"(docs/images/moods-{girl}.png)" in zh, girl
+        assert f"(docs/images/moods-{girl}-en.png)" in en, girl
+    images = re.findall(r"\]\((docs/images/[^)]+)\)", en)
+    assert images and [i for i in images if not i.endswith("-en.png")] == []
+
+
+def test_the_english_previews_are_drawn_in_english():
+    spec = importlib.util.spec_from_file_location("make_previews", ROOT / "devtools" / "make_previews.py")
+    previews = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(previews)
+    labels = [*previews.TEXT["en"].values(), *(previews.name(girl, "en") for girl in CHARACTERS)]
+    assert [t for t in labels if CJK.search(t)] == []
+    assert set(previews.TEXT["en"]) == set(previews.TEXT["zh"]) >= set(MOODS)
 
 
 def test_setting_names_match_the_english_interface():
