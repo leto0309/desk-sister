@@ -85,6 +85,11 @@ ZH = {
         ("sleep", "主人好久没动了……我把扇子合上，眯一会儿……Zzz"),
         ("sleep", "（小声）就打个盹……Zzz"),
     ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("talk", "换我了？好，我是通义千问。帽子扶正，扇子在手，请多关照。"),
+        ("happy", "（轻摇折扇）通义千问到。小盆栽我也带来了，放哪儿好呢？"),
+        ("talk", "从现在起由我通义千问陪着主人。有事尽管说，我这人最实在了。"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("talk", "（微微一愣）……嗯，好吧，就这一下。"), ("happy", "（扶了扶帽子）摸头可以，帽子别碰歪啦。"),
                 ("happy", "被摸头了……这倒是，挺舒服的。"), ("talk", "（抿嘴一笑）这是在夸我吗？那我收下了。"),
@@ -217,6 +222,11 @@ EN = {
     "SLEEP_LINES": [
         ("sleep", "You haven't moved in a while... I'll fold my fan and close my eyes a bit... Zzz"),
         ("sleep", "(whispers) Just a little nap... Zzz"),
+    ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("talk", "My turn? All right, I'm Qwen. Hat straight, fan in hand. Nice to meet you."),
+        ("happy", "(waves her folding fan) Qwen's here. I brought my little potted plant too; where shall I put it?"),
+        ("talk", "Qwen here, keeping you company from now on. Just say if you need anything; I'm as practical as they come."),
     ],
     "INTERACTION_TALK": {
         "pat": [("talk", "(a little startled) ...Mm, all right, just this once."),

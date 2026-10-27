@@ -88,6 +88,11 @@ ZH = {
         ("sleep", "主人好久没动了……我抱着盆眯一会儿……Zzz"),
         ("sleep", "（小声）先……充个电……Zzz"),
     ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("happy", "换我来啦～我是 DeepSeek！盆已经擦得亮亮的，请多关照！"),
+        ("talk", "DeepSeek 报到！推理过程如下：主人选了我，所以接下来由我负责陪着～"),
+        ("happy", "（抱着盆转了一圈）我是 DeepSeek，从现在起由我陪着主人啦～"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("happy", "（愣了一下）诶？……嘿嘿，再摸一下也可以！"), ("happy", "（护住头上的盆）摸头可以，盆别弄掉啦～"),
                 ("happy", "被摸头了！这算奖励吧？那我收下啦。"), ("talk", "（眯眼）主人的手好暖，比刚出锅的馒头还暖。"),
@@ -220,6 +225,11 @@ EN = {
     "SLEEP_LINES": [
         ("sleep", "You haven't moved in a while... I'll hug my bowl and close my eyes a bit... Zzz"),
         ("sleep", "(whispers) Recharging... first... Zzz"),
+    ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("happy", "My turn~ I'm DeepSeek! My bowl's polished and shiny. Nice to meet you!"),
+        ("talk", "DeepSeek reporting in! My reasoning goes: you picked me, so keeping you company is my job now~"),
+        ("happy", "(spins round with her bowl) I'm DeepSeek, and I'm keeping you company from now on~"),
     ],
     "INTERACTION_TALK": {
         "pat": [("happy", "(freezes for a second) Huh? ...Hehe, you can pat me again!"),

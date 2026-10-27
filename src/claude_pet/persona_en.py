@@ -35,6 +35,12 @@ SLEEP_LINES = [
     ("sleep", "(whispers) Releasing cache... Zzz"),
 ]
 
+INTRO_LINES = [  # when the user switches to her
+    ("happy", "My turn to keep you company~ I'm Claude, context all loaded. Nice to meet you!"),
+    ("talk", "Claude online! Call me whenever there's something on your mind~"),
+    ("happy", "You picked me? Yay! I'm Claude, and I'm here with you from now on~"),
+]
+
 SELF_TALK = [
     ("think", "(whispers) The indentation in the code in my reading notes... it was four spaces, right? It must be."),
     ("happy", "I'm right here with you, nice and quiet~"),

@@ -86,6 +86,11 @@ ZH = {
         ("sleep", "主人好久没动了……我把眼罩拉下来，抱着尾巴眯一会儿……Zzz"),
         ("sleep", "（小声）铃铛……不响了……Zzz"),
     ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("happy", "换我来啦～我是 GLM。（尾巴轻轻摇了摇）请多关照。"),
+        ("talk", "GLM 在这儿呢。我带了点心……想象中的那种。主人要的话，我这里还有。"),
+        ("happy", "（把眼罩推到额头上）好，从现在起 GLM 陪着主人，不着急，慢慢来～"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("happy", "（耳朵轻轻抖了一下）嗯……我听见了。"), ("talk", "（安静地眯起眼）……很舒服。"),
                 ("happy", "被摸头了，那我分你一块点心。"), ("talk", "嗯，谢谢主人。"),
@@ -218,6 +223,11 @@ EN = {
     "SLEEP_LINES": [
         ("sleep", "You haven't moved in a while... I'll pull my eye mask down, hug my tail and doze a bit... Zzz"),
         ("sleep", "(whispers) The bell... has gone quiet... Zzz"),
+    ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("happy", "My turn~ I'm GLM. (her tail gives a little swish) Nice to meet you."),
+        ("talk", "GLM's here. I brought snacks... the imaginary kind. If you'd like some, I have more here."),
+        ("happy", "(pushes her eye mask up onto her forehead) Right, GLM's with you from now on. No rush, we'll take it slow~"),
     ],
     "INTERACTION_TALK": {
         "pat": [("happy", "(an ear flicks) Mm... I heard you."),

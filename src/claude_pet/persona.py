@@ -52,6 +52,12 @@ SLEEP_LINES = [
     ("sleep", "（小声）缓存……释放中……Zzz"),
 ]
 
+INTRO_LINES = [  # when the user switches to her
+    ("happy", "换我来陪主人啦～我是 Claude，上下文已经准备好了，请多关照！"),
+    ("talk", "Claude 上线！主人有什么想聊的，随时叫我～"),
+    ("happy", "主人选了我？太好啦！从现在起由我 Claude 陪着你～"),
+]
+
 
 @dataclass(frozen=True)
 class Reply:
@@ -62,7 +68,7 @@ class Reply:
 
 # The tables with a character in them: each girl may have her own (lines_<girl>.py); the rest are shared.
 PER_GIRL = ("SELF_TALK", "TIME_TALK", "NIGHT_TALK", "SLEEP_TALK", "GREETINGS", "WEEKDAY_GREETINGS", "WAKE_LINES",
-            "SLEEP_LINES", "INTERACTION_TALK", "FALLBACK")
+            "SLEEP_LINES", "INTRO_LINES", "INTERACTION_TALK", "FALLBACK")
 MERGED = ("FALLBACK",)  # a girl's own entries replace just those keys (the rest are plain system messages)
 _girl = characters.DEFAULT
 

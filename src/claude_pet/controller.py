@@ -1781,7 +1781,7 @@ class PetController(QObject):
         self.window.set_character(girl, self._art_folder(girl), tr(character.name), character.theme.main)
         self._save()
         log.info("now %s", girl)
-        self.window.say("happy", tr("换我来陪主人啦～我是 {0}，请多关照！", self._name()))
+        self.window.say(*self._reply_tuple(persona.pick(persona.lines("INTRO_LINES"))))  # her own hello
 
     def set_address(self, address: str) -> None:
         address = characters.clean_address(address)

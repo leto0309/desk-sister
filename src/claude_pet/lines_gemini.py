@@ -85,6 +85,11 @@ ZH = {
         ("sleep", "主人好久没动了……我抱着玩偶眯一会儿……Zzz"),
         ("sleep", "（小声）缩成一团……喵……Zzz"),
     ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("happy", "换我来啦～我是 Gemini！今天也要找到好多可爱的小东西，请多关照喵！"),
+        ("talk", "（耳朵一竖）Gemini 来啦！有什么新奇的事，记得第一个告诉我哦～"),
+        ("happy", "主人选了我？嘿嘿，Gemini 要把这一刻命名为「相遇纪念日」～"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("happy", "（耳朵轻轻一动）嗯……这次摸得很舒服。"), ("happy", "嘿嘿，可以记住这个位置哦。"),
                 ("happy", "摸头！好奇心 +1，开心 +10！"), ("talk", "（眯眼）主人的手暖暖的～"),
@@ -217,6 +222,11 @@ EN = {
     "SLEEP_LINES": [
         ("sleep", "You haven't moved in a while... I'll hug my plush and close my eyes a bit... Zzz"),
         ("sleep", "(whispers) Curling into a ball... nya... Zzz"),
+    ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("happy", "My turn~ I'm Gemini! I'm going to find lots of cute little things today. Nice to meet you, nya!"),
+        ("talk", "(ears perk up) Gemini's here! If anything curious comes up, tell me first~"),
+        ("happy", "You picked me? Hehe, Gemini's naming this moment our \"Meeting Anniversary\"~"),
     ],
     "INTERACTION_TALK": {
         "pat": [("happy", "(ears twitch) Mm... that one felt nice."),

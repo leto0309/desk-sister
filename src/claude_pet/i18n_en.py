@@ -371,7 +371,6 @@ TEXT = {
         "Only the persona goes here; the task of looking at the screen, the reply format and the privacy rules are "
         "added after it automatically; another format the persona asks for never shows up as gibberish. Chinese "
         "and English are kept separately.",
-    "换我来陪主人啦～我是 {0}，请多关照！": "My turn to keep you company~ I'm {0}, nice to meet you!",
     "抱着饭盆的小机灵鬼，开饭和干活都积极": "A clever little thing with a rice bowl, keen on meals and on work",
     "长着龙角龙翼的领队：这件事交给我": "A leader with dragon horns and wings: leave this to me",
     "好奇心满满的猫娘，怪东西也很可爱": "A curious cat girl who finds even odd things cute",

@@ -121,7 +121,7 @@ def test_switching_girls_changes_her_art_colour_and_prompt(pet):
     assert pet.config.character == "gemini" and pet.window.character == "gemini"
     assert pet.window.sprites["idle"].toImage() != claude_idle  # her own art, or a named placeholder for now
     assert pet.window.accent == characters.get("gemini").theme.main
-    assert "我是 Gemini" in pet.window.full_text
+    assert pet.window.full_text in {text for _mood, text in persona.girl_lines("gemini").ZH["INTRO_LINES"]}
     assert pet._system_prompt().startswith(persona_presets.ZH["gemini"])
     pet.set_character("nobody")
     assert pet.config.character == "gemini"

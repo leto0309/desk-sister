@@ -145,6 +145,42 @@ def test_a_pet_started_as_a_girl_says_her_lines(pet):
     assert persona.lines("WAKE_LINES") == module.ZH["WAKE_LINES"]
 
 
+def intros(girl, english=False):
+    module = persona.girl_lines(girl)
+    if module is None:  # Claude's are the shared tables
+        return (persona_en if english else persona).INTRO_LINES
+    return (module.EN if english else module.ZH)["INTRO_LINES"]
+
+
+@pytest.mark.parametrize("girl", list(characters.CHARACTERS))
+def test_each_girl_introduces_herself_by_name(girl):
+    character = characters.get(girl)
+    others = [name for g, c in characters.CHARACTERS.items() if g != girl for name in (c.name, c.name_en)]
+    for english, name in ((False, character.name), (True, character.name_en)):
+        lines = intros(girl, english)
+        assert len(lines) >= 3 and len({t for _m, t in lines}) == len(lines)
+        for mood, text in lines:
+            assert mood in persona.MOODS and name in text, text  # whoever just arrived says who she is
+            assert not [other for other in others if other in text], text
+    every = [t for g in characters.CHARACTERS for english in (False, True) for _m, t in intros(g, english)]
+    assert len(set(every)) == len(every)  # nobody borrows another girl's hello
+
+
+def test_switching_girls_she_says_her_own_hello(pet, monkeypatch):
+    for girl in ("gpt", "claude", "qwen"):
+        pet.set_character(girl)
+        assert pet.window.full_text in {t for _m, t in intros(girl)}, girl
+    pet.set_address("老板")  # and a hello that says 主人, so the address is surely tried
+    monkeypatch.setattr(persona, "pick", lambda choices: persona.Reply(
+        *next((c for c in choices if "主人" in c[1]), choices[0])))
+    pet.set_character("glm")
+    assert "老板" in pet.window.full_text and "主人" not in pet.window.full_text
+    assert pet.window.full_text in {t.replace("主人", "老板") for _m, t in intros("glm")}
+    i18n.set_language("en")
+    pet.set_character("deepseek")
+    assert pet.window.full_text in {t for _m, t in intros("deepseek", english=True)}
+
+
 ASSUMES = re.compile(r"主人今天也很努力|主人辛苦啦|You're working hard|看起来很悠闲|(?<!要是)坐了(这么久|好一会儿)|一直(坚持到现在|在努力|很认真)|"
                      r"那个(文件夹|图标)|桌面角落里有|你还真是……认真|You look|(?<!if )you've (been|kept|worked)|"
                      r"that (folder|icon)|in the corner of the desktop|You really are\.\.\. so focused", re.IGNORECASE)

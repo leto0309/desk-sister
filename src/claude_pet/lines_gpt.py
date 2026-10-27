@@ -85,6 +85,11 @@ ZH = {
         ("sleep", "主人好久没动了……我先收起翅膀眯一会儿……Zzz"),
         ("sleep", "（小声）营地……安全……Zzz"),
     ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("happy", "（展开龙翼）我是 GPT，从现在起由我带队，请多关照！"),
+        ("talk", "GPT 就位！计划我随时都有，需要的时候叫我就好。"),
+        ("happy", "换我来啦～小云也跟着来了，GPT 和小云一起请多关照！"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("talk", "（努力保持镇定）……嗯，这个我收下了。"), ("happy", "摸头？好吧，队长偶尔也可以被夸一下。"),
                 ("happy", "（龙角轻轻一晃）……再摸一下也不是不行。"), ("talk", "这是在奖励我刚才的表现吗？谢谢主人。"),
@@ -217,6 +222,11 @@ EN = {
     "SLEEP_LINES": [
         ("sleep", "You haven't moved in a while... I'll fold my wings and close my eyes a bit... Zzz"),
         ("sleep", "(whispers) Camp... secure... Zzz"),
+    ],
+    "INTRO_LINES": [  # when the user switches to her
+        ("happy", "(spreads her dragon wings) I'm GPT, and I'm leading the team from now on. Nice to meet you!"),
+        ("talk", "GPT in position! I always have a plan ready; just call me when you need one."),
+        ("happy", "My turn~ Little Cloud came along too: GPT and Little Cloud, nice to meet you!"),
     ],
     "INTERACTION_TALK": {
         "pat": [("talk", "(tries hard to stay composed) ...Mm, I accept this."),
