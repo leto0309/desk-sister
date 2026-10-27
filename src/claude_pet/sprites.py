@@ -36,3 +36,26 @@ def decode_embedded(data: str, sha256: str) -> Image.Image:
             raise ValueError(f"expected WEBP, got {image.format}")
         image.load()
         return image.convert("RGBA")
+
+
+def sprite_module(girl: str):
+    """The generated module holding a girl's embedded art, or None if she has none yet. Imported by name here,
+    one by one, so a one-file build (which follows imports) carries every girl's art."""
+    try:
+        if girl == "claude":
+            from . import sprite_data as module
+        elif girl == "deepseek":
+            from . import sprite_data_deepseek as module
+        elif girl == "gpt":
+            from . import sprite_data_gpt as module
+        elif girl == "gemini":
+            from . import sprite_data_gemini as module
+        elif girl == "qwen":
+            from . import sprite_data_qwen as module
+        elif girl == "glm":
+            from . import sprite_data_glm as module
+        else:
+            return None
+    except ImportError:
+        return None
+    return module

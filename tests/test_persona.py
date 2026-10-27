@@ -61,9 +61,11 @@ def test_a_reply_of_only_tags_is_empty():
 
 
 def test_the_prompt_asks_for_plain_text():
-    from claude_pet.persona import SYSTEM_PROMPT
+    from claude_pet import characters
 
-    assert "不要 HTML" in SYSTEM_PROMPT and "Markdown" in SYSTEM_PROMPT
+    for girl in characters.CHARACTERS:
+        prompt = characters.system_prompt(girl, False)
+        assert "不要 HTML" in prompt and "Markdown" in prompt, girl
 
 
 def test_generics_and_paragraphs_survive():
@@ -86,12 +88,12 @@ def test_only_real_entities_and_never_a_line_break():
 
 
 def test_the_persona_keeps_its_fixed_rules_and_card_traits():
-    from claude_pet.persona import SYSTEM_PROMPT
+    from claude_pet.persona import system_prompt
 
-    for fixed in ("称呼用户为“主人”", "Anthropic 家族的长女", "不超过 50 个汉字", "表情|台词", "礼貌地移开了视线",
-                  "害怕 Token 超限", "害怕被主人格式化"):
-        assert fixed in SYSTEM_PROMPT, fixed
-    for card in ("可靠搭档", "先指出一个最具体的问题", "关心总在抱怨前面", "说错了就承认", "不要假装看到了画面",
-                 "不要声称自己真的移动了窗口"):
-        assert card in SYSTEM_PROMPT, card
+    prompt = system_prompt()
+    for fixed in ("称呼用户为“主人”", "你的名字是Claude", "不超过 50 个汉字", "表情|台词", "礼貌地移开了视线",
+                  "不要假装看到了画面", "不要声称自己真的移动了窗口"):
+        assert fixed in prompt, fixed
+    for card in ("真实小脾气", "先指出一个最具体的问题", "说着麻烦，仍愿意陪着处理", "犯错就承认并改正"):
+        assert card in prompt, card
 

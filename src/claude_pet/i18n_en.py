@@ -135,7 +135,7 @@ TEXT = {
     "、": ", ",
     "{0}（{1}）": "{0} ({1})",
     # ---- menu, dialogs, bubbles -----------------------------------------------------------------------
-    "和 Claude 说话": "Talk to Claude",
+    "和 {0} 说话": "Talk to {0}",
     "想对她说什么？": "What would you like to say to her?",
     "戳她一下（立即评论）": "Poke her (comment now)",
     "和她说话…": "Talk to her…",
@@ -165,7 +165,7 @@ TEXT = {
     "好的，陪伴记忆都清空啦……（翻到新的一页）": "All right, my companion memory is cleared... (turns to a fresh page)",
     "记忆在我这儿清空了，但 memory.json 没能改写（{0}），我稍后会再试。":
         "My memory is cleared, but memory.json could not be rewritten ({0}); I'll try again later.",
-    "主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。": "Hello~ I'm Claude. I'll stay quietly here and now and then see what you're up to.",
+    "主人好～我是 {0}。我会安静待在这里，偶尔看看你在忙什么。": "Hello~ I'm {0}. I'll stay quietly here and now and then see what you're up to.",
     "我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）": "My eyes are closed right now, I'm not looking~ (Ctrl+Alt+P to resume)",
     "等一下下，我还在想上一句……": "Just a moment, I'm still thinking about the last one...",
     "主人现在好像没有打开什么窗口呢……": "Looks like you don't have any window open right now...",
@@ -280,11 +280,12 @@ TEXT = {
         "She swings a little when carried, squashes and springs back when she lands, and moves a little when happy, "
         "angry, panicked or sad.",
     "沿屏幕底部溜达": "Stroll along the bottom of the screen",
-    "<p style='font-size:12pt'><b>Desk Sister</b> {0}</p><p>非官方粉丝作品，与 Anthropic 无任何关联。</p><p>代码：MIT 许可。角色立绘与图标：参考 B 站 UP 主 <b>ZipZipPipe</b> 的原设（BV1tE9XBbErS）用 AI 生成，经原作者同意<b>仅限非商业使用</b>。人设参考 leto0309/ai-girl-desktop-pet-prompts 中的 Claude 角色卡。</p><p>隐私：她只看当前前台窗口，截图不写日志；黑名单里的窗口不截图；Ctrl+Alt+P 随时暂停。截图只在内存中处理——唯一的例外是 Codex 模式：Codex CLI 只能从文件读图，截图会短暂写入你自己的临时文件夹，调用结束后删除（文件被占用时稍后重试）。</p><p><a style='color:#B5531F' href='https://github.com/leto0309/desk-sister'>github.com/leto0309/desk-sister</a></p>":
-        "<p style='font-size:12pt'><b>Desk Sister</b> {0}</p><p>An unofficial fan work, not affiliated with Anthropic "
-        "in any way.</p><p>Code: MIT licence. Character art and icon: AI-generated after the original design by "
-        "Bilibili creator <b>ZipZipPipe</b> (BV1tE9XBbErS), with the artist's permission, <b>for non-commercial use "
-        "only</b>. Persona based on the Claude character card in leto0309/ai-girl-desktop-pet-prompts.</p>"
+    "<p style='font-size:12pt'><b>Desk Sister</b> {0}</p><p>非官方粉丝作品，与 Anthropic、OpenAI、DeepSeek、Google、阿里云、智谱等公司无任何关联。</p><p>代码：MIT 许可。角色立绘与图标：参考 B 站 UP 主 <b>ZipZipPipe</b> 的原设用 AI 生成，经原作者同意<b>仅限非商业使用</b>。默认人设来自 leto0309/ai-girl-desktop-pet-prompts（根据 B 站 UP 主冬冰的《五个 AI 玩我的世界》系列归纳）。</p><p>隐私：她只看当前前台窗口，截图不写日志；黑名单里的窗口不截图；Ctrl+Alt+P 随时暂停。截图只在内存中处理——唯一的例外是 Codex 模式：Codex CLI 只能从文件读图，截图会短暂写入你自己的临时文件夹，调用结束后删除（文件被占用时稍后重试）。</p><p><a style='color:#B5531F' href='https://github.com/leto0309/desk-sister'>github.com/leto0309/desk-sister</a></p>":
+        "<p style='font-size:12pt'><b>Desk Sister</b> {0}</p><p>An unofficial fan work, not affiliated with Anthropic, "
+        "OpenAI, DeepSeek, Google, Alibaba Cloud, Zhipu or any other company.</p><p>Code: MIT licence. "
+        "Character art and icon: AI-generated after the original designs by Bilibili creator <b>ZipZipPipe</b>, with "
+        "the artist's permission, <b>for non-commercial use only</b>. Default personas from "
+        "leto0309/ai-girl-desktop-pet-prompts (drawn from the Bilibili series by Dongbing, \"Five AIs play Minecraft\").</p>"
         "<p>Privacy: she looks only at the window in front, and screenshots are never logged; windows on the "
         "blocklist are never captured; Ctrl+Alt+P pauses her at any time. Screenshots are handled in memory only, "
         "with one exception, Codex mode: the Codex CLI can only read images from files, so the screenshot is briefly "
@@ -346,6 +347,36 @@ TEXT = {
     "说话声音（动物语）": "Voice (Animalese)",
     # ---- focus timer and reminders
     "番茄钟与提醒": "Focus timer and reminders",
+    # ---- the girls
+    "Claude": "Claude",
+    "DeepSeek": "DeepSeek",
+    "GPT": "GPT",
+    "Gemini": "Gemini",
+    "通义千问": "Qwen",
+    "GLM": "GLM",
+    "角色": "Character",
+    "陪着你的是": "Keeping you company",
+    "她怎么称呼你": "What she calls you",
+    "默认称呼「主人」，提示词和本地台词都会用你填的称呼。":
+        "In Chinese she calls you \"master\" by default; whatever you write here is used in her prompt and "
+        "her local lines. In English she simply says \"you\" unless you write a name.",
+    "{0} 的人设提示词（{1}）": "{0}'s persona prompt ({1})",
+    "保存人设": "Save persona",
+    "恢复默认": "Restore default",
+    "（有未保存的修改）": "(unsaved changes)",
+    "（太长了：{0} / {1} 字，保存不了）": "(too long: {0} / {1} characters, it can't be saved)",
+    "（已修改，和默认不同）": "(edited, differs from the default)",
+    "（默认）": "(default)",
+    "这里只写人设；看截图的任务、回复格式和隐私规则会自动接在后面。人设里要求的其他格式不会显示成乱码。中文和英文各存一份。":
+        "Only the persona goes here; the task of looking at the screen, the reply format and the privacy rules are "
+        "added after it automatically; another format the persona asks for never shows up as gibberish. Chinese "
+        "and English are kept separately.",
+    "换我来陪主人啦～我是 {0}，请多关照！": "My turn to keep you company~ I'm {0}, nice to meet you!",
+    "抱着饭盆的小机灵鬼，开饭和干活都积极": "A clever little thing with a rice bowl, keen on meals and on work",
+    "长着龙角龙翼的领队：这件事交给我": "A leader with dragon horns and wings: leave this to me",
+    "好奇心满满的猫娘，怪东西也很可爱": "A curious cat girl who finds even odd things cute",
+    "执扇的生活搭档，先挑最值得做的事": "An everyday partner with a fan: the most worthwhile thing first",
+    "温和的狐耳女仆：我这里还有，你也来一点": "A gentle fox-eared maid: I have more here, have some too",
     "今天已完成 {0} 个番茄": "{0} pomodoros done today",
     "（说说今天各类活动花了多久、完成了几个番茄，一天一次；活动时长需要陪伴记忆）":
         "(how long today went on each activity and how many pomodoros you finished, once a day; activity times need "

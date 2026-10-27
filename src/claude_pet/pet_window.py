@@ -23,8 +23,8 @@ DRAG_THRESHOLD = 6
 STATUS_MARGIN = 8
 
 
-def placeholder_sprite(mood: str, height: int) -> QPixmap:
-    """Drawn when a sprite file is missing, so the pet still runs without art."""
+def placeholder_sprite(mood: str, height: int, label: str = "", color: str = "#e8743b") -> QPixmap:
+    """Drawn when a sprite file is missing, so the pet still runs without art: her name (if given) and the mood."""
     width = int(height * 0.7)
     pixmap = QPixmap(width, height)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -33,21 +33,24 @@ def placeholder_sprite(mood: str, height: int) -> QPixmap:
     p.setPen(QPen(QColor("#3b2416"), 3))
     p.setBrush(QColor("#f6efe6"))
     p.drawRoundedRect(QRectF(width * 0.2, height * 0.5, width * 0.6, height * 0.45), 18, 18)
-    p.setBrush(QColor("#e8743b"))
+    p.setBrush(QColor(color))
     p.drawEllipse(QRectF(width * 0.1, height * 0.05, width * 0.8, width * 0.8))
-    p.setPen(QColor("#3b2416"))
+    p.setPen(QColor("#ffffff") if label else QColor("#3b2416"))
     p.setFont(QFont("Microsoft YaHei UI", max(9, height // 18), QFont.Weight.Bold))
-    p.drawText(QRectF(0, height * 0.05, width, width * 0.8), Qt.AlignmentFlag.AlignCenter, mood)
+    p.drawText(QRectF(0, height * 0.05, width, width * 0.8), Qt.AlignmentFlag.AlignCenter,
+               f"{label}\n{mood}" if label else mood)
     p.end()
     return pixmap
 
 
-def embedded_sprite(mood: str, part: bool = False) -> QPixmap:
+def embedded_sprite(mood: str, part: bool = False, girl: str = "claude") -> QPixmap:
     """Sprite (or face part) from the generated module (a one-file exe has no assets folder). Decoded
     with Pillow, so it does not depend on Qt image-format plugins being bundled."""
-    from . import sprite_data
-    from .sprites import decode_embedded
+    from .sprites import decode_embedded, sprite_module
 
+    sprite_data = sprite_module(girl)
+    if sprite_data is None:
+        return QPixmap()
     images = getattr(sprite_data, "PART_IMAGES", {}) if part else sprite_data.SPRITES
     checksums = getattr(sprite_data, "PART_CHECKSUMS", {}) if part else sprite_data.CHECKSUMS
     data = images.get(mood)
@@ -98,32 +101,40 @@ def fit_lines(text: str, metrics: QFontMetrics, width: int, max_lines: int = 2) 
     return lines
 
 
-def load_sprites(folder: Path, height: int) -> dict[str, QPixmap]:
-    """assets/sprites PNGs when present (source checkout), else the embedded copies, else placeholders."""
+def load_sprites(folder: Path, height: int, embedded: str | None = "claude", label: str = "",
+                 color: str = "#e8743b") -> dict[str, QPixmap]:
+    """PNGs in `folder` when present (source checkout), else the girl `embedded` names' embedded copies, else
+    placeholders."""
     sprites: dict[str, QPixmap] = {}
     for mood in MOODS:
         pixmap = QPixmap(str(folder / f"{mood}.png"))
-        if pixmap.isNull():
-            pixmap = embedded_sprite(mood)
+        if pixmap.isNull() and embedded:
+            pixmap = embedded_sprite(mood, girl=embedded)
         if pixmap.isNull():
             log.warning("sprite %s missing; drawing a placeholder", mood)
-            sprites[mood] = placeholder_sprite(mood, height)
+            sprites[mood] = placeholder_sprite(mood, height, label, color)
         else:
             sprites[mood] = pixmap.scaledToHeight(height, Qt.TransformationMode.SmoothTransformation)
     return sprites
 
 
-def load_parts(folder: Path, height: int) -> dict[str, QPixmap]:
-    """Face overlay parts (assets/sprites/parts, else embedded). A missing part is simply not drawn."""
+def load_parts(folder: Path, height: int, embedded: str | None = "claude") -> dict[str, QPixmap]:
+    """Face overlay parts (<folder>/parts, else embedded). A missing part is simply not drawn; what is missing is
+    logged in one line: a girl without any parts yet just does not blink or move her mouth."""
     parts: dict[str, QPixmap] = {}
+    missing: list[str] = []
     for name in PARTS:
         pixmap = QPixmap(str(folder / "parts" / f"{name}.png"))
+        if pixmap.isNull() and embedded:
+            pixmap = embedded_sprite(name, part=True, girl=embedded)
         if pixmap.isNull():
-            pixmap = embedded_sprite(name, part=True)
-        if pixmap.isNull():
-            log.warning("face part %s missing; she will not use it", name)
+            missing.append(name)
             continue
         parts[name] = pixmap.scaledToHeight(height, Qt.TransformationMode.SmoothTransformation)
+    if missing and not parts:
+        log.info("no face parts for %s; she will not blink or move her mouth", embedded or folder.name)
+    elif missing:
+        log.warning("face parts missing for %s, not used: %s", embedded or folder.name, ", ".join(missing))
     return parts
 
 
@@ -156,7 +167,8 @@ class PetWindow(QWidget):
     patted = Signal()  # the mouse rubbed back and forth over her head (no button held)
     lifted = Signal()  # picked up: a drag just began
 
-    def __init__(self, sprite_folder: Path, sprite_height: int = 220) -> None:
+    def __init__(self, sprite_folder: Path, sprite_height: int = 220, character: str = "claude", label: str = "",
+                 accent: str = "#e8743b") -> None:
         # DoesNotAcceptFocus: clicking the pet must not steal the foreground from the window it comments on.
         flags = (Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
                  | Qt.WindowType.WindowDoesNotAcceptFocus)
@@ -166,8 +178,9 @@ class PetWindow(QWidget):
         self.setWindowTitle("Desk Sister")
         self.sprite_folder = sprite_folder
         self.sprite_height = sprite_height
-        self.sprites = load_sprites(sprite_folder, sprite_height)
-        self.parts = load_parts(sprite_folder, sprite_height)
+        self.character, self.label, self.accent = character, label, accent  # who she is, her name, her colour
+        self.address = "主人"  # what she calls the user: her Chinese lines say 主人, and are told otherwise here
+        self.sprites, self.parts = self._load_art(sprite_height)
         self._rng = random.Random()
         self._talk_started = 0.0
         self._paused_mouth = False
@@ -223,22 +236,37 @@ class PetWindow(QWidget):
         """Resize her live; her feet stay where they were (bottom centre of the window)."""
         if height == self.sprite_height:
             return
+        self.sprite_height = height
+        self._reload_keeping_feet()
+
+    def _reload_keeping_feet(self) -> None:
+        """New art (another size or another girl): the window fits it, and her feet stay where they were."""
         old = self.geometry()
         # The centre is kept as a float between resizes, so back-and-forth resizing never drifts;
         # once she has been moved, her new place is the reference.
         centre = self._feet[0] if self._feet and self._feet[1] == old.topLeft() else old.x() + old.width() / 2
-        self.sprite_height = height
-        self.sprites = load_sprites(self.sprite_folder, height)
-        self.parts = load_parts(self.sprite_folder, height)
+        self.sprites, self.parts = self._load_art(self.sprite_height)
         self._mirrored = {}
-        self._head, self._head_mask = None, None  # a new size: a new mask, no movement
+        self._head, self._head_mask = None, None  # new art: a new mask, no movement
         self._body, self._body_next = None, None
         sprite_width = max(p.width() for p in self.sprites.values())
-        self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + height + 8)
+        self.setFixedSize(max(BUBBLE_WIDTH + 20, sprite_width), self.bubble_area + self.sprite_height + 8)
         place = QPoint(round(centre - self.width() / 2), old.y() + old.height() - self.height())
         self.move(place)
         self._feet = (centre, place)
         self.update()
+
+    def _load_art(self, height: int) -> tuple[dict[str, QPixmap], dict[str, QPixmap]]:
+        """Her sprites and face parts: files when present, else her embedded copy (if she has one yet)."""
+        embedded = self.character
+        return (load_sprites(self.sprite_folder, height, embedded, self.label, self.accent),
+                load_parts(self.sprite_folder, height, embedded))
+
+    def set_character(self, character: str, sprite_folder: Path, label: str, accent: str) -> None:
+        """Another girl: her art (same size, same place on screen), her name for a placeholder, her colour."""
+        self.character, self.sprite_folder, self.label, self.accent = character, sprite_folder, label, accent
+        self.eyes = self.mouth = None
+        self._reload_keeping_feet()
 
     # ---- state -------------------------------------------------------
     def set_walking(self, direction: int) -> None:
@@ -298,8 +326,10 @@ class PetWindow(QWidget):
             self._react_body()
         self.update()
 
-    def say(self, mood: str, text: str, hold_ms: int | None = None) -> None:
+    def say(self, mood: str, text: str, hold_ms: int | None = None, verbatim: bool = False) -> None:
         """Show a line, typed out; `spoke` tells her voice what to say and how fast."""
+        if self.address != "主人" and not verbatim:
+            text = text.replace("主人", self.address)  # her own lines are written with 主人; a model's words are not
         self.last_said_at = self.clock()
         self.set_mood(mood)
         self.full_text = text
@@ -606,7 +636,7 @@ class PetWindow(QWidget):
         tail.lineTo(cx + 10, rect.bottom() - 1)
         tail.closeSubpath()
         path = path.united(tail)
-        p.setPen(QPen(QColor("#e8743b"), 2))
+        p.setPen(QPen(QColor(self.accent), 2))
         p.setBrush(QColor(255, 251, 245, 245))
         p.drawPath(path)
         p.setPen(QColor("#3b2416"))

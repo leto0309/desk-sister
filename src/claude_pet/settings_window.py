@@ -15,7 +15,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QPushButton, QRadioButton, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
+    QListWidget, QPlainTextEdit, QPushButton, QRadioButton, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from .i18n import N_, english, tr
@@ -27,6 +27,9 @@ from .bedtime import NIGHT_STARTS
 from .config import BLINK_CHOICES, INTERVAL_CHOICES, MODEL_CHOICES
 from .persona import SUMMARY_HOURS
 from .timers import BREAK_RANGE, FOCUS_RANGE
+from . import characters
+from .characters import DEFAULT as DEFAULT_CHARACTER
+from .characters import Theme
 from .voice import STYLE_NAMES as VOICE_STYLE_NAMES
 from .voice import STYLES as VOICE_STYLES
 from .providers import CLAUDE_CLI, CODEX_CLI, PROVIDERS, model_label
@@ -37,69 +40,73 @@ if TYPE_CHECKING:
 LINK_LABEL = N_("Claude Code 联动（会先征得同意，再修改 ~/.claude/settings.json）")
 BLINK_LABELS = {"off": N_("关闭"), "few": N_("少"), "normal": N_("正常"), "often": N_("多")}
 
-# Claude 娘: orange hair, white dress; Baroque: ivory, cream and gold.
-IVORY = "#FFF9F1"
-CREAM = "#FBEFDF"
-PEACH = "#F7D9BF"
-ORANGE = "#E07B39"
-DEEP = "#B5531F"
-GOLD = "#C9A45C"
-INK = "#4A2E1F"
+# Each girl has her own colours (characters.Theme); the Baroque frame, serif titles and flourishes stay.
 SERIF = '"Noto Serif SC", "Source Han Serif SC", "SimSun", "Georgia", serif'
 SANS = '"Microsoft YaHei UI", "Microsoft YaHei", sans-serif'
 
 INTERVAL_LABELS = {30: N_("30 秒"), 60: N_("1 分钟"), 90: N_("90 秒"), 120: N_("2 分钟"), 300: N_("5 分钟"), 600: N_("10 分钟")}
 UPDATE_BUTTON = {"downloading": N_("取消下载"), "ready": N_("重启并更新")}
-PAGES = (N_("常规"), N_("调用方式"), N_("观察范围"), N_("陪伴"), N_("外观"), N_("关于"))
-HEAD = (0.2575, 0.047, 0.46, 0.39)  # her face in the idle sprite, as fractions (see devtools/make_icon.py)
+PAGES = (N_("常规"), N_("角色"), N_("调用方式"), N_("观察范围"), N_("陪伴"), N_("外观"), N_("关于"))
+MOTTOS = {  # the header's subtitle for each girl
+    "claude": N_("Anthropic 家族的长女，为主人整理一切"),
+    "deepseek": N_("抱着饭盆的小机灵鬼，开饭和干活都积极"),
+    "gpt": N_("长着龙角龙翼的领队：这件事交给我"),
+    "gemini": N_("好奇心满满的猫娘，怪东西也很可爱"),
+    "qwen": N_("执扇的生活搭档，先挑最值得做的事"),
+    "glm": N_("温和的狐耳女仆：我这里还有，你也来一点"),
+}
+LINK_COLOR = "#B5531F"  # the colour links are written with; shown in the current girl's deep colour
 
-STYLE = f"""
-QDialog {{ background: {IVORY}; }}
-QWidget {{ color: {INK}; font-family: {SANS}; font-size: 10pt; }}
-QFrame#frame {{ background: {IVORY}; border: 2px solid {GOLD}; border-radius: 14px; }}
-QFrame#inner {{ background: transparent; border: 1px solid {PEACH}; border-radius: 10px; }}
-QLabel#pageTitle {{ font-family: {SERIF}; font-size: 15pt; color: {DEEP}; font-weight: bold; }}
-QLabel#hint {{ color: #8A6A55; font-size: 9pt; }}
-QLabel#fleuron {{ color: {GOLD}; font-size: 13pt; }}
-QListWidget#nav {{ background: {CREAM}; border: 1px solid {GOLD}; border-radius: 10px; padding: 6px;
+def stylesheet(t: Theme, arrows: str) -> str:
+    """The settings window's look in one girl's colours."""
+    return f"""
+QDialog {{ background: {t.ivory}; }}
+QWidget {{ color: {t.ink}; font-family: {SANS}; font-size: 10pt; }}
+QFrame#frame {{ background: {t.ivory}; border: 2px solid {t.gold}; border-radius: 14px; }}
+QFrame#inner {{ background: transparent; border: 1px solid {t.peach}; border-radius: 10px; }}
+QLabel#pageTitle {{ font-family: {SERIF}; font-size: 15pt; color: {t.deep}; font-weight: bold; }}
+QLabel#hint {{ color: {t.hint}; font-size: 9pt; }}
+QLabel#fleuron {{ color: {t.gold}; font-size: 13pt; }}
+QListWidget#nav {{ background: {t.cream}; border: 1px solid {t.gold}; border-radius: 10px; padding: 6px;
                    font-family: {SERIF}; font-size: 11pt; outline: none; }}
-QListWidget#nav::item {{ padding: 9px 14px; margin: 2px 0; border-radius: 8px; color: {INK}; }}
-QListWidget#nav::item:hover {{ background: {PEACH}; }}
-QListWidget#nav::item:selected {{ color: white; border-left: 3px solid {GOLD};
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {DEEP}, stop:1 {ORANGE}); }}
-QPushButton {{ color: white; border: 1px solid {DEEP}; border-radius: 13px; padding: 6px 16px;
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #EE9152, stop:1 {DEEP}); }}
-QPushButton:hover {{ background: {ORANGE}; }}
-QPushButton:disabled {{ background: #D9C3B0; border-color: #C9B39F; }}
-QPushButton#quiet {{ color: {DEEP}; background: {IVORY}; border: 1px solid {ORANGE}; }}
-QPushButton#quiet:hover {{ background: {CREAM}; }}
-QPushButton#quiet:disabled {{ color: #C9B39F; border-color: #E2D3C4; background: {IVORY}; }}
-QComboBox, QSpinBox, QLineEdit {{ background: white; border: 1px solid {GOLD}; border-radius: 6px; padding: 4px 8px; }}
-QComboBox:focus, QSpinBox:focus, QLineEdit:focus {{ border: 1px solid {ORANGE}; }}
+QListWidget#nav::item {{ padding: 9px 14px; margin: 2px 0; border-radius: 8px; color: {t.ink}; }}
+QListWidget#nav::item:hover {{ background: {t.peach}; }}
+QListWidget#nav::item:selected {{ color: white; border-left: 3px solid {t.gold};
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {t.deep}, stop:1 {t.main}); }}
+QPushButton {{ color: white; border: 1px solid {t.deep}; border-radius: 13px; padding: 6px 16px;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {t.light}, stop:1 {t.deep}); }}
+QPushButton:hover {{ background: {t.main}; }}
+QPushButton:disabled {{ background: {t.disabled}; border-color: {t.disabled}; }}
+QPushButton#quiet {{ color: {t.deep}; background: {t.ivory}; border: 1px solid {t.main}; }}
+QPushButton#quiet:hover {{ background: {t.cream}; }}
+QPushButton#quiet:disabled {{ color: {t.disabled}; border-color: {t.disabled}; background: {t.ivory}; }}
+QComboBox, QSpinBox, QLineEdit, QPlainTextEdit {{ background: white; border: 1px solid {t.gold}; border-radius: 6px;
+    padding: 4px 8px; }}
+QComboBox:focus, QSpinBox:focus, QLineEdit:focus, QPlainTextEdit:focus {{ border: 1px solid {t.main}; }}
 QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: center right; width: 22px; border: none; }}
-QComboBox::down-arrow {{ image: url("{{arrows}}/down.png"); width: 10px; height: 6px; }}
-QComboBox QAbstractItemView {{ background: white; border: 1px solid {GOLD}; selection-background-color: {PEACH};
-    selection-color: {INK}; outline: none; }}
+QComboBox::down-arrow {{ image: url("{arrows}/down.png"); width: 10px; height: 6px; }}
+QComboBox QAbstractItemView {{ background: white; border: 1px solid {t.gold}; selection-background-color: {t.peach};
+    selection-color: {t.ink}; outline: none; }}
 QSpinBox::up-button, QSpinBox::down-button {{ width: 18px; border: none; background: transparent; }}
-QSpinBox::up-arrow {{ image: url("{{arrows}}/up.png"); width: 9px; height: 5px; }}
-QSpinBox::down-arrow {{ image: url("{{arrows}}/down.png"); width: 9px; height: 5px; }}
-QListWidget#rules {{ background: white; border: 1px solid {GOLD}; border-radius: 6px; }}
-QListWidget#rules::item:selected {{ background: {PEACH}; color: {INK}; }}
+QSpinBox::up-arrow {{ image: url("{arrows}/up.png"); width: 9px; height: 5px; }}
+QSpinBox::down-arrow {{ image: url("{arrows}/down.png"); width: 9px; height: 5px; }}
+QListWidget#rules {{ background: white; border: 1px solid {t.gold}; border-radius: 6px; }}
+QListWidget#rules::item:selected {{ background: {t.peach}; color: {t.ink}; }}
 QCheckBox, QRadioButton {{ spacing: 8px; }}
-QCheckBox::indicator, QRadioButton::indicator {{ width: 15px; height: 15px; border: 1px solid {GOLD}; background: white; }}
+QCheckBox::indicator, QRadioButton::indicator {{ width: 15px; height: 15px; border: 1px solid {t.gold}; background: white; }}
 QCheckBox::indicator {{ border-radius: 4px; }}
 QRadioButton::indicator {{ border-radius: 8px; }}
-QCheckBox::indicator:checked, QRadioButton::indicator:checked {{ background: {ORANGE}; border: 1px solid {DEEP}; }}
-QSlider::groove:horizontal {{ height: 6px; background: {PEACH}; border-radius: 3px; }}
-QSlider::sub-page:horizontal {{ background: {ORANGE}; border-radius: 3px; }}
-QSlider::handle:horizontal {{ width: 16px; margin: -6px 0; border-radius: 8px; background: white; border: 2px solid {GOLD}; }}
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {{ background: {t.main}; border: 1px solid {t.deep}; }}
+QSlider::groove:horizontal {{ height: 6px; background: {t.peach}; border-radius: 3px; }}
+QSlider::sub-page:horizontal {{ background: {t.main}; border-radius: 3px; }}
+QSlider::handle:horizontal {{ width: 16px; margin: -6px 0; border-radius: 8px; background: white; border: 2px solid {t.gold}; }}
 """
 
 
-def arrow_folder() -> str:
-    """Small gold arrows for combo and spin boxes (style sheets need image files), drawn once."""
-    folder = Path(tempfile.gettempdir()) / "desk-sister-ui"
-    folder.mkdir(exist_ok=True)
+def arrow_folder(color: str) -> str:
+    """Small arrows in `color` for combo and spin boxes (style sheets need image files), drawn once per colour."""
+    folder = Path(tempfile.gettempdir()) / "desk-sister-ui" / color.lstrip("#").lower()
+    folder.mkdir(parents=True, exist_ok=True)
     for name, points in (("down", [(1, 2), (19, 2), (10, 11)]), ("up", [(1, 11), (19, 11), (10, 2)])):
         target = folder / f"{name}.png"
         if target.exists():
@@ -109,7 +116,7 @@ def arrow_folder() -> str:
         p = QPainter(image)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(DEEP))
+        p.setBrush(QColor(color))
         p.drawPolygon(QPolygonF([QPointF(x, y) for x, y in points]))
         p.end()
         image.save(str(target))
@@ -119,9 +126,9 @@ def arrow_folder() -> str:
 class BaroqueHeader(QWidget):
     """Her face in a gold cameo, the title in serif type, and symmetric scroll flourishes."""
 
-    def __init__(self, portrait: QPixmap, parent: QWidget | None = None) -> None:
+    def __init__(self, portrait: QPixmap, theme: Theme, motto: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.portrait = portrait
+        self.portrait, self.theme, self.motto = portrait, theme, motto
         self.setFixedHeight(118)
 
     @staticmethod
@@ -139,11 +146,12 @@ class BaroqueHeader(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w = self.width()
+        t = self.theme
         band = QLinearGradient(0, 0, 0, self.height())
-        band.setColorAt(0, QColor(CREAM))
-        band.setColorAt(1, QColor(IVORY))
+        band.setColorAt(0, QColor(t.cream))
+        band.setColorAt(1, QColor(t.ivory))
         p.fillRect(self.rect(), band)
-        gold = QPen(QColor(GOLD), 1.6)
+        gold = QPen(QColor(t.gold), 1.6)
         p.setPen(gold)
         p.drawLine(QPointF(18, self.height() - 6), QPointF(w - 18, self.height() - 6))
         p.drawLine(QPointF(30, self.height() - 2), QPointF(w - 30, self.height() - 2))
@@ -154,18 +162,18 @@ class BaroqueHeader(QWidget):
         clip.addEllipse(oval.adjusted(4, 4, -4, -4))
         p.save()
         p.setClipPath(clip)
-        p.fillRect(oval, QColor(IVORY))
+        p.fillRect(oval, QColor(t.ivory))
         if not self.portrait.isNull():
             face = self.portrait.scaled(int(oval.width()), int(oval.height()), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                         Qt.TransformationMode.SmoothTransformation)
             p.drawPixmap(int(cx - face.width() / 2), int(cy - face.height() / 2), face)
         p.restore()
-        p.setPen(QPen(QColor(GOLD), 3))
+        p.setPen(QPen(QColor(t.gold), 3))
         p.drawEllipse(oval.adjusted(3, 3, -3, -3))
-        p.setPen(QPen(QColor(DEEP), 1))
+        p.setPen(QPen(QColor(t.deep), 1))
         p.drawEllipse(oval)
         # title
-        p.setPen(QColor(DEEP))
+        p.setPen(QColor(t.deep))
         title = QFont("Noto Serif SC")
         title.setFamilies(["Noto Serif SC", "Source Han Serif SC", "SimSun", "Georgia"])
         title.setPointSize(20)
@@ -177,16 +185,16 @@ class BaroqueHeader(QWidget):
         sub.setPointSize(10)
         sub.setBold(False)
         p.setFont(sub)
-        p.setPen(QColor("#8A6A55"))
-        p.drawText(QRectF(120, 60, w - 140, 22), Qt.AlignmentFlag.AlignCenter, tr("Anthropic 家族的长女，为主人整理一切"))
+        p.setPen(QColor(t.hint))
+        p.drawText(QRectF(120, 60, w - 140, 22), Qt.AlignmentFlag.AlignCenter, self.motto)
         # flourishes either side of a fleuron, under the subtitle
         mid = 120 + (w - 140) / 2
         flourish = QPainterPath()
         self._scroll(flourish, mid - 14, 92, -1)
         self._scroll(flourish, mid + 14, 92, 1)
-        p.setPen(QPen(QColor(GOLD), 1.4))
+        p.setPen(QPen(QColor(t.gold), 1.4))
         p.drawPath(flourish)
-        p.setPen(QColor(ORANGE))
+        p.setPen(QColor(t.main))
         fleuron = QFont("Segoe UI Symbol")
         fleuron.setPointSize(13)
         p.setFont(fleuron)
@@ -223,7 +231,7 @@ class SettingsWindow(QDialog):
         super().__init__(None, Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint)
         self.ctrl = controller
         self.setWindowTitle(tr("Desk Sister · 设置"))
-        self.setStyleSheet(STYLE.replace("{arrows}", arrow_folder()))
+        self._themed = ""  # the girl whose look the window has now
         self.setMinimumSize(760, 560)
         self._syncing = False
 
@@ -234,7 +242,8 @@ class SettingsWindow(QDialog):
         outer.addWidget(frame)
         body = QVBoxLayout(frame)
         body.setContentsMargins(10, 10, 10, 10)
-        body.addWidget(BaroqueHeader(self._portrait()))
+        self.header = BaroqueHeader(QPixmap(), characters.get(DEFAULT_CHARACTER).theme, "")
+        body.addWidget(self.header)
         inner = QFrame()
         inner.setObjectName("inner")
         row = QHBoxLayout(inner)
@@ -244,7 +253,8 @@ class SettingsWindow(QDialog):
         self.nav.addItems([tr(page) for page in PAGES])
         self.nav.setFixedWidth(150)
         self.pages = QStackedWidget()
-        for build in (self._general, self._backend, self._scope, self._companion, self._appearance, self._about):
+        for build in (self._general, self._character, self._backend, self._scope, self._companion, self._appearance,
+                      self._about):
             self.pages.addWidget(build())
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
@@ -257,11 +267,31 @@ class SettingsWindow(QDialog):
             button.setDefault(False)
         self.refresh()
 
+    def _theme(self) -> None:
+        """Dress the window in the current girl's colours, with her face and words in the header."""
+        character = characters.get(self.ctrl.config.character)
+        if self._themed == character.id:
+            return
+        self._themed = character.id
+        theme = character.theme
+        self.setStyleSheet(stylesheet(theme, arrow_folder(theme.deep)))
+        self.header.portrait, self.header.theme = self._portrait(), theme
+        self.header.motto = tr(MOTTOS.get(character.id, MOTTOS[DEFAULT_CHARACTER]))
+        self.header.update()
+        self.about_label.setText(self._link(self._about_text()))
+
+    @staticmethod
+    def _about_text() -> str:
+        return tr("<p style='font-size:12pt'><b>Desk Sister</b> {0}</p><p>非官方粉丝作品，与 Anthropic、OpenAI、DeepSeek、Google、阿里云、智谱等公司无任何关联。</p><p>代码：MIT 许可。角色立绘与图标：参考 B 站 UP 主 <b>ZipZipPipe</b> 的原设用 AI 生成，经原作者同意<b>仅限非商业使用</b>。默认人设来自 leto0309/ai-girl-desktop-pet-prompts（根据 B 站 UP 主冬冰的《五个 AI 玩我的世界》系列归纳）。</p><p>隐私：她只看当前前台窗口，截图不写日志；黑名单里的窗口不截图；Ctrl+Alt+P 随时暂停。截图只在内存中处理——唯一的例外是 Codex 模式：Codex CLI 只能从文件读图，截图会短暂写入你自己的临时文件夹，调用结束后删除（文件被占用时稍后重试）。</p><p><a style='color:#B5531F' href='https://github.com/leto0309/desk-sister'>github.com/leto0309/desk-sister</a></p>", __version__)
+
+    def _link(self, html: str) -> str:
+        return html.replace(LINK_COLOR, characters.get(self.ctrl.config.character).theme.deep)
+
     def _portrait(self) -> QPixmap:
         idle = self.ctrl.window.sprites.get("idle", QPixmap())
         if idle.isNull():
             return idle
-        x, y, w, h = HEAD
+        x, y, w, h = characters.get(self.ctrl.config.character).head
         return idle.copy(int(x * idle.width()), int(y * idle.height()), int(w * idle.width()), int(h * idle.height()))
 
     # ---- pages ---------------------------------------------------------
@@ -300,6 +330,108 @@ class SettingsWindow(QDialog):
         layout.addWidget(_hint(tr("评论间隔越短、选 Sonnet，消耗的额度越多。开机自启写在你自己的「启动」文件夹里，也可以在任务管理器里管理。")))
         layout.addStretch(1)
         return page
+
+    def _character(self) -> QWidget:
+        page, layout = _page(tr("角色"))
+        grid = QGridLayout()
+        self.character_combo = QComboBox()
+        for character in characters.CHARACTERS.values():
+            self.character_combo.addItem(tr(character.name), character.id)
+        self.character_combo.currentIndexChanged.connect(
+            lambda _i: self._apply(lambda: self.ctrl.set_character(self.character_combo.currentData())))
+        self.address_edit = QLineEdit()
+        self.address_edit.setMaxLength(characters.MAX_ADDRESS)
+        self.address_edit.setPlaceholderText(characters.DEFAULT_ADDRESS)
+        self.address_edit.editingFinished.connect(lambda: self._apply(lambda: self.ctrl.set_address(self.address_edit.text())))
+        grid.addWidget(QLabel(tr("陪着你的是")), 0, 0)
+        grid.addWidget(self.character_combo, 0, 1)
+        grid.addWidget(QLabel(tr("她怎么称呼你")), 1, 0)
+        grid.addWidget(self.address_edit, 1, 1)
+        grid.setColumnStretch(2, 1)
+        layout.addLayout(grid)
+        layout.addWidget(_hint(tr("默认称呼「主人」，提示词和本地台词都会用你填的称呼。")))
+        self.persona_label = QLabel()
+        layout.addWidget(self.persona_label)
+        self.persona_edit = QPlainTextEdit()
+        self.persona_edit.setMinimumHeight(90)
+        self.persona_edit.textChanged.connect(self._persona_edited)
+        layout.addWidget(self.persona_edit, 1)
+        buttons = QHBoxLayout()
+        self.persona_save = QPushButton(tr("保存人设"))
+        self.persona_save.clicked.connect(self._save_persona)
+        self.persona_reset = QPushButton(tr("恢复默认"))
+        self.persona_reset.setObjectName("quiet")
+        self.persona_reset.clicked.connect(self._reset_persona)
+        self.persona_state = _hint("")
+        buttons.addWidget(self.persona_save)
+        buttons.addWidget(self.persona_reset)
+        buttons.addWidget(self.persona_state, 1)
+        layout.addLayout(buttons)
+        layout.addWidget(_hint(tr("这里只写人设；看截图的任务、回复格式和隐私规则会自动接在后面。人设里要求的其他格式不会显示成乱码。中文和英文各存一份。")))
+        self._persona_shown: tuple[str, bool] | None = None  # (girl, English) the editor holds
+        self._drafts = self.ctrl.persona_drafts  # unsaved edits of girls not shown now (outlive this window)
+        return page
+
+    def keep_draft(self) -> None:
+        """Before this window goes (say, rebuilt in another language): what is typed here is kept."""
+        if self.persona_save.isEnabled() and self._persona_shown is not None:
+            self._drafts[self._persona_shown] = self.persona_edit.toPlainText()
+
+    def _persona_edited(self) -> None:
+        if not self._syncing:
+            self._mark_edited()
+
+    def _mark_edited(self) -> None:
+        """The editor holds text that is not saved: it can be saved (if not too long) or thrown away."""
+        self.persona_save.setEnabled(True)
+        self.persona_reset.setEnabled(True)  # an unsaved edit can be thrown away too
+        length = len(self.persona_edit.toPlainText().strip())
+        self.persona_state.setText(tr("（有未保存的修改）") if length <= characters.MAX_PERSONA else
+                                   tr("（太长了：{0} / {1} 字，保存不了）", length, characters.MAX_PERSONA))
+
+    def _save_persona(self) -> None:
+        text = self.persona_edit.toPlainText()
+        if len(text.strip()) > characters.MAX_PERSONA:
+            self._mark_edited()  # says how long it is; the draft stays exactly as typed
+            return
+        self._apply(lambda: self.ctrl.set_persona(text))
+        self._drafts.pop((self.ctrl.config.character, english()), None)
+        self._show_persona(force=True)
+
+    def _reset_persona(self) -> None:
+        self._apply(self.ctrl.reset_persona)
+        self._drafts.pop((self.ctrl.config.character, english()), None)
+        self._show_persona(force=True)
+
+    def _show_persona(self, force: bool = False) -> None:
+        """The editor follows the girl and the language; unsaved typing survives other refreshes."""
+        key = (self.ctrl.config.character, english())
+        edited = self.persona_save.isEnabled()
+        if not force and key == self._persona_shown and edited:
+            return
+        if edited and self._persona_shown is not None and key != self._persona_shown:
+            self._drafts[self._persona_shown] = self.persona_edit.toPlainText()  # kept for when she comes back
+        text, custom = self.ctrl.persona_text()
+        draft = None if force else self._drafts.pop(key, None)
+        if draft is not None:
+            text = draft
+        was, self._syncing = self._syncing, True
+        try:
+            if self.persona_edit.toPlainText() != text:
+                self.persona_edit.setPlainText(text)
+        finally:
+            self._syncing = was
+        self._persona_shown = key
+        self.persona_save.setEnabled(False)
+        self.persona_reset.setEnabled(custom)
+        if draft is not None:
+            self._mark_edited()  # an unsaved draft from before: still unsaved
+            name = tr(characters.get(key[0]).name)
+            self.persona_label.setText(tr("{0} 的人设提示词（{1}）", name, "English" if key[1] else "中文"))
+            return
+        name = tr(characters.get(key[0]).name)
+        self.persona_label.setText(tr("{0} 的人设提示词（{1}）", name, "English" if key[1] else "中文"))
+        self.persona_state.setText(tr("（已修改，和默认不同）") if custom else tr("（默认）"))
 
     def _backend(self) -> QWidget:
         page, layout = _page(tr("调用方式"))
@@ -635,8 +767,7 @@ class SettingsWindow(QDialog):
 
     def _about(self) -> QWidget:
         page, layout = _page(tr("关于"))
-        text = QLabel(
-            tr("<p style='font-size:12pt'><b>Desk Sister</b> {0}</p><p>非官方粉丝作品，与 Anthropic 无任何关联。</p><p>代码：MIT 许可。角色立绘与图标：参考 B 站 UP 主 <b>ZipZipPipe</b> 的原设（BV1tE9XBbErS）用 AI 生成，经原作者同意<b>仅限非商业使用</b>。人设参考 leto0309/ai-girl-desktop-pet-prompts 中的 Claude 角色卡。</p><p>隐私：她只看当前前台窗口，截图不写日志；黑名单里的窗口不截图；Ctrl+Alt+P 随时暂停。截图只在内存中处理——唯一的例外是 Codex 模式：Codex CLI 只能从文件读图，截图会短暂写入你自己的临时文件夹，调用结束后删除（文件被占用时稍后重试）。</p><p><a style='color:#B5531F' href='https://github.com/leto0309/desk-sister'>github.com/leto0309/desk-sister</a></p>", __version__))
+        self.about_label = text = QLabel()
         text.setWordWrap(True)
         text.setOpenExternalLinks(True)
         text.setTextFormat(Qt.TextFormat.RichText)
@@ -715,8 +846,13 @@ class SettingsWindow(QDialog):
     def refresh(self) -> None:
         """Show the current config; signals are muted so this never applies anything."""
         cfg = self.ctrl.config
+        self._theme()
         self._syncing = True
         try:
+            self.character_combo.setCurrentIndex(max(0, self.character_combo.findData(cfg.character)))
+            if not self.address_edit.hasFocus():
+                self.address_edit.setText(cfg.address)
+            self._show_persona()
             self.pause_box.setChecked(cfg.paused)
             self.interval_combo.setCurrentIndex(max(0, self.interval_combo.findData(cfg.interval_sec)))
             provider = PROVIDERS.get(cfg.backend, PROVIDERS["subscription"])
@@ -731,7 +867,8 @@ class SettingsWindow(QDialog):
             if provider.needs_key:
                 saved = self.ctrl._has_key(provider.id)
                 self.key_status.setText(tr("{0} API Key：", provider.company) + (tr("已保存（在 Windows 凭据管理器里）") if saved else tr("还没有保存")))
-                self.key_link.setText(tr("<a style='color:#B5531F' href='{0}'>去哪里申请 Key</a>", provider.key_page))
+                self.key_link.setText(self._link(tr("<a style='color:#B5531F' href='{0}'>去哪里申请 Key</a>",
+                                                    provider.key_page)))
             else:
                 self.key_status.setText(tr("这个方式用订阅登录，不需要 API Key。"))
                 self.key_link.setText("")
@@ -785,7 +922,7 @@ class SettingsWindow(QDialog):
             self.check_now.setEnabled(not self.ctrl.update_checking)
             status = html.escape(self.ctrl.update_status)
             if self.ctrl.update_available:
-                status += tr(" · <a style='color:#B5531F' href='{0}'>打开下载页</a>", RELEASES_PAGE)
+                status += self._link(tr(" · <a style='color:#B5531F' href='{0}'>打开下载页</a>", RELEASES_PAGE))
             if self.ctrl.download_text:
                 status += "<br>" + html.escape(self.ctrl.download_text)
             self.update_label.setText(status)

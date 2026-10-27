@@ -130,3 +130,13 @@ def _silent(monkeypatch):
     from claude_pet import voice
 
     monkeypatch.setattr(voice, "_winsound_play", lambda path: None)
+
+
+@pytest.fixture(autouse=True)
+def _claude_by_default():
+    """Every test starts with Claude's lines; a test that switches girls does not leak into the next."""
+    from claude_pet import persona
+
+    persona.set_girl("claude")
+    yield
+    persona.set_girl("claude")

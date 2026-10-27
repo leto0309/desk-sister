@@ -7,6 +7,8 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
+from .characters import CHARACTERS, MAX_PERSONA, clean_address
+from .characters import DEFAULT as DEFAULT_CHARACTER
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .days import clean_birthday
@@ -85,6 +87,9 @@ class Config:
     daily_summary_hour: int = 21  # from this hour she sums up the day once; 0 = never
     summary_on: str = ""  # the day (YYYY-MM-DD) of the last summary
     language: str = ""  # "" follows the Windows display language; "zh" or "en"
+    character: str = "claude"  # which AI girl she is (characters.CHARACTERS)
+    address: str = "主人"  # what she calls the user
+    personas: dict = field(default_factory=dict)  # edited personas: {girl: {"zh": text, "en": text}}
     greeted_on: str = ""  # the day (YYYY-MM-DD) she last said her first hello, so a restart does not repeat it
     bedtime_reminder: str = "nightly"  # off | nightly | every_2h (see bedtime.py)
     night_start_hour: int = 23
@@ -165,6 +170,17 @@ class Config:
             self.summary_on = ""
         if self.language not in LANGUAGES:
             self.language = ""
+        if not isinstance(self.character, str) or self.character not in CHARACTERS:
+            self.character = DEFAULT_CHARACTER
+        self.address = clean_address(self.address)
+        personas = self.personas if isinstance(self.personas, dict) else {}
+        self.personas = {}
+        for girl, texts in personas.items():
+            if girl in CHARACTERS and isinstance(texts, dict):
+                kept = {lang: text[:MAX_PERSONA] for lang, text in texts.items()
+                        if lang in ("zh", "en") and isinstance(text, str) and text.strip()}
+                if kept:
+                    self.personas[girl] = kept
         if not isinstance(self.check_updates, bool):
             self.check_updates = True
         try:

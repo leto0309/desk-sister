@@ -19,7 +19,7 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
 from .i18n import N_, tr
-from . import __version__, agent_link, i18n, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, providers, reminder_dialog, timers, updates, voice
+from . import __version__, agent_link, i18n, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, characters, providers, reminder_dialog, timers, updates, voice
 from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
@@ -228,7 +228,12 @@ class PetController(QObject):
         self.config = config
         self.config_file = config_file
         i18n.set_language(config.language)  # before any text is made
-        self.window = PetWindow(sprite_folder, config.sprite_height)
+        self._sprite_root = sprite_folder  # Claude's art; the others' is in ../characters/<girl>
+        self.persona_drafts: dict[tuple[str, bool], str] = {}  # unsaved persona edits, by (girl, English)
+        girl = characters.get(config.character)
+        persona.set_girl(girl.id)
+        self.window = PetWindow(self._art_folder(girl.id), config.sprite_height, girl.id, tr(girl.name), girl.theme.main)
+        self.window.address = config.address
         self.window.set_blink(config.blink)
         self.window.set_talk_mouth(config.talk_mouth)
         self.window.set_head_motion(config.head_motion)
@@ -377,7 +382,7 @@ class PetController(QObject):
                 self._greeting_due = today  # after the notice
         else:
             if not self._greet_if_new_day():  # the first hello of the day, or the usual one
-                self.window.say("happy", tr("主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。"))
+                self.window.say("happy", tr("主人好～我是 {0}。我会安静待在这里，偶尔看看你在忙什么。", self._name()))
             # First look once the dwell gate can pass, so she does not wait a whole interval.
             QTimer.singleShot(max(8, self.config.dwell_sec + 1) * 1000, self.tick)
 
@@ -500,7 +505,7 @@ class PetController(QObject):
             self._last_poke_look, self._pokes_since_look = now, 0
 
     def chat(self) -> None:
-        text, ok = QInputDialog.getText(None, tr("和 Claude 说话"), tr("想对她说什么？"))
+        text, ok = QInputDialog.getText(None, tr("和 {0} 说话", self._name()), tr("想对她说什么？"))
         if ok and text.strip():
             if self.busy:
                 self.window.say("think", tr("等一下下，我还在想上一句……"))
@@ -786,7 +791,7 @@ class PetController(QObject):
         reply, self.deferred = self.deferred, None
         if self.config.paused or self.quit_pending:
             return
-        self.window.say(*self._reply_tuple(reply))
+        self.window.say(reply.mood, reply.text, verbatim=reply.model)
         self._note_bedtime(reply.text)  # only what she really said counts
 
     def _update_sleep(self) -> None:
@@ -886,13 +891,13 @@ class PetController(QObject):
             bedtime=job.bedtime,
         )
         if job.kind == CLAUDE_CLI:
-            args = claude_client.build_args(job.claude, job.model, persona.system_prompt())
+            args = claude_client.build_args(job.claude, job.model, self._system_prompt())
             result = job.call.run(args, claude_client.build_message(text, snapshot.jpeg))
         elif job.kind == CODEX_CLI:
-            result = job.call.ask(job.codex, job.model, persona.system_prompt(), text, snapshot.jpeg,
+            result = job.call.ask(job.codex, job.model, self._system_prompt(), text, snapshot.jpeg,
                                   effort=codex_client.EFFORTS.get(job.tier, "low"))
         else:
-            result = job.call.ask(job.model, persona.system_prompt(), text, snapshot.jpeg)
+            result = job.call.ask(job.model, self._system_prompt(), text, snapshot.jpeg)
         source = "claude" if job.kind == CLAUDE_CLI else job.backend
         log.info("%s call ok=%s in %.1fs", source, result.ok, time.monotonic() - started)
         if not result.ok:
@@ -978,7 +983,7 @@ class PetController(QObject):
             self._refresh_status()
             return
         self._refresh_status()
-        self.window.say(*self._reply_tuple(reply))
+        self.window.say(reply.mood, reply.text, verbatim=reply.model)
         self._note_bedtime(reply.text)  # only what she really said counts
 
     def _count_result(self, ok: bool) -> None:
@@ -1026,11 +1031,13 @@ class PetController(QObject):
             if late > timers.FORGET_AFTER_SEC:
                 log.info("dropped a reminder missed by %.0f hours", late / 3600)
                 continue
-            reply = persona.timer_line("missed" if late > timers.MISSED_AFTER_SEC else "reminder", self._rng,
-                                       reminder.text, timers.clock_text(reminder.due))
+            line = persona.timer_line("missed" if late > timers.MISSED_AFTER_SEC else "reminder", self._rng,
+                                      "\x00", timers.clock_text(reminder.due))
+            # her words take the form of address; the reminder's own text stays exactly as written
+            reply = persona.Reply(line.mood, self._addressed(line.text).replace("\x00", reminder.text), model=True)
         if self.asleep:
             self._wake(announce=False)
-        self.window.say(reply.mood, reply.text, hold_ms=TIMER_HOLD_MS)
+        self.window.say(reply.mood, reply.text, hold_ms=TIMER_HOLD_MS, verbatim=reply.model)
 
     def _focus_reply(self, now: float) -> persona.Reply | None:
         """Worded when said, from the time really left: a line held back a while still tells the truth."""
@@ -1393,7 +1400,7 @@ class PetController(QObject):
         if self._hushed():
             self.voice.stop()
             return
-        self.voice.say(tr("主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。"), "happy",
+        self.voice.say(self._addressed(tr("主人好～我是 {0}。我会安静待在这里，偶尔看看你在忙什么。", self._name())), "happy",
                        self.config.voice_style, self.config.voice_volume, 35)
 
     def set_body_motion(self, enabled: bool) -> None:
@@ -1738,6 +1745,74 @@ class PetController(QObject):
         log.info("restarting into the downloaded update")
         self.request_quit()
 
+    # ---- who she is ----------------------------------------------------------
+    def _addressed(self, text: str) -> str:
+        """One of her own lines with the user's chosen form of address."""
+        return text if self.config.address == "主人" else text.replace("主人", self.config.address)
+
+    def _name(self) -> str:
+        return tr(characters.get(self.config.character).name)
+
+    def _art_folder(self, girl: str) -> Path:
+        return self._sprite_root if girl == characters.DEFAULT else self._sprite_root.parent / "characters" / girl
+
+    def _system_prompt(self) -> str:
+        """Her persona (as edited, or the default for this girl and language) and the pet's fixed rules."""
+        lang = "en" if i18n.english() else "zh"
+        edited = self.config.personas.get(self.config.character, {}).get(lang)
+        return characters.system_prompt(self.config.character, i18n.english(), edited, self.config.address)
+
+    def persona_text(self) -> tuple[str, bool]:
+        """The persona the settings show for this girl and language, and whether it is an edited one."""
+        lang = "en" if i18n.english() else "zh"
+        edited = self.config.personas.get(self.config.character, {}).get(lang)
+        if edited:
+            return edited, True
+        return characters.default_persona(self.config.character, i18n.english()), False
+
+    def set_character(self, girl: str) -> None:
+        if girl not in characters.CHARACTERS or girl == self.config.character:
+            return
+        self._cancel_inflight()  # a reply on its way was asked of the other girl
+        self.config.character = girl
+        persona.set_girl(girl)
+        self.recent.clear()  # (another girl, other lines: what was said recently no longer applies)
+        character = characters.get(girl)
+        self.window.set_character(girl, self._art_folder(girl), tr(character.name), character.theme.main)
+        self._save()
+        log.info("now %s", girl)
+        self.window.say("happy", tr("换我来陪主人啦～我是 {0}，请多关照！", self._name()))
+
+    def set_address(self, address: str) -> None:
+        address = characters.clean_address(address)
+        if address == self.config.address:
+            return
+        self.config.address = address
+        self.window.address = address
+        self._save()
+
+    def set_persona(self, text: str) -> bool:
+        """Save an edited persona for this girl and language; one equal to the default is not kept. False (nothing
+        saved) when it is longer than characters.MAX_PERSONA: it is never cut short behind the user's back."""
+        lang = "en" if i18n.english() else "zh"
+        text = text.strip()
+        if len(text) > characters.MAX_PERSONA:
+            return False
+        texts = dict(self.config.personas.get(self.config.character, {}))
+        if not text or text == characters.default_persona(self.config.character, i18n.english()).strip():
+            texts.pop(lang, None)
+        else:
+            texts[lang] = text
+        personas = {girl: t for girl, t in self.config.personas.items() if girl != self.config.character}
+        if texts:
+            personas[self.config.character] = texts
+        self.config.personas = personas
+        self._save()
+        return True
+
+    def reset_persona(self) -> None:
+        self.set_persona("")
+
     def set_language(self, choice: str) -> None:
         """Switch her language now: the menu and an open settings window are rebuilt; lines follow at once."""
         if choice not in i18n.CHOICES:
@@ -1751,6 +1826,7 @@ class PetController(QObject):
         self._refresh_allowlist_action()
         if self.settings_window is not None:
             visible, geometry = self.settings_window.isVisible(), self.settings_window.geometry()
+            self.settings_window.keep_draft()
             self.settings_window.close()
             self.settings_window.deleteLater()
             self.settings_window = None

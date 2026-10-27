@@ -38,6 +38,15 @@ def self_test() -> int:
     for mood in persona.MOODS:
         image = decode_embedded(sprite_data.SPRITES[mood], sprite_data.CHECKSUMS[mood])  # raises if damaged
         assert image.mode == "RGBA" and image.width > 100, mood
+    # Every girl with art carries it in the exe (each module is imported by name, so the build must include it).
+    from claude_pet.sprites import sprite_module
+
+    for girl in ("deepseek", "gpt", "gemini", "qwen", "glm"):
+        module = sprite_module(girl)
+        assert module is not None, f"{girl}'s art is not in this build"
+        assert decode_embedded(module.SPRITES["idle"], module.CHECKSUMS["idle"]).width > 100, girl
+        assert persona.girl_lines(girl) is not None, f"{girl}'s lines are not in this build"
+    assert persona.system_prompt("glm").count("表情|台词") == 1  # each girl's persona and the fixed rules
     print("desk-sister self-test passed")
     return 0
 

@@ -2,13 +2,14 @@
 
 **English** · [中文](README.md)
 
-> **An unofficial fan project, not affiliated with or endorsed by Anthropic.** "Claude" and "Anthropic" are trademarks
-> of Anthropic PBC, used here only to say that this program calls Claude models.
+> **An unofficial fan project, not affiliated with or endorsed by Anthropic, OpenAI, DeepSeek, Google, Alibaba Cloud,
+> Zhipu or any other company.** Claude, GPT, Gemini, DeepSeek, Qwen, GLM and the like are their companies'
+> trademarks, used here only to name the characters and the models the program calls.
 
-A chibi girl who lives in a corner of your Windows desktop, modelled on "Claude-chan", the eldest daughter of the
-Anthropic family: gentle, restrained, a perfectionist and a code fanatic, afraid of running out of tokens, afraid of
-being formatted, and unable to stand misaligned layout. Every so often she glances at your active window and says one
-line about it: a tease, or a word of care.
+A chibi girl who lives in a corner of your Windows desktop. Every so often she glances at your active window and says
+one line about it: a tease, or a word of care. On the "Character" page of the settings you choose which AI girl keeps
+you company: Claude (the default), DeepSeek, GPT, Gemini, Qwen or GLM, each with her own persona, art and
+settings-window colours.
 
 ![Her 8 moods](docs/images/moods.png)
 
@@ -77,6 +78,11 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
 - She blinks now and then (except when happy or flustered), and her mouth moves while her words appear in the bubble,
   with each mood's own mouth shapes. The "Appearance" page sets how often she blinks (off / few / normal / often) and
   can switch the moving mouth off.
+- "Character" page: choose your AI girl; set "What she calls you" (used in her prompt and her local lines); edit the
+  current girl's persona prompt, applied with "Save persona" and undone any time with "Restore default". Chinese and
+  English are kept separately; the task of looking at the screen, the reply format and the privacy rules are added
+  after the persona by the pet. Each girl has her own local lines (self-talk, greetings, dream talk, reactions to
+  pats and dragging), in Chinese and English; festival and focus-timer lines are shared.
 - Small head movements (off by default): a little nod as she starts to talk, a tilt now and then while idle, and a duck
   when patted; switch them on in the "Appearance" page.
 - Small body movements (on by default): she swings a little as she is carried and squashes and springs back when she
@@ -191,12 +197,13 @@ Interface text lives in `src/claude_pet/i18n_en.py` (keyed by the Chinese text),
 ## Credits and licence
 
 - **Code**: MIT licence, see [LICENSE](LICENSE).
-- **The character art is not MIT**: the original character design comes from the video
-  [BV1tE9XBbErS](https://www.bilibili.com/video/BV1tE9XBbErS/) by Bilibili creator **ZipZipPipe**; this project's
-  chibi art was generated with AI after that design and is used with the original artist's permission for
-  non-commercial purposes. **Non-commercial use only, no commercial use**; credit the original artist when sharing or
+- **The character art is not MIT**: the original designs of the AI girls come from Bilibili creator **ZipZipPipe**
+  (Claude-chan: video [BV1tE9XBbErS](https://www.bilibili.com/video/BV1tE9XBbErS/)); this project's chibi art was
+  generated with AI after those designs and is used with the original artist's permission for non-commercial
+  purposes. **Non-commercial use only, no commercial use**; credit the original artist when sharing or
   reusing it. See [ASSETS-LICENSE.md](ASSETS-LICENSE.md).
-- **Persona prompt**: her personality and way of talking are based on the Claude character card in
-  [leto0309/ai-girl-desktop-pet-prompts](https://github.com/leto0309/ai-girl-desktop-pet-prompts); that card was
-  summarised and adapted by its compiler from how Claude appears in the "Five AIs play Minecraft" video series by
-  Bilibili creator **冬冰** (Dongbing), and is not an official character of the video's author or of Anthropic.
+- **Persona prompts**: each girl's default persona comes from
+  [leto0309/ai-girl-desktop-pet-prompts](https://github.com/leto0309/ai-girl-desktop-pet-prompts) (the English ones
+  are translations); those cards were summarised and adapted by their compiler from how the girls appear in the
+  "Five AIs play Minecraft" video series by Bilibili creator **冬冰** (Dongbing), and are not official characters of
+  the video's author or of any company.

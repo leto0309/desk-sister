@@ -2,12 +2,12 @@
 
 [English](README.en.md) · **中文**
 
-> **非官方粉丝作品，与 Anthropic 无任何关联，也未获其认可。** “Claude” 和 “Anthropic” 是 Anthropic PBC 的商标，
-> 这里只用于说明本程序调用的是 Claude 模型。
+> **非官方粉丝作品，与 Anthropic、OpenAI、DeepSeek、Google、阿里云、智谱等公司无任何关联，也未获其认可。**
+> 文中的 Claude、GPT、Gemini、DeepSeek、通义千问、GLM 等是各自公司的商标，这里只用来称呼角色和说明调用的模型。
 > *Unofficial fan project, not affiliated with or endorsed by Anthropic.*
 
-一个住在 Windows 桌面角落的 Q 版少女——以“Claude 娘”为原型的 Anthropic 家族长女：温柔、克制、严谨强迫症、
-代码狂魔，怕 Token 超限、怕被格式化、见不得排版不齐。她隔一会儿看一眼你当前的窗口，用一句话吐槽或关心你。
+一个住在 Windows 桌面角落的 Q 版少女，隔一会儿看一眼你当前的窗口，用一句话吐槽或关心你。可以在设置的「角色」页
+选择陪你的 AI 娘：Claude（默认）、DeepSeek、GPT、Gemini、通义千问、GLM，各有自己的人设、立绘和设置窗口配色。
 
 ![8 种表情](docs/images/moods.png)
 
@@ -67,6 +67,9 @@ Claude 桌面版自带的 claude-code。
 - 鼠标放在她身上按住 Ctrl 滚动滚轮：调整她的身高（每格 10 像素，100～600），脚站在原地。
 - 她会不时眨眼（开心和慌张的表情除外），气泡逐字出现时嘴巴会跟着一开一合，每种表情用各自的嘴型。
   在「外观」页可以调眨眼频率（关闭/少/正常/多），也可以关掉说话时动嘴。
+- 「角色」页：选择陪你的 AI 娘；填「她怎么称呼你」（默认「主人」，提示词和本地台词都会用它）；编辑当前角色的人设提示词，
+  「保存人设」后生效，「恢复默认」随时改回。中文、英文各存一份；看截图的任务、回复格式和隐私规则由桌宠自动接在人设后面。
+  每位都有自己的一套本地台词（自言自语、问候、梦话、摸头拖动等反应），中英文都有；节日、番茄钟这类台词大家共用。
 - 头部小动作（默认关闭）：开口说话时轻轻点头，闲着时偶尔歪一下头，被摸头时缩一下；在「外观」页打开。
 - 身体小动作（默认开启）：被拎起来时随拖动方向轻轻摆动，松手落地时压扁再弹回；开心时轻蹦一下，生气时跺跺脚，
   慌张时哆嗦，难过时身子往下塌、慢慢晃。都是用现有立绘变形，不需要新图；睡着、溜达、全屏免打扰时不动。不想要可以在「外观」页关掉。
@@ -143,13 +146,13 @@ PowerShell 7：`./scripts/verify.ps1` 运行测试（pytest、compileall、ruff�
 ## 致谢与许可
 
 - **代码**：MIT 许可，见 [LICENSE](LICENSE)。
-- **角色形象（立绘）不适用 MIT**：角色原设来自 B 站 UP 主 **ZipZipPipe** 的视频
-  [BV1tE9XBbErS](https://www.bilibili.com/video/BV1tE9XBbErS/)，本项目的 Q 版立绘是参考该原设用 AI 生成的，
+- **角色形象（立绘）不适用 MIT**：各位 AI 娘的原设来自 B 站 UP 主 **ZipZipPipe**（Claude 娘见视频
+  [BV1tE9XBbErS](https://www.bilibili.com/video/BV1tE9XBbErS/)），本项目的 Q 版立绘是参考原设用 AI 生成的，
   经原作者同意用于非商业用途。**仅限非商业使用，禁止商用**，转载或二次使用请注明原作者。
   详见 [ASSETS-LICENSE.md](ASSETS-LICENSE.md)。
-- **人设提示词**：性格与说话方式参考了 [leto0309/ai-girl-desktop-pet-prompts](https://github.com/leto0309/ai-girl-desktop-pet-prompts)
-  中的 Claude 角色卡；该卡由整理者根据 B 站 UP 主 **冬冰** 的《五个 AI 玩我的世界》系列视频中的表现归纳并改编，
-  不是视频作者或 Anthropic 的官方设定。
+- **人设提示词**：各角色的默认人设来自 [leto0309/ai-girl-desktop-pet-prompts](https://github.com/leto0309/ai-girl-desktop-pet-prompts)
+  （英文版为翻译）；这些角色卡由整理者根据 B 站 UP 主 **冬冰** 的《五个 AI 玩我的世界》系列视频中的表现归纳并改编，
+  不是视频作者或各家公司的官方设定。
 
 ---
 

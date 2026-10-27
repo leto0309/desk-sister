@@ -251,7 +251,7 @@ def test_api_mode_works_without_claude_code(pet, monkeypatch):
     assert ctrl.claude is None
     ctrl.tick(force=True, user_message="你好")
     [(model, system, text, jpeg, key)] = sent
-    assert model == "claude-haiku-5-5" and system == controller_module.persona.SYSTEM_PROMPT and "你好" in text and jpeg is None
+    assert model == "claude-haiku-5-5" and system == controller_module.persona.system_prompt() and "你好" in text and jpeg is None
     assert key == FAKE_KEY and "用 API 回答你" in ctrl.window.full_text
 
 

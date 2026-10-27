@@ -5,6 +5,11 @@ The factory's PyInstaller step bundles code, not loose data files, so the sprite
 base64 WebP inside a module. Re-run after changing sprites; a test fails if the module is stale.
 
 usage: python devtools/embed_sprites.py [sprites_dir] [output_module]
+       python devtools/embed_sprites.py --girl <id>   (assets/characters/<id> -> sprite_data_<id>.py)
+
+With --girl, a set may come without face parts (no parts/ folder yet): then only her eight moods are embedded
+and she simply does not blink or move her mouth. A half-made parts folder is still refused, and Claude's set
+(the default) must always be whole.
 """
 from __future__ import annotations
 
@@ -52,18 +57,23 @@ def _table(prefix: str, folder: Path, names: tuple[str, ...]) -> list[str]:
 
 
 def render(sprites_dir: Path) -> str:
-    lines = [HEADER, *_table("", sprites_dir, MOODS), "", "# Face overlay parts (blink and talk), cropped like the sprites.",
-             *_table("PART_", sprites_dir / "parts", PARTS)]
+    lines = [HEADER, *_table("", sprites_dir, MOODS)]
+    if (sprites_dir / "parts").is_dir():
+        lines += ["", "# Face overlay parts (blink and talk), cropped like the sprites.",
+                  *_table("PART_", sprites_dir / "parts", PARTS)]
     return "\n".join(lines) + "\n"
 
 
-def missing(sprites_dir: Path) -> list[Path]:
-    needed = [sprites_dir / f"{mood}.png" for mood in MOODS] + [sprites_dir / "parts" / f"{n}.png" for n in PARTS]
+def missing(sprites_dir: Path, parts_optional: bool = False) -> list[Path]:
+    needed = [sprites_dir / f"{mood}.png" for mood in MOODS]
+    if not parts_optional or (sprites_dir / "parts").is_dir():
+        needed += [sprites_dir / "parts" / f"{n}.png" for n in PARTS]
     return [path for path in needed if not path.is_file()]
 
 
-def main(sprites_dir: Path, output: Path) -> int:
-    absent = missing(sprites_dir)
+def main(sprites_dir: Path, output: Path, parts_optional: bool = False) -> int:
+    """`parts_optional` (a new girl, --girl): her moods may come without a parts folder. Claude's set must be whole."""
+    absent = missing(sprites_dir, parts_optional)
     if absent:  # an incomplete set would silently switch animations off in the exe: keep the old module
         for path in absent:
             print(f"[missing] {path}")
@@ -77,6 +87,10 @@ def main(sprites_dir: Path, output: Path) -> int:
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if args[:1] == ["--girl"] and len(args) == 2:
+        sprites = ROOT / "assets" / "characters" / args[1]
+        out = ROOT / "src" / "claude_pet" / f"sprite_data_{args[1]}.py"
+        raise SystemExit(main(sprites, out, parts_optional=True))
     sprites = Path(args[0]) if args else ROOT / "assets" / "sprites"
     out = Path(args[1]) if len(args) > 1 else ROOT / "src" / "claude_pet" / "sprite_data.py"
     raise SystemExit(main(sprites, out))

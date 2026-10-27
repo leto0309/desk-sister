@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from PySide6 import QtWidgets
 
-from claude_pet import bedtime, claude_client, persona
+from claude_pet import characters, bedtime, claude_client, persona
 from claude_pet import controller as controller_module
 from claude_pet.claude_client import ClaudeResult
 from claude_pet.config import Config, load_config
@@ -53,7 +53,9 @@ def test_the_model_is_told_whether_it_may_bring_it_up():
     assert bedtime.MAY in persona.build_user_text("t", "p.exe", "23:30", [], bedtime="ok")
     allowed_not = persona.build_user_text("t", "p.exe", "23:30", [], bedtime="no")
     assert bedtime.MAY_NOT in allowed_not and bedtime.MAY not in allowed_not
-    assert "23 点" not in persona.SYSTEM_PROMPT and "不要主动催主人睡觉" in persona.SYSTEM_PROMPT
+    for girl in characters.CHARACTERS:
+        prompt = persona.system_prompt(girl)
+        assert "23 点" not in prompt and "不要主动催主人睡觉" in prompt, girl
 
 
 def test_settings_are_kept_and_broken_values_fall_back(tmp_path):

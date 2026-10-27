@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from claude_pet import bedtime, claude_client, i18n, i18n_en, memory, persona, persona_en
+from claude_pet import characters, persona_presets_en, bedtime, claude_client, i18n, i18n_en, memory, persona, persona_en
 from claude_pet.config import Config
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
@@ -47,9 +47,12 @@ def test_the_english_has_no_chinese():
         table = getattr(persona_en, name)
         for value in table.values():
             assert not CJK.search(repr(value)), (name, value)
-    for name in ("WAKE_LINES", "SLEEP_LINES", "SELF_TALK", "NIGHT_TALK", "SLEEP_TALK", "TIME_TALK", "SYSTEM_PROMPT",
+    for name in ("WAKE_LINES", "SLEEP_LINES", "SELF_TALK", "NIGHT_TALK", "SLEEP_TALK", "TIME_TALK",
                  "BIRTHDAY_LINE", "MEMORY_TALK", "SUMMARY"):
         assert not CJK.search(repr(getattr(persona_en, name))), name
+    for girl, persona_text in persona_presets_en.EN.items():
+        assert not CJK.search(persona_text), girl
+        assert not CJK.search(characters.system_prompt(girl, True)), girl
 
 
 def shape(value):
@@ -121,7 +124,7 @@ def test_tr_fills_fields_in_both_languages():
 def test_her_lines_and_prompts_in_english():
     i18n.set_language("en")
     rng = random.Random(1)
-    assert persona.system_prompt() == persona_en.SYSTEM_PROMPT and "in English" in persona.system_prompt()
+    assert persona.system_prompt().startswith(persona_presets_en.EN["claude"]) and "in English" in persona.system_prompt()
     assert persona.fallback("error").text.startswith("Uh...")
     assert persona.interaction_line("pat", rng).text in {t for _m, t in persona_en.INTERACTION_TALK["pat"]}
     assert persona.greeting_line(8, None, False, rng).text in {t for _m, t in persona_en.GREETINGS["morning"]}
@@ -216,7 +219,7 @@ def test_switching_language_from_the_settings(pet):
     new = ctrl.settings_window
     assert new is not window and new.isVisible() and new.windowTitle() == "Desk Sister · Settings"
     assert [new.nav.item(i).text() for i in range(new.nav.count())] == [
-        "General", "How she thinks", "Watching", "Companion", "Appearance", "About"]
+        "General", "Character", "How she thinks", "Watching", "Companion", "Appearance", "About"]
     assert new.language_combo.currentData() == "en"
     ctrl.poke = lambda: None
     ctrl.toggle_pause()
@@ -359,7 +362,6 @@ def test_plenty_of_different_reactions(lines_of):
 
 def test_new_reactions_do_not_claim_to_see_what_the_user_does():
     """Reactions come from local tables: she has not looked at the screen, so no line says what the user is doing."""
-    old = {"哇，视野变高了！主人屏幕上的每个像素都看得清～", "Wow, I can see further now! Every pixel on your screen~"}
     for table in (persona.INTERACTION_TALK, persona_en.INTERACTION_TALK):
-        texts = [t for lines in table.values() for _m, t in lines if t not in old]
+        texts = [t for lines in table.values() for _m, t in lines]
         assert [t for t in texts if re.search(r"在忙什么|在做什么|what you're (up to|doing)", t)] == []
