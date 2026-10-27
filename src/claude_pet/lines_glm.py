@@ -91,6 +91,11 @@ ZH = {
         ("talk", "GLM 在这儿呢。我带了点心……想象中的那种。主人要的话，我这里还有。"),
         ("happy", "（把眼罩推到额头上）好，从现在起 GLM 陪着主人，不着急，慢慢来～"),
     ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("happy", "主人好，我是 GLM。我就在这儿慢慢陪着，偶尔看一眼主人的窗口。"),
+        ("talk", "（尾巴轻轻卷起来）GLM 在呢。我会安静待着，偶尔瞄一眼主人的窗口。"),
+        ("happy", "我是 GLM，铃铛轻轻响了一下，就当是打招呼啦～我会偶尔看看主人的窗口，不着急。"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("happy", "（耳朵轻轻抖了一下）嗯……我听见了。"), ("talk", "（安静地眯起眼）……很舒服。"),
                 ("happy", "被摸头了，那我分你一块点心。"), ("talk", "嗯，谢谢主人。"),
@@ -228,6 +233,11 @@ EN = {
         ("happy", "My turn~ I'm GLM. (her tail gives a little swish) Nice to meet you."),
         ("talk", "GLM's here. I brought snacks... the imaginary kind. If you'd like some, I have more here."),
         ("happy", "(pushes her eye mask up onto her forehead) Right, GLM's with you from now on. No rush, we'll take it slow~"),
+    ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("happy", "Hello, I'm GLM. I'm right here keeping you company, unhurried, glancing at your window now and then."),
+        ("talk", "(curls her tail up) GLM's here. I'll stay quiet and glance at your window now and then."),
+        ("happy", "I'm GLM. My little bell just gave a jingle; let's call that hello~ I'll peek at your window now and then, no rush."),
     ],
     "INTERACTION_TALK": {
         "pat": [("happy", "(an ear flicks) Mm... I heard you."),

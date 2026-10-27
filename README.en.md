@@ -145,7 +145,8 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   page first.
 - "Voice (Animalese)" (Appearance page, off by default): as she talks, every character gets a little synthesised
   babble syllable, like the villagers in Animal Crossing, in step with the text in her bubble and pitched by her mood.
-  Choose Squeaky (default) / Bright / Soft / Low, set the volume, and "Preview" a line any time. It is not real speech:
+  By default each girl has "Her own voice", all six different; or give them all one of Squeaky / Bright / Soft / Low.
+  Set the volume, and "Preview" a line any time. It is not real speech:
   nothing online, no model. Silent while asleep or in full-screen quiet, and it stops when the bubble goes.
   While it is on, a pat, being picked up, a landing and dozing off (one little snore) get a little sound too, in the
   same style and volume.

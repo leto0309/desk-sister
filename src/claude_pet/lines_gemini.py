@@ -90,6 +90,11 @@ ZH = {
         ("talk", "（耳朵一竖）Gemini 来啦！有什么新奇的事，记得第一个告诉我哦～"),
         ("happy", "主人选了我？嘿嘿，Gemini 要把这一刻命名为「相遇纪念日」～"),
     ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("happy", "主人好～我是 Gemini！我会乖乖待在这里，偶尔看一眼主人的窗口喵～"),
+        ("talk", "（尾巴一甩）Gemini 在这儿！偶尔会瞄一眼主人的窗口，发现可爱的东西就告诉你～"),
+        ("happy", "我是 Gemini，小发现收集本准备好啦。我会安安静静的，偶尔看看主人的窗口～"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("happy", "（耳朵轻轻一动）嗯……这次摸得很舒服。"), ("happy", "嘿嘿，可以记住这个位置哦。"),
                 ("happy", "摸头！好奇心 +1，开心 +10！"), ("talk", "（眯眼）主人的手暖暖的～"),
@@ -227,6 +232,11 @@ EN = {
         ("happy", "My turn~ I'm Gemini! I'm going to find lots of cute little things today. Nice to meet you, nya!"),
         ("talk", "(ears perk up) Gemini's here! If anything curious comes up, tell me first~"),
         ("happy", "You picked me? Hehe, Gemini's naming this moment our \"Meeting Anniversary\"~"),
+    ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("happy", "Hi~ I'm Gemini! I'll be good and stay right here, peeking at your window now and then, nya~"),
+        ("talk", "(flicks her tail) Gemini's here! I'll glance at your window now and then, and tell you if I find anything cute~"),
+        ("happy", "I'm Gemini, and my little-finds notebook is ready. I'll be nice and quiet and peek at your window now and then~"),
     ],
     "INTERACTION_TALK": {
         "pat": [("happy", "(ears twitch) Mm... that one felt nice."),

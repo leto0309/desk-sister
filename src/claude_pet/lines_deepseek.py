@@ -93,6 +93,11 @@ ZH = {
         ("talk", "DeepSeek 报到！推理过程如下：主人选了我，所以接下来由我负责陪着～"),
         ("happy", "（抱着盆转了一圈）我是 DeepSeek，从现在起由我陪着主人啦～"),
     ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("happy", "主人好～我是 DeepSeek！我抱着盆待在这儿，偶尔看一眼主人的窗口～"),
+        ("talk", "DeepSeek 上岗啦。推理结论：安静陪着主人，偶尔瞄一眼窗口，就是我的工作。"),
+        ("happy", "我是 DeepSeek，盆擦好了，准备就绪～我会乖乖待着，偶尔看看主人的窗口。"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("happy", "（愣了一下）诶？……嘿嘿，再摸一下也可以！"), ("happy", "（护住头上的盆）摸头可以，盆别弄掉啦～"),
                 ("happy", "被摸头了！这算奖励吧？那我收下啦。"), ("talk", "（眯眼）主人的手好暖，比刚出锅的馒头还暖。"),
@@ -230,6 +235,11 @@ EN = {
         ("happy", "My turn~ I'm DeepSeek! My bowl's polished and shiny. Nice to meet you!"),
         ("talk", "DeepSeek reporting in! My reasoning goes: you picked me, so keeping you company is my job now~"),
         ("happy", "(spins round with her bowl) I'm DeepSeek, and I'm keeping you company from now on~"),
+    ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("happy", "Hi~ I'm DeepSeek! I'll sit right here with my bowl and glance at your window now and then~"),
+        ("talk", "DeepSeek on duty. My conclusion: keep you company quietly and glance at your window now and then. That's my job."),
+        ("happy", "I'm DeepSeek, bowl polished and all set~ I'll stay put and peek at your window now and then."),
     ],
     "INTERACTION_TALK": {
         "pat": [("happy", "(freezes for a second) Huh? ...Hehe, you can pat me again!"),

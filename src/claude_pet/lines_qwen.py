@@ -90,6 +90,11 @@ ZH = {
         ("happy", "（轻摇折扇）通义千问到。小盆栽我也带来了，放哪儿好呢？"),
         ("talk", "从现在起由我通义千问陪着主人。有事尽管说，我这人最实在了。"),
     ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("talk", "主人好，我是通义千问。我就在这儿待着，偶尔看一眼主人的窗口，不打扰你。"),
+        ("happy", "（啪地合上扇子）通义千问在这儿。盆栽也安顿好了，我会安静陪着，偶尔瞄一眼主人的窗口。"),
+        ("talk", "我是通义千问。规矩很简单：我安静待着，偶尔看看主人的窗口，需要我就开口。"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("talk", "（微微一愣）……嗯，好吧，就这一下。"), ("happy", "（扶了扶帽子）摸头可以，帽子别碰歪啦。"),
                 ("happy", "被摸头了……这倒是，挺舒服的。"), ("talk", "（抿嘴一笑）这是在夸我吗？那我收下了。"),
@@ -227,6 +232,11 @@ EN = {
         ("talk", "My turn? All right, I'm Qwen. Hat straight, fan in hand. Nice to meet you."),
         ("happy", "(waves her folding fan) Qwen's here. I brought my little potted plant too; where shall I put it?"),
         ("talk", "Qwen here, keeping you company from now on. Just say if you need anything; I'm as practical as they come."),
+    ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("talk", "Hello, I'm Qwen. I'll stay right here and glance at your window now and then without getting in your way."),
+        ("happy", "(snaps her fan shut) Qwen here. The little plant's settled in; I'll keep you company quietly and glance at your window now and then."),
+        ("talk", "I'm Qwen. Simple arrangement: I stay quiet and peek at your window now and then; when you need me, just ask."),
     ],
     "INTERACTION_TALK": {
         "pat": [("talk", "(a little startled) ...Mm, all right, just this once."),

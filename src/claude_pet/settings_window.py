@@ -31,7 +31,7 @@ from . import characters
 from .characters import DEFAULT as DEFAULT_CHARACTER
 from .characters import Theme
 from .voice import STYLE_NAMES as VOICE_STYLE_NAMES
-from .voice import STYLES as VOICE_STYLES
+from .voice import CHOICES as VOICE_STYLES  # her own voice first, then the shared styles
 from .providers import CLAUDE_CLI, CODEX_CLI, PROVIDERS, model_label
 
 if TYPE_CHECKING:

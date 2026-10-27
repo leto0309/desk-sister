@@ -372,7 +372,7 @@ def test_silent_unless_chosen(pet):
     assert fake.said == []
     ctrl.set_voice(True)
     ctrl.window.say("happy", "落地成功！")
-    assert fake.said == [("落地成功！", "happy", "squeaky", 60, ctrl.window._typer.interval())]
+    assert fake.said == [("落地成功！", "happy", "claude", 60, ctrl.window._typer.interval())]
 
 
 def test_never_while_asleep_or_muted(pet):
@@ -425,12 +425,12 @@ def test_a_broken_voice_style_keeps_the_rest_of_the_settings(tmp_path, bad):
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"watch_mode": "allowlist", "voice": True, "voice_style": bad}), encoding="utf-8")
     config = load_config(path)
-    assert (config.watch_mode, config.voice, config.voice_style) == ("allowlist", True, "squeaky")
+    assert (config.watch_mode, config.voice, config.voice_style) == ("allowlist", True, "")  # her own
 
 
 def test_config_cleans_voice_fields():
     config = Config(voice="yes", voice_style="opera", voice_volume=500).normalized()
-    assert (config.voice, config.voice_style, config.voice_volume) == (False, "squeaky", 100)
+    assert (config.voice, config.voice_style, config.voice_volume) == (False, "", 100)
     assert Config(voice_volume=True).normalized().voice_volume == 60
 
 
@@ -438,7 +438,7 @@ def test_settings_row(pet):
     ctrl, fake = pet
     ctrl.open_settings()
     window = ctrl.settings_window
-    assert not window.voice_box.isChecked() and window.voice_combo.currentData() == "squeaky"
+    assert not window.voice_box.isChecked() and window.voice_combo.currentData() == ""
     window.voice_box.setChecked(True)
     window.voice_combo.setCurrentIndex(window.voice_combo.findData("soft"))
     assert ctrl.config.voice and ctrl.config.voice_style == "soft"
@@ -577,3 +577,107 @@ def test_the_window_tells_when_she_is_picked_up(app):
     window.mouseReleaseEvent(event(QEvent.Type.MouseButtonRelease, glob, Qt.MouseButton.NoButton))
     assert lifts == [1]  # once per pick-up, not per move (and not for a plain click)
     window.close()
+
+
+# ---- each girl her own voice ------------------------------------------------------------------------------
+def test_every_girl_has_her_own_voice():
+    from claude_pet import characters
+
+    assert set(voice.GIRL_VOICES) == set(characters.CHARACTERS)
+    tones = [voice.tone(girl) for girl in characters.CHARACTERS]
+    for i, (base, bright) in enumerate(tones):
+        assert 200 <= base <= 800 and 0.6 <= bright <= 1.5
+        for other_base, other_bright in tones[i + 1:]:  # heard apart, not just numbers apart: a word's own
+            ratio = max(base, other_base) / min(base, other_base)  # pitch already moves by ±14%
+            assert ratio >= 1.17 or abs(bright - other_bright) >= 0.2, (base, other_base)
+    assert voice.tone("claude") == voice.STYLES["squeaky"]  # Claude keeps the voice she always had
+    assert voice.render("你好呀", "talk", "gpt") != voice.render("你好呀", "talk", "deepseek")
+    assert voice.effect_pcm("pat", "gemini") != voice.effect_pcm("pat", "glm")
+    assert voice.CHOICES[0] == ""
+
+
+def test_an_unknown_voice_falls_back_alike_for_words_and_sounds():
+    assert voice.tone("nobody") == voice.STYLES[voice.DEFAULT_STYLE]
+    assert voice.render("你好", "talk", "nobody") == voice.render("你好", "talk", voice.DEFAULT_STYLE)
+    assert voice.effect_pcm("pat", "nobody") == voice.effect_pcm("pat", voice.DEFAULT_STYLE)
+
+
+def test_by_default_each_girl_speaks_in_her_own_voice_until_one_is_chosen(pet):
+    ctrl, fake = pet
+    ctrl.set_voice(True)
+    ctrl.set_character("gpt")
+    assert fake.said[-1][2] == "gpt"  # her hello on arriving, in her voice
+    ctrl.window.lifted.emit()
+    assert fake.effects[-1][1] == "gpt"
+    ctrl.set_voice_style("soft")  # one style for every girl
+    ctrl.set_character("qwen")
+    assert fake.said[-1][2] == "soft"
+    ctrl.set_voice_style("")  # back to their own
+    ctrl.set_character("deepseek")
+    assert fake.said[-1][2] == "deepseek" and ctrl.config.voice_style == ""
+
+
+def test_the_preview_says_her_own_first_hello_in_her_own_voice(pet):
+    from claude_pet import persona
+
+    ctrl, fake = pet
+    ctrl.set_character("glm")
+    ctrl.set_address("老板")
+    ctrl.preview_voice()
+    mood, text = persona.girl_lines("glm").ZH["HELLO_LINES"][0]
+    assert fake.said[-1][:3] == (text.replace("主人", "老板"), mood, "glm")
+
+
+@pytest.mark.parametrize(("saved", "expected"), [
+    ({"voice_style": "squeaky"}, ""),  # the old default, never really chosen: now her own
+    ({"voice_style": "low"}, "low"),  # a real choice stays
+    ({"voice_style": "squeaky", "config_version": 2}, "squeaky"),  # chosen since: stays
+    ({"voice_style": "squeaky", "config_version": 99}, "squeaky"),  # from a newer version: stays
+    ({}, ""),
+])
+def test_an_older_settings_file_moves_to_her_own_voice(tmp_path, saved, expected):
+    import json
+
+    from claude_pet.config import CONFIG_VERSION, load_config, save_config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"voice": True, **saved}), encoding="utf-8")
+    config = load_config(path)
+    assert config.voice_style == expected and config.voice
+    save_config(config, path)
+    again = load_config(path)
+    assert again.voice_style == expected and again.config_version == max(saved.get("config_version", 0), CONFIG_VERSION)
+
+
+def test_a_chosen_squeaky_survives_a_restart(tmp_path):
+    from claude_pet.config import load_config, save_config
+
+    path = tmp_path / "config.json"
+    save_config(Config(voice_style="squeaky"), path)
+    assert load_config(path).voice_style == "squeaky"
+
+@pytest.mark.parametrize(("written", "kept"), [(99, 99), ("x", 2), (True, 2), (1, 2)])
+def test_the_settings_version_is_never_lowered(tmp_path, written, kept):
+    import json
+
+    from claude_pet.config import load_config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"config_version": written}), encoding="utf-8")
+    assert load_config(path).config_version == kept
+
+
+def test_settings_switch_back_to_her_own_voice(pet):
+    ctrl, fake = pet
+    ctrl.open_settings()
+    window = ctrl.settings_window
+    window.voice_combo.setCurrentIndex(window.voice_combo.findData("soft"))
+    assert ctrl.config.voice_style == "soft"
+    window.voice_combo.setCurrentIndex(window.voice_combo.findData(""))
+    assert ctrl.config.voice_style == "" and window.voice_combo.currentIndex() == 0
+    ctrl.set_voice_style("bright")
+    window.refresh()
+    assert window.voice_combo.currentData() == "bright"
+    ctrl.set_voice_style("")
+    window.refresh()
+    assert window.voice_combo.currentIndex() == 0 and window.voice_combo.currentText() == "她自己的声音"

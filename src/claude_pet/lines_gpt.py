@@ -90,6 +90,11 @@ ZH = {
         ("talk", "GPT 就位！计划我随时都有，需要的时候叫我就好。"),
         ("happy", "换我来啦～小云也跟着来了，GPT 和小云一起请多关照！"),
     ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("happy", "主人好，我是 GPT。营地扎在这里了，我会偶尔看一眼主人的窗口，有事叫我。"),
+        ("talk", "GPT 报到！我的计划：安静待命，偶尔瞄一眼主人的窗口。"),
+        ("happy", "（龙尾轻轻一摆）我是 GPT，小云在旁边飘着。我们就在这儿，偶尔看看主人的窗口～"),
+    ],
     "INTERACTION_TALK": {
         "pat": [("talk", "（努力保持镇定）……嗯，这个我收下了。"), ("happy", "摸头？好吧，队长偶尔也可以被夸一下。"),
                 ("happy", "（龙角轻轻一晃）……再摸一下也不是不行。"), ("talk", "这是在奖励我刚才的表现吗？谢谢主人。"),
@@ -227,6 +232,11 @@ EN = {
         ("happy", "(spreads her dragon wings) I'm GPT, and I'm leading the team from now on. Nice to meet you!"),
         ("talk", "GPT in position! I always have a plan ready; just call me when you need one."),
         ("happy", "My turn~ Little Cloud came along too: GPT and Little Cloud, nice to meet you!"),
+    ],
+    "HELLO_LINES": [  # her usual hello when she starts (the first of a day is a greeting)
+        ("happy", "Hi, I'm GPT. Camp's set up right here; I'll glance at your window now and then. Call me if you need me."),
+        ("talk", "GPT reporting! My plan: stand by quietly and glance at your window now and then."),
+        ("happy", "(sweeps her dragon tail lightly) I'm GPT, with Little Cloud floating beside me. We'll stay right here and peek at your window now and then~"),
     ],
     "INTERACTION_TALK": {
         "pat": [("talk", "(tries hard to stay composed) ...Mm, I accept this."),

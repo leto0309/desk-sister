@@ -41,6 +41,13 @@ INTRO_LINES = [  # when the user switches to her
     ("happy", "You picked me? Yay! I'm Claude, and I'm here with you from now on~"),
 ]
 
+HELLO_LINES = [  # her usual hello when she starts; each says she looks now and then
+    ("happy", "Hi~ I'm Claude. I'll stay quietly right here and glance at your window now and then."),
+    ("talk", "Claude, all set~ I'm right here on the desktop, glancing at your window now and then without getting "
+             "in your way."),
+    ("happy", "Hello, I'm Claude! Context ready. I'll keep you company quietly and peek at your window now and then~"),
+]
+
 SELF_TALK = [
     ("think", "(whispers) The indentation in the code in my reading notes... it was four spaces, right? It must be."),
     ("happy", "I'm right here with you, nice and quiet~"),

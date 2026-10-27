@@ -287,7 +287,7 @@ def greetings(part):
     return {text for _mood, text in persona.GREETINGS[part]}
 
 
-INTRO = "主人好～我是 Claude。我会安静待在这里，偶尔看看你在忙什么。"
+HELLOS = {text for _mood, text in persona.HELLO_LINES}  # Claude's usual hello
 
 
 def test_first_start_of_the_day_greets_and_a_restart_does_not(pet):
@@ -297,7 +297,7 @@ def test_first_start_of_the_day_greets_and_a_restart_does_not(pet):
     assert ctrl.window.full_text in greetings("morning") and ctrl.config.greeted_on == "2026-10-21"
     ctrl.window.clear_bubble()
     ctrl.start()
-    assert ctrl.window.full_text == INTRO
+    assert ctrl.window.full_text in HELLOS
     ctrl._now = at(2026, 10, 22, 14)
     ctrl.start()
     assert ctrl.window.full_text in greetings("day")

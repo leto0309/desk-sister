@@ -382,7 +382,7 @@ class PetController(QObject):
                 self._greeting_due = today  # after the notice
         else:
             if not self._greet_if_new_day():  # the first hello of the day, or the usual one
-                self.window.say("happy", tr("主人好～我是 {0}。我会安静待在这里，偶尔看看你在忙什么。", self._name()))
+                self.window.say(*self._reply_tuple(persona.pick(persona.lines("HELLO_LINES"))))
             # First look once the dwell gate can pass, so she does not wait a whole interval.
             QTimer.singleShot(max(8, self.config.dwell_sec + 1) * 1000, self.tick)
 
@@ -1373,12 +1373,16 @@ class PetController(QObject):
         if not self.config.voice or mood == "sleep" or self._hushed():
             self.voice.stop()
             return
-        self.voice.say(text, mood, self.config.voice_style, self.config.voice_volume, char_ms)
+        self.voice.say(text, mood, self._voice_style(), self.config.voice_volume, char_ms)
+
+    def _voice_style(self) -> str:
+        """The voice chosen in Settings, or by default this girl's own."""
+        return self.config.voice_style or self.config.character
 
     def _effect(self, name: str) -> None:
         """A little sound for what happened to her: with her voice switched on, never in full-screen quiet."""
         if self.config.voice and not self.quiet and not self.quit_pending:
-            self.voice.effect(name, self.config.voice_style, self.config.voice_volume)
+            self.voice.effect(name, self._voice_style(), self.config.voice_volume)
 
     def set_voice(self, enabled: bool) -> None:
         self.config.voice = bool(enabled)
@@ -1387,7 +1391,7 @@ class PetController(QObject):
         self._save()
 
     def set_voice_style(self, style: str) -> None:
-        if style in voice.STYLES:
+        if style in voice.CHOICES:
             self.config.voice_style = style
             self._save()
 
@@ -1400,8 +1404,8 @@ class PetController(QObject):
         if self._hushed():
             self.voice.stop()
             return
-        self.voice.say(self._addressed(tr("主人好～我是 {0}。我会安静待在这里，偶尔看看你在忙什么。", self._name())), "happy",
-                       self.config.voice_style, self.config.voice_volume, 35)
+        mood, text = persona.lines("HELLO_LINES")[0]  # always the same sample, so styles can be compared
+        self.voice.say(self._addressed(text), mood, self._voice_style(), self.config.voice_volume, 35)
 
     def set_body_motion(self, enabled: bool) -> None:
         self.config.body_motion = bool(enabled)

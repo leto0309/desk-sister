@@ -145,25 +145,53 @@ def test_a_pet_started_as_a_girl_says_her_lines(pet):
     assert persona.lines("WAKE_LINES") == module.ZH["WAKE_LINES"]
 
 
-def intros(girl, english=False):
+def intros(girl, english=False, table="INTRO_LINES"):
     module = persona.girl_lines(girl)
     if module is None:  # Claude's are the shared tables
-        return (persona_en if english else persona).INTRO_LINES
-    return (module.EN if english else module.ZH)["INTRO_LINES"]
+        return getattr(persona_en if english else persona, table)
+    return (module.EN if english else module.ZH)[table]
 
 
+@pytest.mark.parametrize("table", ["INTRO_LINES", "HELLO_LINES"])
 @pytest.mark.parametrize("girl", list(characters.CHARACTERS))
-def test_each_girl_introduces_herself_by_name(girl):
+def test_each_girl_introduces_herself_by_name(girl, table):
     character = characters.get(girl)
     others = [name for g, c in characters.CHARACTERS.items() if g != girl for name in (c.name, c.name_en)]
     for english, name in ((False, character.name), (True, character.name_en)):
-        lines = intros(girl, english)
+        lines = intros(girl, english, table)
         assert len(lines) >= 3 and len({t for _m, t in lines}) == len(lines)
         for mood, text in lines:
             assert mood in persona.MOODS and name in text, text  # whoever just arrived says who she is
             assert not [other for other in others if other in text], text
-    every = [t for g in characters.CHARACTERS for english in (False, True) for _m, t in intros(g, english)]
+            if table == "HELLO_LINES":  # as she starts, she says she will look now and then
+                assert ("window" if english else "窗口") in text, text
+    every = [t for g in characters.CHARACTERS for english in (False, True) for _m, t in intros(g, english, table)]
     assert len(set(every)) == len(every)  # nobody borrows another girl's hello
+
+
+@pytest.mark.parametrize("girl", list(characters.CHARACTERS))
+def test_her_hello_does_not_repeat_her_entrance_line(girl):
+    """Switched to her, then started: the two should not sound like the same line twice."""
+    from difflib import SequenceMatcher
+
+    character = characters.get(girl)
+    for english, name, longest in ((False, character.name, 7), (True, character.name_en, 24)):
+        hellos = [t.replace(name, "\0") for _m, t in intros(girl, english, "HELLO_LINES")]  # saying her name
+        entrances = [t.replace(name, "\1") for _m, t in intros(girl, english)]  # in both is no repeat
+        actions = re.compile(r"（[^）]*）|\([^)]*\)")
+        assert not {a for t in hellos for a in actions.findall(t)} & {a for t in entrances for a in actions.findall(t)}
+        for hello in hellos:
+            for entrance in entrances:
+                match = SequenceMatcher(None, hello, entrance, autojunk=False).find_longest_match()
+                assert match.size < longest, hello[match.a:match.a + match.size]
+
+
+def test_she_starts_with_her_own_usual_hello(pet):
+    pet.set_character("gemini")
+    pet.window.clear_bubble()
+    pet.config.greeted_on = pet._today().isoformat()  # greeted today already: the usual hello
+    pet.start()
+    assert pet.window.full_text in {t for _m, t in intros("gemini", table="HELLO_LINES")}
 
 
 def test_switching_girls_she_says_her_own_hello(pet, monkeypatch):

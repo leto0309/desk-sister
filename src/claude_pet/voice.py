@@ -33,13 +33,29 @@ STYLES = {  # base pitch (Hz), brightness (how far the harmonics reach); the fir
     "soft": (360, 0.75),
     "low": (280, 0.85),
 }
-STYLE_NAMES = {"squeaky": N_("尖细可爱"), "bright": N_("清亮"), "soft": N_("柔和"), "low": N_("低沉")}  # shown through tr()
+DEFAULT_STYLE = "squeaky"  # for a style or girl nobody knows
+GIRL_VOICES = {  # each girl's own voice (the default), like STYLES: any two differ by about 3 semitones or in timbre
+    "claude": STYLES["squeaky"],  # high and cute, as she always was
+    "gemini": (680, 1.35),  # a curious cat: the highest, and the brightest
+    "gpt": (450, 1.0),  # clear and sure of herself
+    "qwen": (370, 1.0),  # composed
+    "glm": (315, 0.7),  # gentle, unhurried: soft
+    "deepseek": (265, 1.0),  # cheerful, but the deepest
+}
+CHOICES = ("", *STYLES)  # "": her own voice, else one style for every girl
+STYLE_NAMES = {"": N_("她自己的声音"), "squeaky": N_("尖细可爱"), "bright": N_("清亮"), "soft": N_("柔和"),
+               "low": N_("低沉")}  # shown through tr()
 MOODS = {  # pitch factor, spread of the pitch steps
     "idle": (1.0, 1.0), "talk": (1.0, 1.0), "happy": (1.12, 1.2), "think": (0.95, 0.7), "panic": (1.2, 1.8),
     "angry": (0.88, 1.3), "sad": (0.82, 0.6),
 }
 STEPS = 9  # pitch steps per voice, cached
 SILENT = set("，。！？、…～,.!?;；：:（）()「」『』—\n \t\"'“”")
+
+
+def tone(style: str) -> tuple[float, float]:
+    """(base pitch, brightness) for a style, or for a girl's own voice when `style` names a girl."""
+    return STYLES.get(style) or GIRL_VOICES.get(style) or STYLES[DEFAULT_STYLE]
 
 
 def _vowel(ch: str) -> str:
@@ -91,7 +107,7 @@ def _pcm(text: str, mood: str, style: str, volume: int, char_ms: int) -> bytes:
     """The whole line as 16-bit samples; empty when nothing in it is voiced."""
     if mood not in MOODS or not text.strip():
         return b""
-    base, brightness = STYLES.get(style, STYLES["bright"])
+    base, brightness = tone(style)
     factor, spread = MOODS[mood]
     slot = max(1, int(RATE * char_ms / 1000))
     blip_len = max(int(RATE * 0.03), min(int(RATE * 0.09), int(slot * 0.9)))
@@ -188,7 +204,7 @@ def effect_pcm(name: str, style: str = "squeaky", volume: int = 60) -> bytes:
     """One of EFFECTS as 16-bit samples, pitched by her voice style; empty when unknown or silent."""
     if name not in EFFECTS:
         return b""
-    base, _brightness = STYLES.get(style, STYLES["squeaky"])
+    base, _brightness = tone(style)
     gain = EFFECT_GAIN * EFFECT_LEVEL[name] * max(0, min(volume, 100)) / 100
     frames = bytearray()
     for v in _effect_shape(name, base):

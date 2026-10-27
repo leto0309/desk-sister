@@ -15,10 +15,11 @@ from .days import clean_birthday
 from .i18n import CHOICES as LANGUAGES
 from .persona import SUMMARY_HOURS
 from .timers import BREAK_RANGE, FOCUS_RANGE
-from .voice import STYLES as VOICE_STYLES
+from .voice import CHOICES as VOICE_STYLES
 from .updates import parse_version
 from .providers import BACKENDS, clean_custom_models  # every way she can think
 
+CONFIG_VERSION = 2  # 2: voice_style "" (her own voice) became the default
 BLINK_CHOICES = ("off", "few", "normal", "often")
 INTERVAL_CHOICES = (30, 60, 90, 120, 300, 600)
 MODEL_CHOICES = ("haiku", "sonnet")  # tiers: fast and cheap / smarter (each provider maps them to its models)
@@ -73,7 +74,7 @@ class Config:
     blink: str = "normal"  # off | few | normal | often
     talk_mouth: bool = True  # her mouth moves while her words appear
     voice: bool = False  # Animalese babble as she talks (off unless chosen)
-    voice_style: str = "squeaky"
+    voice_style: str = ""  # "": each girl her own voice; else one style for all (voice.CHOICES)
     voice_volume: int = 60  # 0-100
     focus_min: int = 25  # the focus timer: minutes of focus, then of a break
     break_min: int = 5
@@ -96,6 +97,7 @@ class Config:
     bedtime_reminded_at: float = 0.0  # wall-clock time of the last reminder, shared by comments and self-talk
     x: int | None = None
     y: int | None = None
+    config_version: int = CONFIG_VERSION  # what the file was written by (see load_config)
 
     def normalized(self) -> "Config":
         """Clamp out-of-range values instead of rejecting the whole file."""
@@ -148,7 +150,7 @@ class Config:
         if not isinstance(self.voice, bool):
             self.voice = False
         if not isinstance(self.voice_style, str) or self.voice_style not in VOICE_STYLES:
-            self.voice_style = "squeaky"
+            self.voice_style = ""
         if isinstance(self.voice_volume, bool) or not isinstance(self.voice_volume, int):
             self.voice_volume = 60
         self.voice_volume = min(max(self.voice_volume, 0), 100)
@@ -195,6 +197,9 @@ class Config:
         for name in ("x", "y"):
             value = getattr(self, name)
             setattr(self, name, None if value is None else int(value))
+        version = self.config_version
+        # A newer version's file keeps its number, so going back and forth never makes it look old to that version.
+        self.config_version = max(version, CONFIG_VERSION) if type(version) is int else CONFIG_VERSION
         return self
 
 
@@ -207,6 +212,10 @@ def load_config(path: Path | None = None) -> Config:
     if not isinstance(raw, dict):
         return Config()
     known = {f.name for f in fields(Config)}
+    if "config_version" not in raw and raw.get("voice_style") == "squeaky":
+        # Written before each girl had her own voice, when squeaky was everyone's default and was saved as such:
+        # it was not a choice, so she gets her own (Claude's own is squeaky anyway). Later files keep a choice.
+        raw = {**raw, "voice_style": ""}
     try:
         return Config(**{k: v for k, v in raw.items() if k in known}).normalized()
     except (TypeError, ValueError, OverflowError):  # e.g. 1e309 parses as inf

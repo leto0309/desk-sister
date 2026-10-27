@@ -47,7 +47,7 @@ def test_the_english_has_no_chinese():
         table = getattr(persona_en, name)
         for value in table.values():
             assert not CJK.search(repr(value)), (name, value)
-    for name in ("WAKE_LINES", "SLEEP_LINES", "INTRO_LINES", "SELF_TALK", "NIGHT_TALK", "SLEEP_TALK", "TIME_TALK",
+    for name in ("WAKE_LINES", "SLEEP_LINES", "INTRO_LINES", "HELLO_LINES", "SELF_TALK", "NIGHT_TALK", "SLEEP_TALK", "TIME_TALK",
                  "BIRTHDAY_LINE", "MEMORY_TALK", "SUMMARY"):
         assert not CJK.search(repr(getattr(persona_en, name))), name
     for girl, persona_text in persona_presets_en.EN.items():
@@ -67,7 +67,7 @@ def shape(value):
     return type(value).__name__
 
 
-@pytest.mark.parametrize("name", ["FALLBACK", "WAKE_LINES", "SLEEP_LINES", "INTRO_LINES", "SELF_TALK", "TIME_TALK", "NIGHT_TALK",
+@pytest.mark.parametrize("name", ["FALLBACK", "WAKE_LINES", "SLEEP_LINES", "INTRO_LINES", "HELLO_LINES", "SELF_TALK", "TIME_TALK", "NIGHT_TALK",
                                   "INTERACTION_TALK", "GREETINGS", "SLEEP_TALK", "BIRTHDAY_LINE", "SUMMARY_TAILS",
                                   "WEEKDAY_GREETINGS", "TIMER_TALK"])
 def test_english_lines_mirror_the_chinese(name):

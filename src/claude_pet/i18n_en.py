@@ -165,7 +165,6 @@ TEXT = {
     "好的，陪伴记忆都清空啦……（翻到新的一页）": "All right, my companion memory is cleared... (turns to a fresh page)",
     "记忆在我这儿清空了，但 memory.json 没能改写（{0}），我稍后会再试。":
         "My memory is cleared, but memory.json could not be rewritten ({0}); I'll try again later.",
-    "主人好～我是 {0}。我会安静待在这里，偶尔看看你在忙什么。": "Hello~ I'm {0}. I'll stay quietly here and now and then see what you're up to.",
     "我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）": "My eyes are closed right now, I'm not looking~ (Ctrl+Alt+P to resume)",
     "等一下下，我还在想上一句……": "Just a moment, I'm still thinking about the last one...",
     "主人现在好像没有打开什么窗口呢……": "Looks like you don't have any window open right now...",
@@ -413,6 +412,7 @@ TEXT = {
     "算了": "Cancel",
     "试听": "Preview",
     "音量": "Volume",
+    "她自己的声音": "Her own voice",
     "尖细可爱": "Squeaky",
     "清亮": "Bright",
     "柔和": "Soft",
