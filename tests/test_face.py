@@ -10,6 +10,7 @@ from claude_pet import pet_window, sprite_data
 from claude_pet.pet_window import BLINK_EVERY, PARTS, PetWindow
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "sprites"
+GIRLS = Path(__file__).resolve().parents[1] / "assets" / "characters"
 
 
 @pytest.fixture(scope="module")
@@ -298,16 +299,69 @@ def test_an_eye_part_is_empty_over_the_whole_mouth(tmp_path):
     assert mask.crop(module.EYES).getextrema()[1] == 255  # the eyes themselves are still covered
 
 
-def test_no_shipped_eye_part_reaches_the_mouth():
+@pytest.mark.parametrize("girl", ["claude", "deepseek", "gpt", "gemini", "qwen", "glm"])
+def test_no_shipped_eye_part_reaches_the_mouth(girl):
     from PIL import Image
 
-    mouth = Image.open(ASSETS / "parts" / "mouth_open.png").getchannel("A")
+    folder = ASSETS if girl == "claude" else GIRLS / girl
+    mouth = Image.open(folder / "parts" / "mouth_open.png").getchannel("A")
     core = mouth.point(lambda a: 255 if a > 200 else 0).getbbox()
     w, h = core[2] - core[0], core[3] - core[1]
     centre = (core[0] + w // 4, core[1] + h // 4, core[2] - w // 4, core[3] - h // 4)
     for name in PARTS:
-        if "eyes" in name:
-            assert Image.open(ASSETS / "parts" / f"{name}.png").getchannel("A").crop(centre).getextrema()[1] <= 8, name
+        if "eyes" in name and (folder / "parts" / f"{name}.png").is_file():
+            assert Image.open(folder / "parts" / f"{name}.png").getchannel("A").crop(centre).getextrema()[1] <= 8, name
+
+
+@pytest.mark.parametrize("girl", ["deepseek", "gpt", "gemini", "qwen", "glm"])
+def test_each_girl_carries_her_face_parts(app, girl):
+    """Idle's and talk's parts always, each other expression's all or none; fails when assets/characters/<girl>/parts
+    changed but embed_sprites.py --girl was not re-run."""
+    from claude_pet.pet_window import IDLE_PARTS, MOOD_PARTS, TALK_EYES, load_parts, load_sprites
+    from claude_pet.sprites import decode_embedded, sprite_module
+
+    module = sprite_module(girl)
+    shipped = {p.stem for p in (GIRLS / girl / "parts").glob("*.png")}
+    assert set(module.PART_SOURCES) == shipped == set(module.PART_IMAGES) == set(module.PART_CHECKSUMS)
+    assert set(IDLE_PARTS + TALK_EYES) <= shipped <= set(PARTS)
+    for mood, names in MOOD_PARTS.items():
+        assert len({f"{mood}_{n}" for n in names} & shipped) in (0, len(names)), mood
+    for name in shipped:
+        digest = hashlib.sha256((GIRLS / girl / "parts" / f"{name}.png").read_bytes()).hexdigest()
+        assert module.PART_SOURCES[name] == digest, f"{girl} {name}: run python devtools/embed_sprites.py --girl {girl}"
+        assert decode_embedded(module.PART_IMAGES[name], module.PART_CHECKSUMS[name]).height == 512
+    parts = load_parts(Path("definitely-missing-folder"), 220, girl)  # as in the one-file exe
+    idle = load_sprites(Path("definitely-missing-folder"), 220, girl)["idle"]
+    assert set(parts) == shipped and all(part.size() == idle.size() for part in parts.values())
+
+
+def test_every_girl_has_her_face_measured():
+    from claude_pet.characters import CHARACTERS
+
+    module = _part_script()
+    assert set(module.FACES) == set(CHARACTERS)
+    for girl, face in module.FACES.items():
+        for box in (*face.eyes, *face.mouth, face.keep):
+            assert 0 <= box[0] < box[2] <= 1024 and 0 <= box[1] < box[3] <= 1024, girl
+        mouth = face.mouth[0]
+        assert mouth[0] <= face.keep[0] < face.keep[2] <= mouth[2] and mouth[1] <= face.keep[1] < face.keep[3] <= mouth[3], girl
+
+
+def test_a_girls_eye_part_stays_in_her_eye_boxes_and_off_her_mouth():
+    from PIL import Image
+
+    module = _part_script()
+    face = module.FACES["gpt"]
+    base = Image.new("RGBA", (1024, 1024), (240, 200, 180, 255))
+    edit = Image.new("RGBA", (1024, 1024), (20, 20, 20, 255))  # different everywhere
+    mask = module.part_mask(face, base, edit, "eyes_closed")
+    assert mask.crop(face.keep).getextrema() == (0, 0)
+    for eye in face.eyes:
+        assert mask.crop(eye).getextrema()[1] == 255  # each eye is covered
+    assert mask.crop((0, 0, 1024, min(e[1] for e in face.eyes))).getextrema() == (0, 0)  # nothing above them
+    mouth = module.part_mask(face, base, edit, "mouth_open")
+    assert mouth.crop(face.keep).getextrema()[1] == 255
+    assert mouth.crop((0, 0, 1024, face.mouth[0][1])).getextrema() == (0, 0)
 
 
 def test_embedding_refuses_an_incomplete_set_of_parts(tmp_path):
@@ -332,6 +386,55 @@ def test_embedding_refuses_an_incomplete_set_of_parts(tmp_path):
     shutil.rmtree(sprites / "parts")
     assert module.main(sprites, output) == 1 and output.read_text(encoding="utf-8") == "OLD = 1"
 
+
+def test_a_new_girls_expression_parts_come_whole_or_not_at_all(tmp_path):
+    import importlib.util
+    import shutil
+
+    script = Path(__file__).resolve().parents[1] / "devtools" / "embed_sprites.py"
+    spec = importlib.util.spec_from_file_location("embed_sprites", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sprites = tmp_path / "sprites"
+    shutil.copytree(ASSETS, sprites)
+    output = tmp_path / "sprite_data_gpt.py"
+    for name in ("angry_mouth_half", "angry_mouth_open", "angry_eyes_half", "angry_eyes_closed"):
+        (sprites / "parts" / f"{name}.png").unlink()
+    assert module.missing(sprites) != [] and module.missing(sprites, whole=False) == []  # Claude's must be whole
+    assert module.main(sprites, output, whole=False) == 0
+    text = output.read_text(encoding="utf-8")
+    assert '"sad_eyes_closed"' in text and '"angry_' not in text
+    output.write_text("OLD = 1", encoding="utf-8")
+    (sprites / "parts" / "sad_mouth_open.png").unlink()  # half of an expression: refused
+    assert module.main(sprites, output, whole=False) == 1 and output.read_text(encoding="utf-8") == "OLD = 1"
+    (sprites / "parts" / "talk_eyes_half.png").unlink()
+    assert [p.name for p in module.missing(sprites, whole=False)] == ["sad_mouth_open.png", "talk_eyes_half.png"]
+
+
+def test_the_part_script_makes_a_new_girls_whole_expressions_only(tmp_path):
+    from PIL import Image
+
+    module = _part_script()
+    raw = tmp_path / "raw"
+    (raw / "parts").mkdir(parents=True)
+    image = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    image.paste((240, 200, 180, 255), (300, 100, 720, 950))
+    for mood in module.MOODS:
+        image.save(raw / f"{mood}.png")
+    for name in ("idle", *module.EDITS, "happy_mouth_half", "happy_mouth_open", "sad_mouth_half"):
+        image.save(raw / "parts" / f"{name}.png")
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "think_eyes_half.png").write_bytes(b"left from an older set")
+    (out / "idle.png").write_bytes(b"not a part: a sprite in a mistyped folder")
+    assert module.main(raw, out, girl="gpt") == 1  # sad is half made
+    assert sorted(p.name for p in out.iterdir()) == ["idle.png", "think_eyes_half.png"]
+    (raw / "parts" / "sad_mouth_half.png").unlink()
+    assert module.main(raw, out, girl="gpt") == 0
+    made = {p.stem for p in out.iterdir()}
+    assert made == {*module.EDITS, "mouth_closed", "talk_eyes_half", "talk_eyes_closed", "happy_mouth_half", "happy_mouth_open",
+                    "idle"}  # the stale part is gone, the sprite is kept
+    assert module.main(raw, out) == 1  # Claude's needs every edit
 
 @pytest.mark.parametrize(("rate", "low", "high"), [("few", 6.0, 12.0), ("normal", 3.0, 7.0), ("often", 1.5, 4.0)])
 def test_blink_rates(window, rate, low, high):
@@ -411,3 +514,19 @@ def test_a_broken_talk_mouth_value_means_the_default(tmp_path, value):
     config = load_config(path)
     assert config.talk_mouth is True and config.interval_sec == 120
 
+
+
+def test_the_readme_lineup_draws_the_parts_as_the_app_does(window):
+    """devtools/make_previews.py animates the README lineup with its own copy of the layering: it must match."""
+    import importlib.util
+
+    script = Path(__file__).resolve().parents[1] / "devtools" / "make_previews.py"
+    spec = importlib.util.spec_from_file_location("make_previews", script)
+    previews = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(previews)
+    window.walking = 0
+    faces = {face for frame, _ in previews.timeline() for face in frame.values()}
+    for mood, mouth, eyes in faces | {("talk", "mouth_open", "eyes_half"), ("talk", "mouth_closed", "eyes_closed")}:
+        window.mood, window.mouth, window.eyes = mood, mouth, eyes
+        drawn = [layer.cacheKey() for layer in window._layers()[1:]]
+        assert drawn == [window.parts[n].cacheKey() for n in previews.face_parts(mood, mouth, eyes)], (mood, mouth, eyes)

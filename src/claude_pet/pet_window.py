@@ -120,7 +120,8 @@ def load_sprites(folder: Path, height: int, embedded: str | None = "claude", lab
 
 def load_parts(folder: Path, height: int, embedded: str | None = "claude") -> dict[str, QPixmap]:
     """Face overlay parts (<folder>/parts, else embedded). A missing part is simply not drawn; what is missing is
-    logged in one line: a girl without any parts yet just does not blink or move her mouth."""
+    logged in one line: a girl without any parts yet just does not blink or move her mouth, and an expression
+    without its parts yet keeps still (both expected, so not warnings); anything else missing is a warning."""
     parts: dict[str, QPixmap] = {}
     missing: list[str] = []
     for name in PARTS:
@@ -131,10 +132,14 @@ def load_parts(folder: Path, height: int, embedded: str | None = "claude") -> di
             missing.append(name)
             continue
         parts[name] = pixmap.scaledToHeight(height, Qt.TransformationMode.SmoothTransformation)
+    who = embedded or folder.name
+    still = [mood for mood, names in MOOD_PARTS.items() if all(f"{mood}_{n}" in missing for n in names)]
     if missing and not parts:
-        log.info("no face parts for %s; she will not blink or move her mouth", embedded or folder.name)
+        log.info("no face parts for %s; she will not blink or move her mouth", who)
+    elif any(not name.startswith(tuple(f"{mood}_" for mood in still)) for name in missing):
+        log.warning("face parts missing for %s, not used: %s", who, ", ".join(missing))
     elif missing:
-        log.warning("face parts missing for %s, not used: %s", embedded or folder.name, ", ".join(missing))
+        log.info("no face parts yet for %s's %s; those expressions keep still", who, ", ".join(still))
     return parts
 
 

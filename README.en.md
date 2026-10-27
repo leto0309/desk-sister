@@ -11,7 +11,7 @@ one line about it: a tease, or a word of care. On the "Character" page of the se
 you company: Claude (the default), DeepSeek, GPT, Gemini, Qwen or GLM, each with her own persona, art and
 settings-window colours.
 
-![The six AI girls](docs/images/girls-en.png)
+![The six AI girls](docs/images/girls-en.gif)
 
 ![Claude's 8 moods](docs/images/moods-claude-en.png)
 
@@ -201,7 +201,7 @@ Requirements and acceptance criteria are in docs/requirements.md, the architectu
 Chinese). After regenerating the art run `python devtools/process_sprites.py assets/raw assets/sprites`, then
 `python devtools/embed_sprites.py` to update the embedded art (otherwise the tests report it as stale), and
 `python devtools/make_icon.py` to update the program icon assets/icon.ico; `python devtools/make_previews.py` updates
-the README previews (docs/images/girls*.png and moods-*.png).
+the README previews (docs/images/girls*.gif and moods-*.png).
 Maintainers sync from the development repository to the public one with `./devtools/Sync-PublicRepo.ps1` (it lists the
 changes first; only with `-Push` does it commit, check, scan for secrets and push).
 

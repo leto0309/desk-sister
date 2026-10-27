@@ -394,9 +394,13 @@ def test_doubao_is_not_one_of_them(tmp_path):
 
 
 def test_the_pet_shows_the_new_art(pet):
+    from claude_pet.pet_window import IDLE_PARTS, TALK_EYES
+
     pet.set_character("gpt")
     sprite = pet.window.sprites["idle"]
     assert sprite.height() == pet.config.sprite_height and sprite.width() != int(pet.config.sprite_height * 0.7)
+    assert set(IDLE_PARTS + TALK_EYES) <= set(pet.window.parts)  # she blinks and moves her mouth too
+    assert all(part.size() == sprite.size() for part in pet.window.parts.values())
 
 
 def test_missing_face_parts_are_logged_in_one_line(app, tmp_path, caplog):
@@ -406,9 +410,9 @@ def test_missing_face_parts_are_logged_in_one_line(app, tmp_path, caplog):
     from claude_pet.pet_window import load_parts
 
     with caplog.at_level(logging.INFO, logger="claude_pet"):
-        assert load_parts(tmp_path / "nothing", 220, "deepseek") == {}
+        assert load_parts(tmp_path / "nothing", 220, None) == {}  # every girl has parts now: none embedded here
     lines = [r for r in caplog.records if "face part" in r.getMessage()]
-    assert len(lines) == 1 and lines[0].levelno == logging.INFO and "deepseek" in lines[0].getMessage()
+    assert len(lines) == 1 and lines[0].levelno == logging.INFO and "nothing" in lines[0].getMessage()
     caplog.clear()
     folder = tmp_path / "some"
     (folder / "parts").mkdir(parents=True)
@@ -418,3 +422,39 @@ def test_missing_face_parts_are_logged_in_one_line(app, tmp_path, caplog):
         assert set(load_parts(folder, 220, None)) == {"eyes_half", "eyes_closed"}
     lines = [r for r in caplog.records if "face part" in r.getMessage()]
     assert len(lines) == 1 and lines[0].levelno == logging.WARNING and "mouth_open" in lines[0].getMessage()
+    caplog.clear()
+    from claude_pet.pet_window import IDLE_PARTS, TALK_EYES
+
+    for name in (*IDLE_PARTS, *TALK_EYES, "happy_mouth_half", "happy_mouth_open"):  # what a new girl may have so far
+        shutil.copy(SPRITES / "parts" / f"{name}.png", folder / "parts" / f"{name}.png")
+    with caplog.at_level(logging.INFO, logger="claude_pet"):
+        load_parts(folder, 220, None)
+    lines = [r for r in caplog.records if "face part" in r.getMessage()]
+    assert len(lines) == 1 and lines[0].levelno == logging.INFO  # expected, so not a warning
+    assert "think, panic, angry, sad" in lines[0].getMessage() and "happy" not in lines[0].getMessage()
+    caplog.clear()
+    (folder / "parts" / "happy_mouth_open.png").unlink()  # half an expression is damage
+    with caplog.at_level(logging.INFO, logger="claude_pet"):
+        load_parts(folder, 220, None)
+    lines = [r for r in caplog.records if "face part" in r.getMessage()]
+    assert len(lines) == 1 and lines[0].levelno == logging.WARNING and "happy_mouth_open" in lines[0].getMessage()
+
+
+def test_a_new_girls_expression_moves_only_with_its_own_parts(pet):
+    from claude_pet.pet_window import MOOD_PARTS
+
+    pet.set_character("gpt")
+    window = pet.window
+    window.walking = 0
+
+    def keys() -> list[int]:  # the overlays over her sprite, by identity
+        return [layer.cacheKey() for layer in window._layers()[1:]]
+
+    for mood, names in MOOD_PARTS.items():
+        window.mood, window.eyes, window.mouth = mood, "eyes_closed", "mouth_open"
+        own = [n for n in ("mouth_open", "eyes_closed") if n in names and f"{mood}_{n}" in window.parts]
+        assert keys() == [window.parts[f"{mood}_{n}"].cacheKey() for n in own], mood  # none: she keeps still
+    window.mood = "happy"
+    assert keys() == [window.parts["happy_mouth_open"].cacheKey()]  # GPT's happy parts are made
+    window.mood = "talk"
+    assert keys() == [window.parts[n].cacheKey() for n in ("mouth_closed", "mouth_open", "talk_eyes_closed")]
