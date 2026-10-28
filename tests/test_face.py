@@ -364,6 +364,49 @@ def test_a_girls_eye_part_stays_in_her_eye_boxes_and_off_her_mouth():
     assert mouth.crop((0, 0, 1024, face.mouth[0][1])).getextrema() == (0, 0)
 
 
+def test_a_new_girls_smaller_panic_mouth_covers_past_the_old_outline(tmp_path):
+    """A big panic mouth reaches the edge of her mouth box, where the box fades out: drawn smaller, the old
+    outline showed through as a pale ring. A new girl's panic mouth parts cover it (other parts, and Claude's,
+    are cut as before)."""
+    from PIL import Image, ImageChops, ImageDraw
+
+    module = _part_script()
+    skin = (240, 200, 180, 255)
+    face = module.FACES["gpt"]
+    x0, y0, x1, y1 = face.mouth[0]
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    big = Image.new("RGBA", (1024, 1024), skin)  # her panic sprite: a big mouth up to 3 px from the box edge
+    ImageDraw.Draw(big).rectangle((x0 + 3, y0 + 3, x1 - 3, y1 - 3), fill=(230, 120, 120, 255), outline=(90, 30, 30, 255),
+                                  width=3)
+    small = Image.new("RGBA", (1024, 1024), skin)  # the edit: a small mouth in the middle, skin round it
+    small.paste((200, 60, 60, 255), (cx - 12, cy - 8, cx + 12, cy + 8))
+    (tmp_path / "parts").mkdir()
+    for name in ("panic_mouth_half", "panic_mouth_open", "happy_mouth_half", "happy_mouth_open"):
+        small.save(tmp_path / "parts" / f"{name}.png")
+
+    def outline_left(wide: bool) -> dict[str, int]:
+        """How far the drawn result still is from the edit on the old outline (0: none of it shows)."""
+        made = module.mood_layers(tmp_path / "parts", {"panic": big, "happy": big}, face, ("panic", "happy"),
+                                  wide_panic=wide)
+        ring = Image.new("L", big.size, 0)
+        ImageDraw.Draw(ring).rectangle((x0 + 3, y0 + 3, x1 - 3, y1 - 3), outline=255, width=3)
+        out = {}
+        for name, layer in made.items():
+            drawn = big.copy()
+            drawn.alpha_composite(layer)
+            diff = ImageChops.difference(drawn.convert("RGB"), small.convert("RGB")).convert("L")
+            out[name] = ImageChops.multiply(diff, ring).getextrema()[1]
+        return out
+
+    wide, plain = outline_left(True), outline_left(False)
+    assert wide["panic_mouth_open"] <= 12 and wide["panic_mouth_half"] <= 12  # the old outline is gone
+    assert plain["panic_mouth_open"] > 40  # cut without widening, it showed
+    # and the script widens every new girl's, never Claude's accepted parts
+    assert not module.wide_panic_for("claude")
+    assert all(module.wide_panic_for(g) for g in module.FACES if g != "claude")
+    assert wide["happy_mouth_open"] == plain["happy_mouth_open"]  # her other parts as before
+
+
 def test_embedding_refuses_an_incomplete_set_of_parts(tmp_path):
     import importlib.util
     import shutil

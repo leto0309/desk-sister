@@ -403,6 +403,29 @@ def test_the_pet_shows_the_new_art(pet):
     assert all(part.size() == sprite.size() for part in pet.window.parts.values())
 
 
+STILL_FOR_NOW = {"gemini": ("sad",), "qwen": ("sad",), "glm": ("sad",)}  # parts not made yet (requirement 54)
+
+
+@pytest.mark.parametrize("girl", GIRLS)
+def test_each_girls_embedded_face_parts_are_as_made(app, tmp_path, caplog, girl):
+    """What each girl moves is pinned: a lost part (a warning) or newly made ones both show up here."""
+    import logging
+
+    from claude_pet.pet_window import MOOD_PARTS, PARTS, load_parts
+
+    with caplog.at_level(logging.INFO, logger="claude_pet"):
+        parts = load_parts(tmp_path / "nowhere", 220, girl)
+    still = STILL_FOR_NOW.get(girl, ())
+    assert set(parts) == {p for p in PARTS if not p.startswith(tuple(f"{m}_" for m in still))}, (
+        f"{girl}'s face parts changed: if they were made on purpose, update STILL_FOR_NOW and requirement 54")
+    lines = [r for r in caplog.records if "face part" in r.getMessage()]
+    if still:
+        assert len(lines) == 1 and lines[0].levelno == logging.INFO
+        assert girl in lines[0].getMessage() and all(mood in lines[0].getMessage() for mood in still)
+    else:
+        assert lines == [] and all(f"{m}_{n}" in parts for m, names in MOOD_PARTS.items() for n in names)
+
+
 def test_missing_face_parts_are_logged_in_one_line(app, tmp_path, caplog):
     import logging
     import shutil
@@ -443,7 +466,7 @@ def test_missing_face_parts_are_logged_in_one_line(app, tmp_path, caplog):
 def test_a_new_girls_expression_moves_only_with_its_own_parts(pet):
     from claude_pet.pet_window import MOOD_PARTS
 
-    pet.set_character("gpt")
+    pet.set_character("gemini")  # every expression made but sad (see STILL_FOR_NOW)
     window = pet.window
     window.walking = 0
 
@@ -454,7 +477,9 @@ def test_a_new_girls_expression_moves_only_with_its_own_parts(pet):
         window.mood, window.eyes, window.mouth = mood, "eyes_closed", "mouth_open"
         own = [n for n in ("mouth_open", "eyes_closed") if n in names and f"{mood}_{n}" in window.parts]
         assert keys() == [window.parts[f"{mood}_{n}"].cacheKey() for n in own], mood  # none: she keeps still
-    window.mood = "happy"
-    assert keys() == [window.parts["happy_mouth_open"].cacheKey()]  # GPT's happy parts are made
+    window.mood = "sad"
+    assert keys() == []  # not made yet: she keeps still
+    window.mood = "think"
+    assert keys() == [window.parts[n].cacheKey() for n in ("think_mouth_open", "think_eyes_closed")]
     window.mood = "talk"
     assert keys() == [window.parts[n].cacheKey() for n in ("mouth_closed", "mouth_open", "talk_eyes_closed")]

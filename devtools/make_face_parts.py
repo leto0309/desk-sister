@@ -58,10 +58,11 @@ MOOD_EDITS = {  # parts/<mood>_<part>.png, edits of that expression's own raw sp
 }
 
 
-def changed_mask(base: Image.Image, edit: Image.Image, box: tuple, keep_out: tuple[int, int, int, int] | None = None
-                 ) -> Image.Image:
+def changed_mask(base: Image.Image, edit: Image.Image, box: tuple, keep_out: tuple[int, int, int, int] | None = None,
+                 grow: int = 9) -> Image.Image:
     """The changed pixels inside `box` (one box, or a tuple of boxes), fading out towards its border. `keep_out`
-    is an area left empty (the mouth, for an eye part); Claude's single EYES box keeps MOUTH_KEEP out by default."""
+    is an area left empty (the mouth, for an eye part); Claude's single EYES box keeps MOUTH_KEEP out by default.
+    `grow`: the size (pixels, odd) of the square the changed pixels are widened by; the softening stays the same."""
     rects = box if isinstance(box[0], tuple) else (box,)
     if keep_out is None and box == EYES:
         keep_out = MOUTH_KEEP
@@ -71,7 +72,7 @@ def changed_mask(base: Image.Image, edit: Image.Image, box: tuple, keep_out: tup
     for rect in rects:
         area.paste(255, rect)
     mask = ImageChops.multiply(strongest.point(lambda v: 255 if v > 30 else 0), area)
-    mask = mask.filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(3))
+    mask = mask.filter(ImageFilter.MaxFilter(grow)).filter(ImageFilter.GaussianBlur(3))
     # The edit may have redrawn hair near the feature too: fade the area out towards its border, so no
     # straight seam shows where the patch ends.
     soft = Image.new("L", base.size, 0)
@@ -88,8 +89,24 @@ def changed_mask(base: Image.Image, edit: Image.Image, box: tuple, keep_out: tup
     return mask
 
 
-def part_mask(face: Face, base: Image.Image, edit: Image.Image, name: str) -> Image.Image:
-    return changed_mask(base, edit, boxes(face, name), face.keep if name.startswith("eyes") else None)
+def part_mask(face: Face, base: Image.Image, edit: Image.Image, name: str, grow: int = 9, widen: int = 0
+              ) -> Image.Image:
+    """`widen`: the feature's boxes grown by this many pixels on every side (within the canvas)."""
+    rects = tuple((max(0, x0 - widen), max(0, y0 - widen), min(base.width, x1 + widen), min(base.height, y1 + widen))
+                  for x0, y0, x1, y1 in boxes(face, name))
+    return changed_mask(base, edit, rects, face.keep if name.startswith("eyes") else None, grow)
+
+
+# A panic mouth is a big wavy shape that reaches the edge of her mouth box, and its talking shapes are smaller:
+# the old outline, where the box fades out, showed round them as a pale ring. So a new girl's panic mouth parts
+# use a box this much wider and a mask widened further; Claude's accepted parts stay as they are.
+PANIC_WIDEN = 20
+PANIC_GROW = 21
+
+
+def wide_panic_for(girl: str) -> bool:
+    """Whose panic mouth parts are cut with the wider box: every girl's but Claude's (hers are accepted)."""
+    return girl != "claude"
 
 
 def layers(parts_dir: Path, talk: Image.Image | None = None, face: Face = FACES["claude"]) -> dict[str, Image.Image]:
@@ -118,9 +135,10 @@ def layers(parts_dir: Path, talk: Image.Image | None = None, face: Face = FACES[
 
 
 def mood_layers(parts_dir: Path, images: dict[str, Image.Image], face: Face = FACES["claude"],
-                moods: tuple[str, ...] | None = None) -> dict[str, Image.Image]:
+                moods: tuple[str, ...] | None = None, wide_panic: bool = False) -> dict[str, Image.Image]:
     """Each expression's own parts: the changed pixels against that expression's sprite, so its own
-    mouth (or eyes) is covered by every shape made for it. `moods`: only these expressions (default all)."""
+    mouth (or eyes) is covered by every shape made for it. `moods`: only these expressions (default all).
+    `wide_panic`: panic's mouth parts cover past the old outline (PANIC_WIDEN); for the new girls."""
     out: dict[str, Image.Image] = {}
     for mood, names in MOOD_EDITS.items():
         base = images.get(mood)
@@ -129,7 +147,10 @@ def mood_layers(parts_dir: Path, images: dict[str, Image.Image], face: Face = FA
         for name in names:
             edit = Image.open(parts_dir / f"{mood}_{name}.png").convert("RGBA").resize(base.size, Image.Resampling.LANCZOS)
             layer = edit.copy()
-            layer.putalpha(part_mask(face, base, edit, name))
+            if wide_panic and mood == "panic" and name.startswith("mouth"):
+                layer.putalpha(part_mask(face, base, edit, name, PANIC_GROW, PANIC_WIDEN))
+            else:
+                layer.putalpha(part_mask(face, base, edit, name))
             out[f"{mood}_{name}"] = layer
     return out
 
@@ -164,7 +185,8 @@ def main(raw_dir: Path, out_dir: Path, height: int = 512, girl: str = "claude") 
     out_dir.mkdir(parents=True, exist_ok=True)
     face = FACES[girl]
     moods = ready_moods(raw_dir)
-    every = {**layers(raw_dir / "parts", images.get("talk"), face), **mood_layers(raw_dir / "parts", images, face, moods)}
+    moody = mood_layers(raw_dir / "parts", images, face, moods, wide_panic=wide_panic_for(girl))
+    every = {**layers(raw_dir / "parts", images.get("talk"), face), **moody}
     for name, layer in every.items():
         part = crop_scale(layer, union, height)
         part.save(out_dir / f"{name}.png", optimize=True)
