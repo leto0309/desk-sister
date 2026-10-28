@@ -393,15 +393,9 @@ TEXT = {
     "（暂停）": " (paused)",
     "提醒 {0}": "Reminder {0}",
     "提醒 {0}（共 {1} 个）": "Reminder {0} ({1} in all)",
-    "继续计时～还剩 {0}。": "Timer running again~ {0} to go.",
-    "好，先暂停，还剩 {0}。": "Paused, with {0} to go.",
-    "提醒已经有 {0} 个了，先取消几个吧～": "There are {0} reminders already; cancel a few first~",
-    "好，{0} 提醒主人：{1}": "Got it, I'll remind you at {0}: {1}",
-    "好，明天 {0} 提醒主人：{1}": "Got it, I'll remind you tomorrow at {0}: {1}",
-    "好，{0} 月 {1} 日 {2} 提醒主人：{3}": "Got it, I'll remind you on {0}/{1} at {2}: {3}",
-    "好，{0} 的提醒取消了。": "Done, the {0} reminder is cancelled.",
-    "提醒没存上（{0}），这次没有设好……": "The reminder could not be saved ({0}), so it is not set…",
-    "没能取消（{0}），提醒还在……": "Could not cancel it ({0}); the reminder is still there…",
+    "今天 {0}": "at {0}",  # when a reminder is set for (her lines for it are in TIMER_TALK)
+    "明天 {0}": "tomorrow at {0}",
+    "{0} 月 {1} 日 {2}": "on {0}/{1} at {2}",
     "番茄钟：专注": "Focus timer: focus",
     "，放松": ", break",
     "（右键菜单「番茄钟与提醒」开始；也可以在那里添加提醒）":

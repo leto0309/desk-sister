@@ -141,7 +141,9 @@ def every_timer_table():
 
 
 NEEDS = {"start": {0}, "focus_done": {1}, "break_done": {0}, "stopped": {2}, "stopped_none": set(), "reminder": {0},
-         "missed": {0, 1}}
+         "missed": {0, 1}, "paused": {0}, "resumed": {0}, "reminder_set": {0, 1}, "reminder_full": {0},
+         "reminder_not_saved": {0}, "reminder_cancelled": {0}, "reminder_not_cancelled": {0}}
+FIELDS = {"reminder": ("喝水", "14:30"), "missed": ("喝水", "14:30"), "reminder_set": ("今天 14:30", "喝水")}
 
 
 @pytest.mark.parametrize("name", list(every_timer_table()))
@@ -151,7 +153,7 @@ def test_timer_lines_never_talk_of_sleep_or_rest_and_fill_their_fields(name):
     for kind, choices in table.items():
         assert choices and len({t for _m, t in choices}) == len(choices), kind
         for mood, text in choices:
-            filled = text.format(25, 5, 3) if kind not in ("reminder", "missed") else text.format("喝水", "14:30")
+            filled = text.format(*FIELDS.get(kind, (25, 5, 3)))
             assert mood in persona.MOODS and not bedtime.mentions(filled) and "{" not in filled, (kind, text)
             used = {int(field) for field in __import__("re").findall(r"\{(\d)\}", text)}
             assert NEEDS[kind] <= used, (kind, text)  # the minutes, the count, the reminder: whatever it is for
@@ -196,6 +198,73 @@ def test_each_girl_says_her_own_timer_lines(pet, girl):
     when = timers.clock_text(pet._now() - 3600)
     assert pet.window.full_text in {t.replace("\x00", "交报告")
                                     for t in _said(table, "missed", "\x00", when, address="老板")}, girl
+
+
+@pytest.mark.parametrize("girl", list(characters.CHARACTERS))
+def test_each_girl_answers_the_timer_menu_in_her_own_words(pet, girl, monkeypatch):
+    """Pausing, resuming, setting, cancelling a reminder, and the troubles: her own lines, the facts exact."""
+    pet.set_character(girl)
+    pet.config.address = "老板"
+    table = every_timer_table()[girl]
+    pet.start_focus()
+    beat(pet, 60)
+    pet.toggle_focus_pause()
+    assert pet.window.full_text in _said(table, "paused", "24:00", address="老板"), girl
+    pet.toggle_focus_pause()
+    assert pet.window.full_text in _said(table, "resumed", "24:00", address="老板"), girl
+    pet.stop_focus()
+    # her words take the address; the reminder's own words stay as written. Every line, in turn.
+    for line in table["reminder_set"]:
+        pet._rng = Picks(line)
+        pet._ask_reminder = lambda clock: (timers.due_in(clock(), 30), "给主人回电话")
+        pet.add_reminder()
+        when = "今天 " + timers.clock_text(pet.reminders.items[-1].due)
+        assert pet.window.full_text == line[1].replace("主人", "老板").format(when, "给主人回电话"), girl
+    pet._rng = random.Random(1)
+    first = pet.reminders.items[0]
+    pet.cancel_reminder(first.id)
+    assert pet.window.full_text in _said(table, "reminder_cancelled", timers.clock_text(first.due), address="老板")
+    while pet.reminders.add(pet._now() + 7200, "占位"):
+        pass
+    pet._ask_reminder = lambda clock: (clock() + 60, "再来一个")
+    pet.add_reminder()
+    assert pet.window.full_text in _said(table, "reminder_full", timers.MAX_REMINDERS, address="老板"), girl
+
+    def locked(_items):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(pet.reminders, "_write", locked)
+    pet.cancel_reminder(pet.reminders.items[0].id)
+    assert pet.window.full_text in _said(table, "reminder_not_cancelled", "Access is denied", address="老板"), girl
+    pet.reminders.items.pop()  # room again, but the file stays locked
+    pet.add_reminder()
+    assert pet.window.full_text in _said(table, "reminder_not_saved", "Access is denied", address="老板"), girl
+
+
+@pytest.mark.parametrize("language", ["zh", "en"])
+def test_a_reminder_set_for_tomorrow_or_later_says_the_day(pet, language):
+    """Through the menu, in both languages: today, tomorrow or the date, and the reminder as written."""
+    pet.config.address = "老板"
+    i18n.set_language(language)
+    try:
+        said = {}
+        for days in (0, 1, 3):
+            due = pet._now() + days * 86400 + 1800
+            pet._ask_reminder = lambda clock, due=due: (due, "给主人回电话")
+            pet.add_reminder()
+            day, clock = datetime.date.fromtimestamp(due), timers.clock_text(due)
+            said[days] = (pet.window.full_text, day, clock)
+    finally:
+        i18n.set_language("zh")
+    for days, (text, day, clock) in said.items():
+        assert text.endswith("给主人回电话"), text  # the reminder exactly as written, "主人" and all
+        assert "主人" not in text[:-len("给主人回电话")], text  # her own words take the address
+    if language == "zh":
+        assert "今天 " + said[0][2] in said[0][0] and "明天 " + said[1][2] in said[1][0]
+        assert f"{said[3][1].month} 月 {said[3][1].day} 日 {said[3][2]}" in said[3][0]
+    else:
+        assert "at " + said[0][2] in said[0][0] and "tomorrow at " + said[1][2] in said[1][0]
+        assert f"on {said[3][1].month}/{said[3][1].day} at {said[3][2]}" in said[3][0]
 
 
 # ---- the pet ---------------------------------------------------------------------------------------------

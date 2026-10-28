@@ -121,6 +121,27 @@ ZH = {
         "missed": [
             ("talk", "{1} 本该有个提醒，我没赶上，现在补上：{0}"),
         ],
+        "paused": [  # {0}: the time left
+            ("talk", "全队原地待命，还剩 {0}。"),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "继续前进！还剩 {0}，跟上～"),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("happy", "已写进行程表，{0} 提醒主人：{1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "行程表上已经有 {0} 个提醒了，先划掉几个吧。"),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "行程表没写进去（{0}），这个提醒没设好……"),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "收到，{0} 的提醒从行程表上划掉了。"),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "没划掉（{0}），提醒还在行程表上……"),
+        ],
     },
     "INTERACTION_TALK": {
         "pat": [("talk", "（努力保持镇定）……嗯，这个我收下了。"), ("happy", "摸头？好吧，队长偶尔也可以被夸一下。"),
@@ -290,6 +311,27 @@ EN = {
         ],
         "missed": [
             ("talk", "There was a reminder due at {1}; I missed it, so here it is now: {0}"),
+        ],
+        "paused": [  # {0}: the time left
+            ("talk", "Whole team, hold position. {0} to go."),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "Moving out again! {0} to go, keep up~"),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("happy", "Added to the itinerary. I'll remind you {0}: {1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "There are {0} reminders on the itinerary already; cross a few off first."),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "It didn't make it into the itinerary ({0}), so the reminder isn't set…"),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "Copy that, the {0} reminder is off the itinerary."),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "Couldn't cross it off ({0}); the reminder is still on the itinerary…"),
         ],
     },
     "INTERACTION_TALK": {

@@ -121,6 +121,27 @@ ZH = {
         "missed": [
             ("talk", "刚才 {1} 有个提醒，我追蝴蝶去了没赶上……补上：{0}"),
         ],
+        "paused": [  # {0}: the time left
+            ("talk", "暂停喵～还剩 {0}，我先蹲在这里等。"),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "继续喵！还剩 {0}～"),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("happy", "记进收集本啦！{0} 提醒主人：{1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "收集本上已经有 {0} 个提醒了，写不下啦，先取消几个喵～"),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "呜喵，提醒没存上（{0}），这次没设好……"),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "好，{0} 的提醒从收集本上擦掉了喵。"),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "擦不掉（{0}），提醒还在……喵。"),
+        ],
     },
     "INTERACTION_TALK": {
         "pat": [("happy", "（耳朵轻轻一动）嗯……这次摸得很舒服。"), ("happy", "嘿嘿，可以记住这个位置哦。"),
@@ -290,6 +311,27 @@ EN = {
         ],
         "missed": [
             ("talk", "There was a reminder at {1}; I was off chasing a butterfly and missed it... here: {0}"),
+        ],
+        "paused": [  # {0}: the time left
+            ("talk", "Paused, nya~ {0} to go; I'll sit right here and wait."),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "Back on, nya! {0} to go~"),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("happy", "Into my collection book it goes! I'll remind you {0}: {1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "My collection book already has {0} reminders, no room left; cancel a few first, nya~"),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "Mew… the reminder couldn't be saved ({0}), so it isn't set…"),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "Okay, the {0} reminder is wiped from my collection book, nya."),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "It won't come off ({0}); the reminder is still there… nya."),
         ],
     },
     "INTERACTION_TALK": {

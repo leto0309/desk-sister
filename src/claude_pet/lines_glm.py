@@ -122,6 +122,27 @@ ZH = {
         "missed": [
             ("talk", "{1} 的时候有个提醒，我说晚了一点：{0}"),
         ],
+        "paused": [  # {0}: the time left
+            ("talk", "嗯，先停下，还剩 {0}。不着急～"),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "（铃铛轻轻响了一下）继续吧，还剩 {0}。"),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("happy", "好，我记着了。{0} 提醒主人：{1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "已经记了 {0} 个提醒了，我记不过来啦，先取消几个好吗？"),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "提醒没存上（{0}）……这次没设好，对不起。"),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "好，{0} 的提醒不用记了。"),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "没能取消（{0}），提醒还在，我先继续记着……"),
+        ],
     },
     "INTERACTION_TALK": {
         "pat": [("happy", "（耳朵轻轻抖了一下）嗯……我听见了。"), ("talk", "（安静地眯起眼）……很舒服。"),
@@ -291,6 +312,27 @@ EN = {
         ],
         "missed": [
             ("talk", "There was a reminder for {1}; I'm a little late with it: {0}"),
+        ],
+        "paused": [  # {0}: the time left
+            ("talk", "Mm, paused. {0} to go. No hurry~"),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "(her bell gives a soft ring) Let's carry on, {0} to go."),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("happy", "Okay, I'll keep it in mind. I'll remind you {0}: {1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "I'm already keeping {0} reminders, I can't hold more; could you cancel a few first?"),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "The reminder couldn't be saved ({0})… it isn't set, I'm sorry."),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "Okay, I don't need to keep the {0} reminder anymore."),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "I couldn't cancel it ({0}); the reminder is still there, so I'll keep it in mind…"),
         ],
     },
     "INTERACTION_TALK": {

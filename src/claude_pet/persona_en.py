@@ -230,6 +230,27 @@ TIMER_TALK = {
     "missed": [
         ("talk", "There was a reminder for {1} I couldn't say in time: {0}"),
     ],
+    "paused": [  # {0}: the time left
+        ("talk", "Paused, with {0} to go."),
+    ],
+    "resumed": [  # {0}: the time left
+        ("happy", "Timer running again~ {0} to go."),
+    ],
+    "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+        ("happy", "Got it, I'll remind you {0}: {1}"),
+    ],
+    "reminder_full": [  # {0}: how many there may be
+        ("think", "There are {0} reminders already; cancel a few first~"),
+    ],
+    "reminder_not_saved": [  # {0}: why
+        ("sad", "The reminder could not be saved ({0}), so it is not set…"),
+    ],
+    "reminder_cancelled": [  # {0}: its time
+        ("talk", "Done, the {0} reminder is cancelled."),
+    ],
+    "reminder_not_cancelled": [  # {0}: why
+        ("sad", "Could not cancel it ({0}); the reminder is still there…"),
+    ],
 }
 
 

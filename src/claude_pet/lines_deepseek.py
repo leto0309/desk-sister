@@ -124,6 +124,27 @@ ZH = {
         "missed": [
             ("talk", "刚才 {1} 有个提醒，我晚了一步：{0}"),
         ],
+        "paused": [  # {0}: the time left
+            ("talk", "好，先暂停～还剩 {0}，我把盆放下等你。"),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "继续！还剩 {0}，我抱好盆了～"),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("happy", "记下啦！{0} 提醒主人：{1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "盆里已经装了 {0} 个提醒，装不下了……先取消几个吧～"),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "呜，提醒没存上（{0}），这次没设好……"),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "好，{0} 的提醒从盆里拿出来了。"),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "没取消掉（{0}），提醒还在盆里……"),
+        ],
     },
     "INTERACTION_TALK": {
         "pat": [("happy", "（愣了一下）诶？……嘿嘿，再摸一下也可以！"), ("happy", "（护住头上的盆）摸头可以，盆别弄掉啦～"),
@@ -293,6 +314,27 @@ EN = {
         ],
         "missed": [
             ("talk", "There was a reminder for {1}; I was a step too late: {0}"),
+        ],
+        "paused": [  # {0}: the time left
+            ("talk", "Paused~ {0} to go; I'll set my bowl down and wait."),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "Back on! {0} to go, and I've got my bowl again~"),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("happy", "Noted! I'll remind you {0}: {1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "My bowl already holds {0} reminders and it's full… cancel a few first~"),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "Oh no, the reminder couldn't be saved ({0}), so it isn't set…"),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "Okay, I've taken the {0} reminder out of my bowl."),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "I couldn't cancel it ({0}); the reminder is still in my bowl…"),
         ],
     },
     "INTERACTION_TALK": {

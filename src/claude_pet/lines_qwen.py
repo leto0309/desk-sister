@@ -121,6 +121,27 @@ ZH = {
         "missed": [
             ("talk", "{1} 那会儿有个提醒，我说晚了：{0}"),
         ],
+        "paused": [  # {0}: the time left
+            ("talk", "好，先停一停，还剩 {0}。"),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "（展开折扇）继续，还剩 {0}。"),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("talk", "记下了，{0} 提醒主人：{1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "已经有 {0} 个提醒了，先取消几个，事情一件件来。"),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "提醒没存上（{0}），这次没设好，再试一次吧。"),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "{0} 的提醒，取消了。"),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "没能取消（{0}），提醒还留着。"),
+        ],
     },
     "INTERACTION_TALK": {
         "pat": [("talk", "（微微一愣）……嗯，好吧，就这一下。"), ("happy", "（扶了扶帽子）摸头可以，帽子别碰歪啦。"),
@@ -290,6 +311,27 @@ EN = {
         ],
         "missed": [
             ("talk", "There was a reminder for {1}, and I'm late with it: {0}"),
+        ],
+        "paused": [  # {0}: the time left
+            ("talk", "Right, a pause. {0} to go."),
+        ],
+        "resumed": [  # {0}: the time left
+            ("happy", "(opens her fan) On we go, {0} to go."),
+        ],
+        "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+            ("talk", "Noted. I'll remind you {0}: {1}"),
+        ],
+        "reminder_full": [  # {0}: how many there may be
+            ("think", "There are {0} reminders already; cancel a few first, one thing at a time."),
+        ],
+        "reminder_not_saved": [  # {0}: why
+            ("sad", "The reminder couldn't be saved ({0}), so it isn't set; try once more."),
+        ],
+        "reminder_cancelled": [  # {0}: its time
+            ("talk", "The {0} reminder, cancelled."),
+        ],
+        "reminder_not_cancelled": [  # {0}: why
+            ("sad", "Couldn't cancel it ({0}); the reminder stays."),
         ],
     },
     "INTERACTION_TALK": {

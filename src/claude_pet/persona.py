@@ -335,6 +335,27 @@ TIMER_TALK = {
     "missed": [
         ("talk", "刚才 {1} 有个提醒，我没来得及说：{0}"),
     ],
+    "paused": [  # {0}: the time left
+        ("talk", "好，先暂停，还剩 {0}。"),
+    ],
+    "resumed": [  # {0}: the time left
+        ("happy", "继续计时～还剩 {0}。"),
+    ],
+    "reminder_set": [  # {0}: when (今天 / 明天 / a date, and the time), {1}: the reminder as written
+        ("happy", "好，{0} 提醒主人：{1}"),
+    ],
+    "reminder_full": [  # {0}: how many there may be
+        ("think", "提醒已经有 {0} 个了，先取消几个吧～"),
+    ],
+    "reminder_not_saved": [  # {0}: why
+        ("sad", "提醒没存上（{0}），这次没有设好……"),
+    ],
+    "reminder_cancelled": [  # {0}: its time
+        ("talk", "好，{0} 的提醒取消了。"),
+    ],
+    "reminder_not_cancelled": [  # {0}: why
+        ("sad", "没能取消（{0}），提醒还在……"),
+    ],
 }
 
 

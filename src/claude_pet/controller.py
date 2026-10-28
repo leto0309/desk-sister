@@ -1090,12 +1090,13 @@ class PetController(QObject):
         if not self.pomodoro.running:
             return
         now = self._now()
+        kind = "resumed" if self.pomodoro.paused else "paused"
         if self.pomodoro.paused:
             self.pomodoro.resume(now)
-            self.window.say("happy", tr("继续计时～还剩 {0}。", timers.left_text(self.pomodoro.left(now))))
         else:
             self.pomodoro.pause(now)
-            self.window.say("talk", tr("好，先暂停，还剩 {0}。", timers.left_text(self.pomodoro.left(now))))
+        left = timers.left_text(self.pomodoro.left(now))
+        self.window.say(*self._reply_tuple(persona.timer_line(kind, self._rng, left)))
         self._refresh_status()
 
     def stop_focus(self) -> None:
@@ -1117,20 +1118,24 @@ class PetController(QObject):
             reminder = self.reminders.add(due, text)
         except OSError as exc:
             log.warning("could not save a reminder: %s", exc)
-            self.window.say("sad", tr("提醒没存上（{0}），这次没有设好……", exc.strerror or type(exc).__name__))
+            why = exc.strerror or type(exc).__name__
+            self.window.say(*self._reply_tuple(persona.timer_line("reminder_not_saved", self._rng, why)))
             return
         if reminder is None:
-            self.window.say("think", tr("提醒已经有 {0} 个了，先取消几个吧～", timers.MAX_REMINDERS))
+            self.window.say(*self._reply_tuple(persona.timer_line("reminder_full", self._rng, timers.MAX_REMINDERS)))
             return
-        when = timers.clock_text(due)
+        clock = timers.clock_text(due)
         today = datetime.date.fromtimestamp(self._now())
         day = datetime.date.fromtimestamp(due)
         if day == today:
-            self.window.say("happy", tr("好，{0} 提醒主人：{1}", when, reminder.text))
+            when = tr("今天 {0}", clock)
         elif day == today + datetime.timedelta(days=1):
-            self.window.say("happy", tr("好，明天 {0} 提醒主人：{1}", when, reminder.text))
+            when = tr("明天 {0}", clock)
         else:
-            self.window.say("happy", tr("好，{0} 月 {1} 日 {2} 提醒主人：{3}", day.month, day.day, when, reminder.text))
+            when = tr("{0} 月 {1} 日 {2}", day.month, day.day, clock)
+        line = persona.timer_line("reminder_set", self._rng, when, "\x00")
+        # her words take the form of address; the reminder's own text stays exactly as written
+        self.window.say(line.mood, self._addressed(line.text).replace("\x00", reminder.text), verbatim=True)
         self._refresh_status()
 
     def cancel_reminder(self, ident: str) -> None:
@@ -1138,10 +1143,12 @@ class PetController(QObject):
             reminder = self.reminders.cancel(ident)
         except OSError as exc:
             log.warning("could not save reminders: %s", exc)
-            self.window.say("sad", tr("没能取消（{0}），提醒还在……", exc.strerror or type(exc).__name__))
+            why = exc.strerror or type(exc).__name__
+            self.window.say(*self._reply_tuple(persona.timer_line("reminder_not_cancelled", self._rng, why)))
             return
         if reminder is not None:
-            self.window.say("talk", tr("好，{0} 的提醒取消了。", timers.clock_text(reminder.due)))
+            line = persona.timer_line("reminder_cancelled", self._rng, timers.clock_text(reminder.due))
+            self.window.say(*self._reply_tuple(line))
         self._refresh_status()
 
     def set_focus_minutes(self, minutes: int) -> None:
