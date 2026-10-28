@@ -1,3 +1,4 @@
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -6,7 +7,7 @@ import anthropic
 import httpx2
 import pytest
 
-from claude_pet import api_client, claude_client, credstore
+from claude_pet import api_client, claude_client, credstore, i18n
 from claude_pet.api_client import API_BASE_URL, API_MODELS, ApiCall, looks_like_key
 from claude_pet.config import Config
 
@@ -164,18 +165,120 @@ def test_only_plausible_keys_are_accepted():
         assert not looks_like_key(bad)
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows Credential Manager")
-def test_credential_manager_round_trip():
-    target = f"DeskSister/test-{uuid.uuid4().hex}"
+def _round_trip(target: str) -> None:
     try:
         assert credstore.load_secret(target) is None
         credstore.save_secret(FAKE_KEY, target)
         assert credstore.load_secret(target) == FAKE_KEY
         credstore.save_secret(FAKE_KEY[::-1], target)  # overwrite
         assert credstore.load_secret(target) == FAKE_KEY[::-1]
-    finally:
-        assert credstore.delete_secret(target)
+    except BaseException:
+        credstore.delete_secret(target)  # leave nothing behind, then let it be tried again
+        raise
+    assert credstore.delete_secret(target)  # the settings say "removed" on this answer
     assert credstore.load_secret(target) is None and not credstore.delete_secret(target)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows Credential Manager")
+@pytest.mark.skipif(bool(os.environ.get("DESK_SISTER_PARALLEL_RUN")),
+                    reason="test runs side by side would make the real Credential Manager lose writes")
+def test_credential_manager_round_trip():
+    """The real store. Windows keeps a user's credentials together, and another program writing at the same moment
+    can put back an older state of them (a write, or a delete, undone); seen under load. So a round trip that came
+    out wrong is tried again with a new name, and only one that never comes out right fails."""
+    for attempt in range(3):
+        try:
+            _round_trip(f"DeskSister/test-{uuid.uuid4().hex}")
+            return
+        except (AssertionError, credstore.CredentialError):
+            if attempt == 2:
+                raise
+
+
+def test_a_save_waits_until_the_store_gives_back_the_new_secret():
+    """Under load the store once answered with the old key right after the overwrite succeeded."""
+    answers = iter(["old", "old", "new"])
+    pauses = []
+    assert credstore.settle("new", "t", read=lambda _t: next(answers), pause=pauses.append)
+    assert len(pauses) == 2
+    pauses.clear()
+    assert not credstore.settle("new", "t", read=lambda _t: "old", pause=pauses.append)
+    assert len(pauses) == credstore.SETTLE_TRIES - 1 and sum(pauses) <= 0.5
+
+    def failing(_t):
+        raise credstore.CredentialError(5, "busy")
+
+    assert not credstore.settle("new", "t", read=failing, pause=lambda _s: None)
+
+
+def test_a_write_the_store_lost_is_made_again_and_never_lost_silently():
+    """Under load a write reported as done sometimes never showed up at all: write it again, else say so."""
+    store, writes = {}, []
+
+    def lossy_write():  # the first write is lost
+        writes.append(1)
+        if len(writes) > 1:
+            store["t"] = "new"
+
+    credstore._save_checked("new", "t", lossy_write, read=store.get, pause=lambda _s: None)
+    assert len(writes) == 2 and store["t"] == "new"
+    writes.clear()
+    with pytest.raises(credstore.CredentialError):
+        credstore._save_checked("new", "t", lambda: writes.append(1), read=lambda _t: None, pause=lambda _s: None)
+    assert len(writes) == credstore.WRITE_TRIES
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows Credential Manager")
+def test_delete_says_whether_there_was_a_key(monkeypatch):
+    """Without touching the real store: removed is True, nothing there is False, any other failure is an error."""
+    answers = {"there": (True, 0), "gone": (False, credstore._ERROR_NOT_FOUND), "denied": (False, 5)}
+    last = []
+
+    def fake_delete(target, _type, _flags):
+        ok, error = answers[target]
+        last[:] = [error]
+        return ok
+
+    monkeypatch.setattr(credstore, "_CredDeleteW", fake_delete)
+    monkeypatch.setattr(credstore.ctypes, "get_last_error", lambda: last[0])
+    assert credstore.delete_secret("there") is True
+    assert credstore.delete_secret("gone") is False
+    with pytest.raises(credstore.CredentialError):
+        credstore.delete_secret("denied")
+
+
+def test_a_read_that_keeps_failing_is_named_in_the_error():
+    """A store that cannot be read (say, access denied) is reported as such, not only as "save it again"."""
+    def denied(_t):
+        raise credstore.CredentialError(5, "access denied")
+
+    with pytest.raises(credstore.CredentialError) as raised:
+        credstore._save_checked("new", "t", lambda: None, read=denied, pause=lambda _s: None)
+    assert "access denied" in str(raised.value) and isinstance(raised.value.__cause__, credstore.CredentialError)
+    assert "再保存" not in str(raised.value)  # saving again would not help
+    i18n.set_language("en")
+    try:
+        with pytest.raises(credstore.CredentialError) as raised:
+            credstore._save_checked("new", "t", lambda: None, read=denied, pause=lambda _s: None)
+    finally:
+        i18n.set_language("zh")
+    assert str(raised.value) == ("Windows Credential Manager could not be read, so there is no way to confirm the key "
+                                 "was stored ([Errno 5] access denied)")
+
+
+def test_a_busy_moment_is_not_blamed_for_a_write_the_store_lost():
+    """One read failing while the store was busy, the rest giving back the old key: the lost write is the cause."""
+    answers = iter([credstore.CredentialError(1726, "busy")])
+
+    def busy_once(_t):
+        error = next(answers, None)
+        if error:
+            raise error
+        return "old"
+
+    with pytest.raises(credstore.CredentialError) as raised:
+        credstore._save_checked("new", "t", lambda: None, read=busy_once, pause=lambda _s: None)
+    assert str(raised.value) == "Windows 凭据写入后读不回来，请再保存一次" and raised.value.__cause__ is None
 
 
 def test_config_backend_is_validated():
@@ -234,6 +337,22 @@ def test_a_bad_key_is_never_saved_and_clearing_works(pet):
     assert ctrl.set_api_key("api") and vault[ANTHROPIC_ENTRY] == FAKE_KEY
     ctrl.clear_api_key("api")
     assert not vault and "已经清除" in ctrl.window.full_text
+
+
+def test_a_store_that_cannot_be_read_is_told_plainly_when_saving_a_key(pet):
+    """Her bubble neither says the key was saved nor asks for another try that would not help."""
+    ctrl, vault, _asked = pet
+
+    def unreadable(_t):
+        raise credstore.CredentialError(5, credstore.tr("读取 Windows 凭据失败"))
+
+    ctrl._save_key = lambda key, entry: credstore._save_checked(key, entry, lambda: None, read=unreadable,
+                                                                pause=lambda _s: None)
+    ctrl._ask_secret = lambda title, label: (FAKE_KEY, True)
+    assert not ctrl.set_api_key("api")
+    said = ctrl.window.full_text
+    assert said.startswith("没能保存 API Key：") and "没法确认 Key 存好了" in said and "[Errno 5]" in said
+    assert "存进去" not in said and "再保存" not in said
 
 
 def test_api_mode_works_without_claude_code(pet, monkeypatch):

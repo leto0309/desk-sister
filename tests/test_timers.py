@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from claude_pet import bedtime, claude_client, i18n, persona, persona_en, timers
+from claude_pet import bedtime, characters, claude_client, i18n, persona, persona_en, timers
 from claude_pet.config import Config, load_config
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
@@ -131,12 +131,71 @@ def test_a_good_entry_survives_bad_neighbours(tmp_path):
 
 
 # ---- her lines -------------------------------------------------------------------------------------------
-@pytest.mark.parametrize("table", [persona.TIMER_TALK, persona_en.TIMER_TALK])
-def test_timer_lines_never_talk_of_sleep_or_rest_and_fill_their_fields(table):
+def every_timer_table():
+    tables = {"claude": persona.TIMER_TALK, "claude-en": persona_en.TIMER_TALK}
+    for girl in characters.CHARACTERS:
+        module = persona.girl_lines(girl)
+        if module is not None:
+            tables[girl], tables[f"{girl}-en"] = module.ZH["TIMER_TALK"], module.EN["TIMER_TALK"]
+    return tables
+
+
+NEEDS = {"start": {0}, "focus_done": {1}, "break_done": {0}, "stopped": {2}, "stopped_none": set(), "reminder": {0},
+         "missed": {0, 1}}
+
+
+@pytest.mark.parametrize("name", list(every_timer_table()))
+def test_timer_lines_never_talk_of_sleep_or_rest_and_fill_their_fields(name):
+    table = every_timer_table()[name]
+    assert set(table) == set(persona.TIMER_TALK)  # every girl says every kind
     for kind, choices in table.items():
+        assert choices and len({t for _m, t in choices}) == len(choices), kind
         for mood, text in choices:
             filled = text.format(25, 5, 3) if kind not in ("reminder", "missed") else text.format("喝水", "14:30")
             assert mood in persona.MOODS and not bedtime.mentions(filled) and "{" not in filled, (kind, text)
+            used = {int(field) for field in __import__("re").findall(r"\{(\d)\}", text)}
+            assert NEEDS[kind] <= used, (kind, text)  # the minutes, the count, the reminder: whatever it is for
+            if kind == "stopped_none":
+                assert 2 not in used, text  # no "0 done"
+
+
+class Picks(random.Random):
+    """Picks this line whenever it is among the choices."""
+    def __init__(self, line):
+        super().__init__(1)
+        self.line = line
+
+    def choice(self, seq):
+        return self.line if self.line in seq else super().choice(seq)
+
+
+def _said(table, kind, *fields, address="主人"):
+    return {t.replace("主人", address).format(*fields) for _m, t in table[kind]}
+
+
+@pytest.mark.parametrize("girl", list(characters.CHARACTERS))
+def test_each_girl_says_her_own_timer_lines(pet, girl):
+    pet.set_character(girl)
+    pet.config.address = "老板"
+    table = every_timer_table()[girl]
+    pet.start_focus()
+    assert pet.window.full_text in _said(table, "start", 25, address="老板"), girl
+    pet.stop_focus()  # before the first one was done
+    assert pet.window.full_text in _said(table, "stopped_none", 25, 5, 0, address="老板"), girl
+    pet.window.clear_bubble()
+    # her words take the address; the reminder's own words stay as written, "主人" and all. Every line, in turn.
+    for line in table["reminder"]:
+        pet._rng = Picks(line)
+        pet.reminders.add(pet._now() + 5, "给主人回电话")
+        beat(pet, 6)
+        assert pet.window.full_text == line[1].replace("主人", "老板").format("给主人回电话"), girl
+        pet.window.clear_bubble()
+    pet._rng = random.Random(1)
+    pet.reminders.add(pet._now() - 3600, "交报告")  # missed by an hour
+    beat(pet)
+    when = timers.clock_text(pet._now() - 3600)
+    assert pet.window.full_text in {t.replace("\x00", "交报告")
+                                    for t in _said(table, "missed", "\x00", when, address="老板")}, girl
 
 
 # ---- the pet ---------------------------------------------------------------------------------------------
@@ -202,7 +261,8 @@ def test_pause_resume_stop(pet):
     pet.toggle_focus_pause()
     assert pet.pomodoro.running and not pet.pomodoro.paused
     pet.stop_focus()
-    assert "0 个" in pet.window.full_text and not pet.pomodoro.running and pet.window.status == ""
+    assert pet.window.full_text in {t for _m, t in persona.TIMER_TALK["stopped_none"]}  # no "0 done"
+    assert not pet.pomodoro.running and pet.window.status == ""
 
 
 def test_a_due_line_waits_for_her_bubble_and_for_full_screen(pet, monkeypatch):

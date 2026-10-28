@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import sys
+import time
+
 from .i18n import tr
 
 VAULT_ENTRY = "Desk Sister: Anthropic"  # the entry name in Windows Credential Manager
@@ -11,6 +13,53 @@ _ERROR_NOT_FOUND = 1168
 
 class CredentialError(OSError):
     pass
+
+
+# A busy Credential Manager now and then reports a write as done and then gives back the old secret, or none at
+# all, for good: a save reads its secret back, waits a little, writes again, and says so if it never takes.
+WRITE_TRIES = 3
+SETTLE_TRIES = 10
+SETTLE_PAUSE = 0.05
+
+
+def settle(secret: str, target: str = VAULT_ENTRY, read=None, pause=None) -> bool:
+    """Wait (up to about half a second) until reading `target` gives `secret`; False if it never does."""
+    read = read or load_secret
+    pause = pause or time.sleep
+    for attempt in range(SETTLE_TRIES):
+        try:
+            if read(target) == secret:
+                return True
+        except CredentialError:
+            pass
+        if attempt < SETTLE_TRIES - 1:
+            pause(SETTLE_PAUSE)
+    return False
+
+
+def _save_checked(secret: str, target: str, write, read=None, pause=None) -> None:
+    """write() until reading it back gives `secret`, at most WRITE_TRIES times."""
+    read = read or load_secret
+    failed: list[CredentialError] = []  # a store that could never be read is the real cause: say it, not "try again"
+    answered = False  # any read that worked: then a failed one now and then was only the store being busy
+
+    def reading(name: str) -> str | None:
+        nonlocal answered
+        try:
+            found = read(name)
+        except CredentialError as exc:
+            failed.append(exc)
+            raise
+        answered = True
+        return found
+
+    for _attempt in range(WRITE_TRIES):
+        write()
+        if settle(secret, target, reading, pause):
+            return
+    if failed and not answered:
+        raise CredentialError(tr("Windows 凭据管理器读不了，没法确认 Key 存好了（{0}）", failed[-1])) from failed[-1]
+    raise CredentialError(tr("Windows 凭据写入后读不回来，请再保存一次"))
 
 
 if sys.platform == "win32":
@@ -81,8 +130,12 @@ if sys.platform == "win32":
         cred.CredentialBlob = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte))
         cred.Persist = _CRED_PERSIST_LOCAL_MACHINE
         cred.UserName = "Desk Sister"
-        if not _CredWriteW(ctypes.byref(cred), 0):
-            raise CredentialError(ctypes.get_last_error(), tr("写入 Windows 凭据失败"))
+
+        def write() -> None:
+            if not _CredWriteW(ctypes.byref(cred), 0):
+                raise CredentialError(ctypes.get_last_error(), tr("写入 Windows 凭据失败"))
+
+        _save_checked(secret, target, write)
 
     def delete_secret(target: str = VAULT_ENTRY) -> bool:
         if _CredDeleteW(target, _CRED_TYPE_GENERIC, 0):

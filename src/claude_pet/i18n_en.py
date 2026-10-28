@@ -74,6 +74,9 @@ TEXT = {
     "读取 Windows 凭据失败": "Could not read the Windows credential",
     "凭据为空或过长": "The credential is empty or too long",
     "写入 Windows 凭据失败": "Could not write the Windows credential",
+    "Windows 凭据写入后读不回来，请再保存一次": "The Windows credential could not be read back after saving; please save it again",
+    "Windows 凭据管理器读不了，没法确认 Key 存好了（{0}）":
+        "Windows Credential Manager could not be read, so there is no way to confirm the key was stored ({0})",
     "开机自启": "Start with Windows",
     "（同名快捷方式属于其他程序）": " (a shortcut of that name belongs to another program)",
     "好的，以后开机我就会自动来陪主人啦～": "All right, I'll come and keep you company whenever Windows starts~",

@@ -95,6 +95,33 @@ ZH = {
         ("talk", "（尾巴一甩）Gemini 在这儿！偶尔会瞄一眼主人的窗口，发现可爱的东西就告诉你～"),
         ("happy", "我是 Gemini，小发现收集本准备好啦。我会安安静静的，偶尔看看主人的窗口～"),
     ],
+    "TIMER_TALK": {  # the focus timer and reminders: the same kinds and fields as persona.TIMER_TALK
+        "start": [
+            ("happy", "专注 {0} 分钟，开始喵！我把这段时间命名为「认真时间」～"),
+            ("talk", "计时开始～{0} 分钟后我来叫你，尾巴保证不乱甩。"),
+        ],
+        "focus_done": [
+            ("happy", "{0} 分钟完成！伸个懒腰吧，像猫一样～{1} 分钟后我再叫你。"),
+            ("happy", "第 {2} 个番茄！我要把它收进小发现收集本～{1} 分钟后继续。"),
+        ],
+        "break_done": [
+            ("talk", "放松时间结束～下一个 {0} 分钟，出发喵！"),
+            ("happy", "回来啦！下一个番茄 {0} 分钟，我在旁边陪着～"),
+        ],
+        "stopped": [
+            ("talk", "番茄钟结束～这次收集到 {2} 个番茄啦！"),
+        ],
+        "stopped_none": [  # stopped before the first one was done
+            ("talk", "番茄钟结束～这次还没收集到番茄喵，下次一定！"),
+        ],
+        "reminder": [
+            ("happy", "叮铃～提醒来了喵：{0}"),
+            ("talk", "（耳朵竖起来）主人，提醒时间到：{0}"),
+        ],
+        "missed": [
+            ("talk", "刚才 {1} 有个提醒，我追蝴蝶去了没赶上……补上：{0}"),
+        ],
+    },
     "INTERACTION_TALK": {
         "pat": [("happy", "（耳朵轻轻一动）嗯……这次摸得很舒服。"), ("happy", "嘿嘿，可以记住这个位置哦。"),
                 ("happy", "摸头！好奇心 +1，开心 +10！"), ("talk", "（眯眼）主人的手暖暖的～"),
@@ -238,6 +265,33 @@ EN = {
         ("talk", "(flicks her tail) Gemini's here! I'll glance at your window now and then, and tell you if I find anything cute~"),
         ("happy", "I'm Gemini, and my little-finds notebook is ready. I'll be nice and quiet and peek at your window now and then~"),
     ],
+    "TIMER_TALK": {  # the focus timer and reminders: the same kinds and fields as persona.TIMER_TALK
+        "start": [
+            ("happy", "{0} minutes of focus, go, nya! I'm naming this stretch \"Serious Time\"~"),
+            ("talk", "Timer's running~ I'll call you in {0} minutes, and my tail promises to behave."),
+        ],
+        "focus_done": [
+            ("happy", "{0} minutes done! Have a big stretch, cat-style~ I'll call you in {1} minutes."),
+            ("happy", "Pomodoro number {2}! That goes in my little-finds notebook~ Back to it in {1} minutes."),
+        ],
+        "break_done": [
+            ("talk", "Break's over~ Next {0} minutes, off we go, nya!"),
+            ("happy", "You're back! Next pomodoro, {0} minutes; I'm right here with you~"),
+        ],
+        "stopped": [
+            ("talk", "Pomodoro stopped~ I collected {2} of them this time!"),
+        ],
+        "stopped_none": [  # stopped before the first one was done
+            ("talk", "Pomodoro stopped~ No tomato for my collection this time, nya. Next time for sure!"),
+        ],
+        "reminder": [
+            ("happy", "Jingle~ Reminder time, nya: {0}"),
+            ("talk", "(ears perk up) It's reminder time: {0}"),
+        ],
+        "missed": [
+            ("talk", "There was a reminder at {1}; I was off chasing a butterfly and missed it... here: {0}"),
+        ],
+    },
     "INTERACTION_TALK": {
         "pat": [("happy", "(ears twitch) Mm... that one felt nice."),
                 ("happy", "Hehe, you can remember that spot."),

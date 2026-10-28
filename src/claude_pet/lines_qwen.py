@@ -95,6 +95,33 @@ ZH = {
         ("happy", "（啪地合上扇子）通义千问在这儿。盆栽也安顿好了，我会安静陪着，偶尔瞄一眼主人的窗口。"),
         ("talk", "我是通义千问。规矩很简单：我安静待着，偶尔看看主人的窗口，需要我就开口。"),
     ],
+    "TIMER_TALK": {  # the focus timer and reminders: the same kinds and fields as persona.TIMER_TALK
+        "start": [
+            ("talk", "好，{0} 分钟，开始。有我看着时间，你放心做事。"),
+            ("happy", "（轻摇折扇）计时开始，{0} 分钟后叫你。"),
+        ],
+        "focus_done": [
+            ("happy", "{0} 分钟到了。起来走两步，给盆栽浇浇水也行，{1} 分钟后继续。"),
+            ("talk", "第 {2} 个番茄完成。稳扎稳打，{1} 分钟后再来。"),
+        ],
+        "break_done": [
+            ("talk", "时间到，收收心，下一段 {0} 分钟。"),
+            ("happy", "回来了？好，下一个番茄 {0} 分钟，开始吧。"),
+        ],
+        "stopped": [
+            ("talk", "番茄钟结束了，这次完成 {2} 个，实打实的。"),
+        ],
+        "stopped_none": [  # stopped before the first one was done
+            ("talk", "番茄钟停了。这一轮没走完也不要紧，想好了再开始。"),
+        ],
+        "reminder": [
+            ("talk", "提醒一下：{0}"),
+            ("happy", "（合上扇子）主人，该做这件事了：{0}"),
+        ],
+        "missed": [
+            ("talk", "{1} 那会儿有个提醒，我说晚了：{0}"),
+        ],
+    },
     "INTERACTION_TALK": {
         "pat": [("talk", "（微微一愣）……嗯，好吧，就这一下。"), ("happy", "（扶了扶帽子）摸头可以，帽子别碰歪啦。"),
                 ("happy", "被摸头了……这倒是，挺舒服的。"), ("talk", "（抿嘴一笑）这是在夸我吗？那我收下了。"),
@@ -238,6 +265,33 @@ EN = {
         ("happy", "(snaps her fan shut) Qwen here. The little plant's settled in; I'll keep you company quietly and glance at your window now and then."),
         ("talk", "I'm Qwen. Simple arrangement: I stay quiet and peek at your window now and then; when you need me, just ask."),
     ],
+    "TIMER_TALK": {  # the focus timer and reminders: the same kinds and fields as persona.TIMER_TALK
+        "start": [
+            ("talk", "Right, {0} minutes, starting. I'll watch the clock; you get on with it."),
+            ("happy", "(waves her fan) Timer's running; I'll call you in {0} minutes."),
+        ],
+        "focus_done": [
+            ("happy", "{0} minutes are up. Get up and walk a bit, water a plant if you like; on again in {1} minutes."),
+            ("talk", "Pomodoro number {2} done. Steady does it; again in {1} minutes."),
+        ],
+        "break_done": [
+            ("talk", "Time's up; let's settle in. Next stretch, {0} minutes."),
+            ("happy", "Back? Good, next pomodoro, {0} minutes. Off you go."),
+        ],
+        "stopped": [
+            ("talk", "Pomodoro's done. {2} this time, every one of them real."),
+        ],
+        "stopped_none": [  # stopped before the first one was done
+            ("talk", "Pomodoro's stopped. Not finishing this round is fine; start again when you're ready."),
+        ],
+        "reminder": [
+            ("talk", "A quick reminder: {0}"),
+            ("happy", "(closes her fan) Time for this: {0}"),
+        ],
+        "missed": [
+            ("talk", "There was a reminder for {1}, and I'm late with it: {0}"),
+        ],
+    },
     "INTERACTION_TALK": {
         "pat": [("talk", "(a little startled) ...Mm, all right, just this once."),
                 ("happy", "(straightens her hat) Pats are fine, just don't knock my hat crooked."),

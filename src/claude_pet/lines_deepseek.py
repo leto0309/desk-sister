@@ -98,6 +98,33 @@ ZH = {
         ("talk", "DeepSeek 上岗啦。推理结论：安静陪着主人，偶尔瞄一眼窗口，就是我的工作。"),
         ("happy", "我是 DeepSeek，盆擦好了，准备就绪～我会乖乖待着，偶尔看看主人的窗口。"),
     ],
+    "TIMER_TALK": {  # the focus timer and reminders: the same kinds and fields as persona.TIMER_TALK
+        "start": [
+            ("happy", "好，专注 {0} 分钟！我抱着盆在旁边守着，开始～"),
+            ("talk", "推理完毕：接下来 {0} 分钟，专心做一件事。计时开始！"),
+        ],
+        "focus_done": [
+            ("happy", "{0} 分钟完成！起来活动一下、喝口水，{1} 分钟后我再叫你～"),
+            ("happy", "第 {2} 个番茄到手！我先放进盆里～放松 {1} 分钟吧。"),
+        ],
+        "break_done": [
+            ("talk", "放松结束～下一轮 {0} 分钟，我们继续！"),
+            ("happy", "回来啦？盆擦好了，下一个番茄 {0} 分钟，开始！"),
+        ],
+        "stopped": [
+            ("talk", "番茄钟结束～这次一共完成了 {2} 个，我都记着呢～"),
+        ],
+        "stopped_none": [  # stopped before the first one was done
+            ("talk", "番茄钟停下啦～这一轮还没走完，盆里先空着，下次再装满～"),
+        ],
+        "reminder": [
+            ("happy", "主人主人，提醒到啦：{0}"),
+            ("talk", "（敲敲盆）说好的提醒来了：{0}"),
+        ],
+        "missed": [
+            ("talk", "刚才 {1} 有个提醒，我晚了一步：{0}"),
+        ],
+    },
     "INTERACTION_TALK": {
         "pat": [("happy", "（愣了一下）诶？……嘿嘿，再摸一下也可以！"), ("happy", "（护住头上的盆）摸头可以，盆别弄掉啦～"),
                 ("happy", "被摸头了！这算奖励吧？那我收下啦。"), ("talk", "（眯眼）主人的手好暖，比刚出锅的馒头还暖。"),
@@ -241,6 +268,33 @@ EN = {
         ("talk", "DeepSeek on duty. My conclusion: keep you company quietly and glance at your window now and then. That's my job."),
         ("happy", "I'm DeepSeek, bowl polished and all set~ I'll stay put and peek at your window now and then."),
     ],
+    "TIMER_TALK": {  # the focus timer and reminders: the same kinds and fields as persona.TIMER_TALK
+        "start": [
+            ("happy", "Right, {0} minutes of focus! I'll stand guard with my bowl. Starting~"),
+            ("talk", "Reasoning done: for the next {0} minutes, one thing at a time. Timer's running!"),
+        ],
+        "focus_done": [
+            ("happy", "{0} minutes done! Get up, move a little, have some water; I'll call you in {1} minutes~"),
+            ("happy", "Pomodoro number {2} secured! Into my bowl it goes~ Unwind for {1} minutes."),
+        ],
+        "break_done": [
+            ("talk", "Break's done~ Next round, {0} minutes. Let's keep going!"),
+            ("happy", "Back? Bowl's polished. Next pomodoro, {0} minutes, starting!"),
+        ],
+        "stopped": [
+            ("talk", "Pomodoro stopped~ {2} done this time, and I've noted every one~"),
+        ],
+        "stopped_none": [  # stopped before the first one was done
+            ("talk", "Pomodoro stopped~ This one wasn't finished yet; my bowl stays empty for now, we'll fill it next time~"),
+        ],
+        "reminder": [
+            ("happy", "Hey, hey, reminder time: {0}"),
+            ("talk", "(taps her bowl) Here's the reminder you asked for: {0}"),
+        ],
+        "missed": [
+            ("talk", "There was a reminder for {1}; I was a step too late: {0}"),
+        ],
+    },
     "INTERACTION_TALK": {
         "pat": [("happy", "(freezes for a second) Huh? ...Hehe, you can pat me again!"),
                 ("happy", "(guards the bowl on her head) Pats are fine, just don't knock the bowl off~"),

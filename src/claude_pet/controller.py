@@ -1103,7 +1103,8 @@ class PetController(QObject):
             return
         done = self.pomodoro.stop()
         self._focus_event = None  # its unsaid "back in 5 minutes" would not come true now
-        self.window.say(*self._reply_tuple(persona.timer_line("stopped", self._rng, self.config.focus_min,
+        kind = "stopped" if done else "stopped_none"  # "0 done" said with a cheer would ring false
+        self.window.say(*self._reply_tuple(persona.timer_line(kind, self._rng, self.config.focus_min,
                                                               self.config.break_min, done)))
         self._refresh_status()
 

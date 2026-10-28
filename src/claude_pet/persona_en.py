@@ -220,6 +220,9 @@ TIMER_TALK = {
     "stopped": [
         ("talk", "Pomodoro stopped. {2} done this time~"),
     ],
+    "stopped_none": [  # stopped before the first one was done
+        ("talk", "Pomodoro stopped before the first one was done. We'll go again next time~"),
+    ],
     "reminder": [
         ("happy", "Ding~ Reminder time: {0}"),
         ("talk", "You asked me to remind you: {0}"),

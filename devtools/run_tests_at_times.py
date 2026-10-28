@@ -43,7 +43,9 @@ MOMENTS = [
 
 def run(setting: tuple[str, str]) -> tuple[str, int, list[str], str]:
     name, value = setting
-    env = dict(os.environ, **{name: value}, PYTHONIOENCODING="utf-8")  # read back as UTF-8: Chinese messages intact
+    # Read back as UTF-8: Chinese messages intact. Runs side by side must not write the real Credential Manager at
+    # once: it then loses writes, the user's own credentials included (see tests/test_api_mode.py).
+    env = dict(os.environ, **{name: value}, PYTHONIOENCODING="utf-8", DESK_SISTER_PARALLEL_RUN="1")
     done = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "tests", "-o", "pythonpath=src", "-p", "no:cacheprovider"],
         cwd=ROOT, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")

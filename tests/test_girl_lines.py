@@ -63,6 +63,7 @@ def test_the_same_kinds_and_hours_as_claude(girl):
         assert [h[:2] for h in table["TIME_TALK"]] == [h[:2] for h in persona.TIME_TALK]  # lunch, afternoon...
         assert set(table["GREETINGS"]) == set(persona.GREETINGS)
         assert set(table["WEEKDAY_GREETINGS"]) == set(persona.WEEKDAY_GREETINGS)
+        assert set(table["TIMER_TALK"]) == set(persona.TIMER_TALK)
         assert set(table["FALLBACK"]) <= set(persona.FALLBACK)
         for kind, lines in table["INTERACTION_TALK"].items():
             assert len(lines) >= (3 if kind in ("max", "min") else 5), kind
@@ -103,7 +104,7 @@ def test_her_lines_are_used_and_shared_ones_stay(girl):
     assert persona.fallback("blocked") == persona.Reply(*persona.FALLBACK["blocked"])  # shared system lines
     if "error" in module.ZH["FALLBACK"]:
         assert persona.fallback("error") == persona.Reply(*module.ZH["FALLBACK"]["error"])
-    assert persona.timer_line("start", rng, 25).text in {t.format(25) for _m, t in persona.TIMER_TALK["start"]}
+    assert persona.timer_line("start", rng, 25).text in {t.format(25) for _m, t in module.ZH["TIMER_TALK"]["start"]}
     i18n.set_language("en")
     assert persona.interaction_line("pat", rng).text in {t for _m, t in module.EN["INTERACTION_TALK"]["pat"]}
     persona.set_girl("claude")

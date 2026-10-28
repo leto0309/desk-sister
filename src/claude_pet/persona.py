@@ -74,7 +74,7 @@ class Reply:
 
 # The tables with a character in them: each girl may have her own (lines_<girl>.py); the rest are shared.
 PER_GIRL = ("SELF_TALK", "TIME_TALK", "NIGHT_TALK", "SLEEP_TALK", "GREETINGS", "WEEKDAY_GREETINGS", "WAKE_LINES",
-            "SLEEP_LINES", "INTRO_LINES", "HELLO_LINES", "INTERACTION_TALK", "FALLBACK")
+            "SLEEP_LINES", "INTRO_LINES", "HELLO_LINES", "INTERACTION_TALK", "TIMER_TALK", "FALLBACK")
 MERGED = ("FALLBACK",)  # a girl's own entries replace just those keys (the rest are plain system messages)
 _girl = characters.DEFAULT
 
@@ -324,6 +324,9 @@ TIMER_TALK = {
     ],
     "stopped": [
         ("talk", "番茄钟结束啦，这次完成了 {2} 个～"),
+    ],
+    "stopped_none": [  # stopped before the first one was done
+        ("talk", "番茄钟先停下啦，这一轮还没走完，下次再一起来～"),
     ],
     "reminder": [
         ("happy", "叮～提醒时间到：{0}"),

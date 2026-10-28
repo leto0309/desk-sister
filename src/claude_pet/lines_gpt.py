@@ -95,6 +95,33 @@ ZH = {
         ("talk", "GPT 报到！我的计划：安静待命，偶尔瞄一眼主人的窗口。"),
         ("happy", "（龙尾轻轻一摆）我是 GPT，小云在旁边飘着。我们就在这儿，偶尔看看主人的窗口～"),
     ],
+    "TIMER_TALK": {  # the focus timer and reminders: the same kinds and fields as persona.TIMER_TALK
+        "start": [
+            ("happy", "计划启动：专注 {0} 分钟。我来掌握时间，你只管往前走！"),
+            ("talk", "计时开始，{0} 分钟。路线定好了，出发～"),
+        ],
+        "focus_done": [
+            ("happy", "{0} 分钟完成！先回营地喝口水、伸伸腰，{1} 分钟后再出发～"),
+            ("happy", "第 {2} 个番茄拿下！小云也在鼓掌～{1} 分钟后继续。"),
+        ],
+        "break_done": [
+            ("talk", "放松结束，队伍集合！下一段 {0} 分钟，跟上～"),
+            ("happy", "回来了？好，下一个番茄 {0} 分钟，我带路！"),
+        ],
+        "stopped": [
+            ("talk", "番茄钟收队～这次完成了 {2} 个，记进行程日志了。"),
+        ],
+        "stopped_none": [  # stopped before the first one was done
+            ("talk", "番茄钟收队～这一程还没到第一站，下次重新出发就好。"),
+        ],
+        "reminder": [
+            ("happy", "按计划提醒：{0}"),
+            ("talk", "主人，到点了，这是你交代的：{0}"),
+        ],
+        "missed": [
+            ("talk", "{1} 本该有个提醒，我没赶上，现在补上：{0}"),
+        ],
+    },
     "INTERACTION_TALK": {
         "pat": [("talk", "（努力保持镇定）……嗯，这个我收下了。"), ("happy", "摸头？好吧，队长偶尔也可以被夸一下。"),
                 ("happy", "（龙角轻轻一晃）……再摸一下也不是不行。"), ("talk", "这是在奖励我刚才的表现吗？谢谢主人。"),
@@ -238,6 +265,33 @@ EN = {
         ("talk", "GPT reporting! My plan: stand by quietly and glance at your window now and then."),
         ("happy", "(sweeps her dragon tail lightly) I'm GPT, with Little Cloud floating beside me. We'll stay right here and peek at your window now and then~"),
     ],
+    "TIMER_TALK": {  # the focus timer and reminders: the same kinds and fields as persona.TIMER_TALK
+        "start": [
+            ("happy", "Plan in motion: {0} minutes of focus. I'll keep time; you just keep going!"),
+            ("talk", "Timer's on, {0} minutes. Route set, let's move~"),
+        ],
+        "focus_done": [
+            ("happy", "{0} minutes done! Back to camp for some water and a stretch; we set off again in {1} minutes~"),
+            ("happy", "Pomodoro number {2} taken! Little Cloud's cheering too~ On again in {1} minutes."),
+        ],
+        "break_done": [
+            ("talk", "Break's over, team, fall in! Next stretch, {0} minutes. Keep up~"),
+            ("happy", "Back? Good. Next pomodoro, {0} minutes; I'll lead the way!"),
+        ],
+        "stopped": [
+            ("talk", "Pomodoro wrapped up~ {2} done this time; it's in the trip log."),
+        ],
+        "stopped_none": [  # stopped before the first one was done
+            ("talk", "Pomodoro wrapped up~ We hadn't reached the first stop yet; we'll set out again next time."),
+        ],
+        "reminder": [
+            ("happy", "Reminder, right on schedule: {0}"),
+            ("talk", "It's time; here's what you asked me to tell you: {0}"),
+        ],
+        "missed": [
+            ("talk", "There was a reminder due at {1}; I missed it, so here it is now: {0}"),
+        ],
+    },
     "INTERACTION_TALK": {
         "pat": [("talk", "(tries hard to stay composed) ...Mm, I accept this."),
                 ("happy", "A pat? Fine, even a leader can be praised now and then."),
