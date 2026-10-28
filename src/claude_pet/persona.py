@@ -74,7 +74,8 @@ class Reply:
 
 # The tables with a character in them: each girl may have her own (lines_<girl>.py); the rest are shared.
 PER_GIRL = ("SELF_TALK", "TIME_TALK", "NIGHT_TALK", "SLEEP_TALK", "GREETINGS", "WEEKDAY_GREETINGS", "WAKE_LINES",
-            "SLEEP_LINES", "INTRO_LINES", "HELLO_LINES", "INTERACTION_TALK", "TIMER_TALK", "FALLBACK")
+            "SLEEP_LINES", "INTRO_LINES", "HELLO_LINES", "INTERACTION_TALK", "TIMER_TALK", "FESTIVAL_LINES",
+            "BIRTHDAY_LINE", "SUMMARY_TAILS", "SUMMARY_FOCUS_TAILS", "SUMMARY_TAIL", "MEMORY_TALK", "FALLBACK")
 MERGED = ("FALLBACK",)  # a girl's own entries replace just those keys (the rest are plain system messages)
 _girl = characters.DEFAULT
 
@@ -372,11 +373,12 @@ SLEEP_TALK = [
 ]
 
 
+MEMORY_TALK = "主人今天在「{activity}」上已经花了 {hours:.1f} 小时啦，记得起来走走、喝口水～"
+
+
 def memory_talk_line(activity: str, seconds: float) -> Reply:
-    hours = seconds / 3600
-    if i18n.english():
-        return Reply("talk", persona_en.MEMORY_TALK.format(activity=activity_name(activity), hours=hours))
-    return Reply("talk", f"主人今天在「{activity}」上已经花了 {hours:.1f} 小时啦，记得起来走走、喝口水～")
+    name = activity_name(activity) if i18n.english() else activity
+    return Reply("talk", _table("MEMORY_TALK").format(activity=name, hours=seconds / 3600))
 
 
 # The day's summary (设置→陪伴「每日小结」): from the companion memory's time per activity.
@@ -384,11 +386,12 @@ SUMMARY_HOURS = (0, 18, 20, 21, 22)  # 0 = off
 SUMMARY_MIN_ITEM_SEC = 600  # an activity counts from 10 minutes
 SUMMARY_MIN_TOTAL_SEC = 1800  # under half an hour in all: nothing to sum up (yet)
 SUMMARY_FOCUS_TAILS = ["专注力满分，辛苦啦～", "一个番茄一个番茄地完成，真棒！"]  # a day with only the focus timer to tell
+SUMMARY_TAIL = "辛苦啦～"  # a main activity with no words of its own
 SUMMARY_TAILS = {  # a word on the day's main activity, one picked at random
     "写代码": ["代码敲了这么久，辛苦啦～", "今天写代码有什么新收获吗？", "写了这么久，记得给自己点个赞～"],
     "和 AI 一起干活": ["和 AI 搭档了这么久，配合得还顺利吧？", "今天和 AI 搭档，有什么新收获吗？"],
     "看视频": ["今天看到什么好看的了吗？", "有好看的也分享给我嘛～"],
-    "办公/看文档": ["文档一份份啃下来，主人真厉害。", "看了这么久的文档，眼睛记得歇一歇～"],
+    "办公/看文档": ["文档一份份啃下来，主人真厉害。", "看了这么久的文档，眼睛记得眨一眨、看看远处～"],
     "打游戏": ["今天赢了几把呀？", "玩得开心最重要～"],
     "聊天": ["今天和大家聊得挺开心吧～", "聊了这么久，有什么好玩的事吗？"],
     "听音乐": ["今天的歌单我也想听听～", "有音乐陪着，今天应该过得不错吧～"],
@@ -409,6 +412,9 @@ def summary_line(seconds: dict[str, float], rng: random.Random | None = None,
     if not ranked and periods <= 0:
         return None
     pick_from = (rng or random).choice
+    # her own word on the day (the facts before it are worded the same for every girl)
+    tails = _table("SUMMARY_TAILS")
+    tail = pick_from(tails.get(ranked[0][0], [_table("SUMMARY_TAIL")]) if ranked else _table("SUMMARY_FOCUS_TAILS"))
     if i18n.english():
         en = persona_en
         parts = [en.SUMMARY_ITEM.format(activity=activity_name(activity), duration=duration_text(spent))
@@ -416,13 +422,11 @@ def summary_line(seconds: dict[str, float], rng: random.Random | None = None,
         if periods > 0:
             parts.append(en.SUMMARY_FOCUS.format(count=periods, duration=duration_text(focused),
                                                   s="" if periods == 1 else "s"))
-        tail = pick_from(en.SUMMARY_TAILS.get(ranked[0][0], [en.SUMMARY_TAIL]) if ranked else en.SUMMARY_FOCUS_TAILS)
         return Reply("talk", en.SUMMARY.format(parts=en.SUMMARY_JOIN.join(parts), tail=tail))
     text = "、".join(f"{activity}约 {duration_text(spent)}" for activity, spent in ranked[:3])
     if periods > 0:
         focus_part = f"专注了 {periods} 个番茄（约 {duration_text(focused)}）"
         text = f"{text}；{focus_part}" if text else focus_part
-    tail = pick_from(SUMMARY_TAILS.get(ranked[0][0], ["辛苦啦～"]) if ranked else SUMMARY_FOCUS_TAILS)
     return Reply("talk", f"今天的小结：{text}。{tail}")
 
 

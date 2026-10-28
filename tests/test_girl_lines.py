@@ -29,7 +29,23 @@ def entries(value):
     return []
 
 
+RESTING = re.compile(r"歇|break", re.I)  # her words on the day never tell 主人 to rest (bedtime's rule)
+
+
+def plain(value):
+    """Every plain text line (no mood) in a table: the summary words."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [t for v in value.values() for t in plain(v)]
+    if isinstance(value, list):
+        return [t for v in value for t in plain(v)]
+    return []
+
+
 def shape(value):
+    if isinstance(value, str):  # a plain line (a summary word): any text
+        return "text"
     if isinstance(value, dict):
         return {k: shape(v) for k, v in value.items()}
     if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], str):
@@ -49,10 +65,15 @@ def test_every_table_is_hers_and_mirrored_in_english(girl):
     assert set(module.ZH) == set(module.EN) and set(module.ZH) <= set(persona.PER_GIRL)
     assert set(module.ZH) == set(persona.PER_GIRL)  # a girl with lines has all of them
     for name in module.ZH:
-        assert shape(module.ZH[name]) == shape(module.EN[name]), name
+        if name == "FESTIVAL_LINES":  # each language greets its own festivals, as Claude does
+            assert set(module.ZH[name]) == set(persona.FESTIVAL_LINES)
+            assert set(module.EN[name]) == set(persona_en.FESTIVAL_LINES)
+        else:
+            assert shape(module.ZH[name]) == shape(module.EN[name]), name
         for mood, text in entries(module.ZH[name]) + entries(module.EN[name]):
             assert mood in persona.MOODS and text.strip(), (name, text)
         assert not [t for _m, t in entries(module.EN[name]) if CJK.search(t)], name
+        assert not [t for t in plain(module.EN[name]) if CJK.search(t)], name
 
 
 @pytest.mark.parametrize("girl", WITH_LINES)
@@ -109,6 +130,60 @@ def test_her_lines_are_used_and_shared_ones_stay(girl):
     assert persona.interaction_line("pat", rng).text in {t for _m, t in module.EN["INTERACTION_TALK"]["pat"]}
     persona.set_girl("claude")
     assert persona.interaction_line("pat", rng).text in {t for _m, t in persona_en.INTERACTION_TALK["pat"]}
+
+
+@pytest.mark.parametrize("girl", [*WITH_LINES, "claude"])
+def test_her_festival_birthday_and_summary_words(girl):
+    module = persona.girl_lines(girl)
+    tables = ((module.ZH, persona), (module.EN, persona_en)) if module else (
+        ({n: getattr(persona, n) for n in persona.PER_GIRL}, persona),
+        ({n: getattr(persona_en, n) for n in persona.PER_GIRL}, persona_en))
+    for table, shared in tables:
+        assert set(table["SUMMARY_TAILS"]) == set(shared.SUMMARY_TAILS)  # every activity Claude has a word for
+        for activity, words in table["SUMMARY_TAILS"].items():
+            assert len(words) >= 2 and len(set(words)) == len(words), activity
+        assert len(table["SUMMARY_FOCUS_TAILS"]) >= 2 and table["SUMMARY_TAIL"].strip()
+        assert "{activity}" in table["MEMORY_TALK"] and "{hours:.1f}" in table["MEMORY_TALK"]
+        texts = ([t for _m, t in entries(table["FESTIVAL_LINES"]) + entries(table["BIRTHDAY_LINE"])]
+                 + plain(table["SUMMARY_TAILS"]) + table["SUMMARY_FOCUS_TAILS"] + [table["SUMMARY_TAIL"],
+                                                                                   table["MEMORY_TALK"]])
+        assert [t for t in texts if bedtime.mentions(t) or RESTING.search(t)] == []
+        festival_texts = [t for _m, t in entries(table["FESTIVAL_LINES"])]
+        assert len(set(festival_texts)) == len(festival_texts)
+
+
+@pytest.mark.parametrize("girl", [*WITH_LINES, "claude"])
+@pytest.mark.parametrize("language", ["zh", "en"])
+def test_she_says_her_own_wishes_and_summary_words(girl, language):
+    module = persona.girl_lines(girl)
+    persona.set_girl(girl)
+    i18n.set_language(language)
+    try:
+        own = (module.ZH if language == "zh" else module.EN) if module else None
+        shared = persona if language == "zh" else persona_en
+        table = own or {name: getattr(shared, name) for name in persona.PER_GIRL}
+        persona.set_girl("claude")
+        claudes = persona.summary_line({"写代码": 7200.0}, random.Random(1)).text
+        tail = next(w for w in (persona if language == "zh" else persona_en).SUMMARY_TAILS["写代码"] if claudes.endswith(w))
+        facts = claudes[:-len(tail)]
+        assert persona.duration_text(7200.0) in facts
+        persona.set_girl(girl)
+        rng = random.Random(1)
+        assert persona.greeting_line(9, "春节", False, rng) == persona.Reply(*table["FESTIVAL_LINES"]["春节"])
+        assert persona.greeting_line(9, None, True, rng) == persona.Reply(*table["BIRTHDAY_LINE"])
+        summary = persona.summary_line({"写代码": 7200.0}, rng).text
+        assert any(summary.endswith(word) for word in table["SUMMARY_TAILS"]["写代码"]), summary
+        assert summary.startswith(facts), summary  # the facts worded as for everyone
+        focus_only = persona.summary_line({}, rng, (3, 4500.0)).text
+        assert any(focus_only.endswith(word) for word in table["SUMMARY_FOCUS_TAILS"]), focus_only
+        other = persona.summary_line({"别的事": 7200.0}, rng).text
+        assert other.endswith(table["SUMMARY_TAIL"]), other
+        name = persona.activity_name("写代码") if language == "en" else "写代码"
+        said = persona.memory_talk_line("写代码", 5400.0).text
+        assert said == table["MEMORY_TALK"].format(activity=name, hours=1.5) and "1.5" in said
+    finally:
+        i18n.set_language("zh")
+        persona.set_girl("claude")
 
 
 def test_an_unknown_girl_says_claudes_lines():

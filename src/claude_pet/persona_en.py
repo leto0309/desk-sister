@@ -270,7 +270,7 @@ SUMMARY_TAILS = {
                    "Working with your AI partner today, learn anything new?"],
     "看视频": ["See anything good today?", "If you found something good, share it with me~"],
     "办公/看文档": ["Working through all those documents, you're amazing.",
-                "That's a long time with documents. Give your eyes a break~"],
+                "That's a long time with documents. Remember to blink and look into the distance~"],
     "打游戏": ["How many games did you win?", "Having fun is what matters~"],
     "聊天": ["Sounds like a good chat with everyone today~", "All that chatting, anything fun happen?"],
     "听音乐": ["I'd like to hear today's playlist too~", "With music along, it must have been a good day~"],
