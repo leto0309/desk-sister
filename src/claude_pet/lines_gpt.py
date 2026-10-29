@@ -469,7 +469,7 @@ EN = {
     },
     "SUMMARY_FOCUS_TAILS": ['Full marks for focus; a very steady stretch!', 'One pomodoro after another, all in the trip log~'],
     "SUMMARY_TAIL": "Today's itinerary is done. Well done~",  # for an activity with no words of its own
-    "MEMORY_TALK": 'Report: you\'ve been on "{activity}" for {hours:.1f} hours today. Stop for a walk and some water~',  # {activity}, {hours}: now and then in her self-talk
+    "MEMORY_TALK": 'Report: you\'ve spent {hours:.1f} hours on "{activity}" today. Stop for a walk and some water~',  # {activity}, {hours}: now and then in her self-talk
     "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
         "eyes_closed": [("sad", "I'm on standby at camp with my eyes closed, not looking~ (Ctrl+Alt+P to resume)")],
         "busy": [("think", "One moment, I'm still planning the route for the last one...")],

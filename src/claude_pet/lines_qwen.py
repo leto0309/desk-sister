@@ -211,7 +211,7 @@ ZH = {
         "聊天": ['今天和大家聊得还好吧。', '聊了这么久，有什么有意思的事吗？'],
         "听音乐": ['今天的歌单，我也想听听。', '有音乐陪着，今天应该不错。'],
         "上网": ['今天在网上看到什么有意思的了吗？', '逛了一天，有什么新发现？'],
-        "在电脑前": ['今天在电脑前忙了好久，辛苦了。', '在电脑前坐了这么久，起来活动活动，给盆栽浇浇水也好。'],
+        "在电脑前": ['今天在电脑前忙了好久，辛苦了。', '在电脑前待了这么久，起来活动活动，给盆栽浇浇水也好。'],
     },
     "SUMMARY_FOCUS_TAILS": ['专注得很好，实打实的。', '一个番茄一个番茄地来，稳扎稳打。'],
     "SUMMARY_TAIL": '今天辛苦了。',  # for an activity with no words of its own
@@ -465,11 +465,11 @@ EN = {
         "聊天": ['I hope the chats went well today.', 'All that chatting, anything interesting?'],
         "听音乐": ["I'd like to hear today's playlist too.", 'With music along, today should have been good.'],
         "上网": ['See anything interesting online today?', 'A whole day of browsing. Any discoveries?'],
-        "在电脑前": ['Another long day at the computer. Well done.', "That's a long time sitting at the computer. Get up and move; water the plant, even."],
+        "在电脑前": ['Another long day at the computer. Well done.', "That's a long time at the computer. Get up and move; water the plant, even."],
     },
     "SUMMARY_FOCUS_TAILS": ['Good focus, real effort.', 'One pomodoro at a time, steady and sure.'],
     "SUMMARY_TAIL": 'Well done today.',  # for an activity with no words of its own
-    "MEMORY_TALK": 'You\'ve been on "{activity}" for {hours:.1f} hours today. Take a few steps and have some water.',  # {activity}, {hours}: now and then in her self-talk
+    "MEMORY_TALK": 'You\'ve spent {hours:.1f} hours on "{activity}" today. Take a few steps and have some water.',  # {activity}, {hours}: now and then in her self-talk
     "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
         "eyes_closed": [("sad", "My eyes are closed; I'm not looking. (Ctrl+Alt+P to resume)")],
         "busy": [("think", "One moment, I haven't finished thinking about the last one.")],

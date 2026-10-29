@@ -29,7 +29,7 @@ def entries(value):
     return []
 
 
-RESTING = re.compile(r"歇|break", re.I)  # her words on the day never tell 主人 to rest (bedtime's rule)
+RESTING = re.compile(r"歇|\bbreak\b", re.I)  # her words on the day never tell 主人 to rest (bedtime's rule)
 
 
 def plain(value):
@@ -334,7 +334,8 @@ def test_stated_outcomes_and_plans_are_never_assumed():
     for girl in WITH_LINES:
         lines = persona.girl_lines(girl)
         for table in (lines.ZH, lines.EN):
-            assert [t for _m, t in entries(table) if STATED.search(t)] == []
+            texts = [t for _m, t in entries(table)] + plain(table)  # the summary words and reminder are plain text
+            assert [t for t in texts if STATED.search(t) or ASSUMES.search(t)] == [], girl
 
 
 @pytest.mark.parametrize("line", ["（小声）刚才那段代码的缩进……", "The indentation in that code...", "今天不用赶进度",
