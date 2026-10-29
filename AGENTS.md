@@ -7,4 +7,5 @@
 把需求整理成可验证的验收条件，记录在 docs/requirements.md；为行为变化写真实测试。
 运行 scripts/verify.ps1 和 scripts/build.ps1，修复失败并重新运行；禁止删除测试、忽略异常、伪造成功或绕过权限。
 提交前检查 git status、差异和敏感信息（scripts/Scan-Secrets.ps1）。推送、PR、合并和发布需要用户授权。
+完成一项任务时，在同一个提交或 PR 中更新 docs/STATUS.md（当前版本、进行中的工作、待办、最近的决定），让换会话或换 Agent 时能直接接手。
 不使用绕过全部权限的运行选项，不记录、输出或提交密钥。
