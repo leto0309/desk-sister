@@ -89,13 +89,17 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   right-click menu always looks. Drag her to move her (the place is remembered).
 - Hold Ctrl and scroll the wheel over her: change her height (10 pixels a notch, 100 to 600); her feet stay put.
 - She blinks now and then (except when happy or flustered), and her mouth moves while her words appear in the bubble,
-  with each mood's own mouth shapes. The "Appearance" page sets how often she blinks (off / few / normal / often) and
+  with each mood's own mouth shapes. All six girls do; only the sad face of Gemini, Qwen and GLM keeps still for now
+  (a few pictures are still to come). The "Appearance" page sets how often she blinks (off / few / normal / often) and
   can switch the moving mouth off.
 - "Character" page: choose your AI girl; set "What she calls you" (used in her prompt and her local lines); edit the
   current girl's persona prompt, applied with "Save persona" and undone any time with "Restore default". Chinese and
   English are kept separately; the task of looking at the screen, the reply format and the privacy rules are added
-  after the persona by the pet. Each girl has her own local lines (self-talk, greetings, dream talk, reactions to
-  pats and dragging), in Chinese and English; festival and focus-timer lines are shared.
+  after the persona by the pet. Each girl has her own local lines in her own voice, in Chinese and English: how she
+  introduces herself when you switch to her, her hello at start, good mornings and festival and birthday wishes,
+  self-talk and dream talk, reactions to pats and dragging, the focus-timer and reminder lines and replies, the closing
+  words of the daily summary, and the everyday replies such as pausing or resuming her looks. The reminders you write
+  are shown exactly as written; settings, API key and error messages are the same for everyone.
 - Small head movements (off by default): a little nod as she starts to talk, a tilt now and then while idle, and a duck
   when patted; switch them on in the "Appearance" page.
 - Small body movements (on by default): she swings a little as she is carried and squashes and springs back when she
