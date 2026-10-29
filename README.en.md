@@ -125,7 +125,7 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   the portable one replaces just the exe.
 - Right-click her or the tray icon: Poke her, Talk to her, Settings…, Pause watching, Quit; in "only the allowlist"
   mode there is also a one-click "Add the current program to the allowlist".
-- "Settings…" has six pages: General, How she thinks, Watching, Companion, Appearance and About; every change applies
+- "Settings…" has seven pages: General, Character, How she thinks, Watching, Companion, Appearance and About; every change applies
   at once. The comment interval (30 seconds to 10 minutes), the model (fast and cheap / smarter), the way she thinks,
   starting with Windows, the blocklist and allowlist, companionship, strolling, her height and more are set there.
 - Language: she follows the Windows display language (Chinese on a Chinese Windows, English otherwise); change it to
