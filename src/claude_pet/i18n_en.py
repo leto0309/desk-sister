@@ -165,14 +165,9 @@ TEXT = {
     "我不再看联动了，但没能从 settings.json 移除 hook：{0}": "I stopped watching the link, but could not remove the hooks from settings.json: {0}",
     "没能开启联动：事件文件写不进去（{0}）": "Could not turn on the link: the event file cannot be written ({0})",
     "没能开启联动：{0}": "Could not turn on the link: {0}",
-    "好的，陪伴记忆都清空啦……（翻到新的一页）": "All right, my companion memory is cleared... (turns to a fresh page)",
     "记忆在我这儿清空了，但 memory.json 没能改写（{0}），我稍后会再试。":
         "My memory is cleared, but memory.json could not be rewritten ({0}); I'll try again later.",
-    "我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）": "My eyes are closed right now, I'm not looking~ (Ctrl+Alt+P to resume)",
-    "等一下下，我还在想上一句……": "Just a moment, I'm still thinking about the last one...",
     "主人现在好像没有打开什么窗口呢……": "Looks like you don't have any window open right now...",
-    "好的，我先闭上眼睛，不偷看了。需要我的时候再叫我～": "All right, I'll close my eyes and not peek. Call me when you need me~",
-    "我回来啦！继续陪着主人～": "I'm back! Keeping you company again~",
     "白名单还是空的哦～打开想让我看的程序，右键选「把它加入白名单」，或在设置的「观察范围」页添加吧。":
         "The allowlist is still empty~ Open a program you want me to watch and right-click \"Add to the allowlist\", "
         "or add it on the \"Watching\" page in Settings.",

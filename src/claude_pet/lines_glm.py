@@ -217,6 +217,13 @@ ZH = {
     "SUMMARY_FOCUS_TAILS": ['专注得真好～（铃铛轻轻响了一下）', '一个番茄一个番茄地完成，慢慢来就很好。'],
     "SUMMARY_TAIL": '今天辛苦啦～',  # for an activity with no words of its own
     "MEMORY_TALK": '主人今天在「{activity}」上已经花了 {hours:.1f} 小时啦，起来走走、喝口水吧，点心也在这里～',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", '嗯，我现在闭着眼睛，没在看哦～（Ctrl+Alt+P 恢复）')],
+        "busy": [("think", '等一下哦，上一句我还在慢慢想……')],
+        "memory_cleared": [("happy", '好，陪伴记忆都清空啦……我们慢慢重新认识吧。')],
+        "paused": [("sad", '（铃铛轻轻响了一下）好，我闭上眼睛，不偷看了。需要我的时候再叫我～')],
+        "resumed": [("happy", '我回来啦～继续陪着主人，不着急。')],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，我把每个角落都找过了。请在设置里告诉我它在哪儿～"),
         "error": ("panic", "嗯……刚才那段没接住，我、我忘了要说什么了…"),
@@ -464,6 +471,13 @@ EN = {
     "SUMMARY_FOCUS_TAILS": ['Such good focus~ (her bell gives a soft ring)', 'One pomodoro after another; taking it slowly is just fine.'],
     "SUMMARY_TAIL": 'Well done today~',  # for an activity with no words of its own
     "MEMORY_TALK": 'You\'ve spent {hours:.1f} hours on "{activity}" today. Get up, walk about and have some water; there are snacks here too~',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", "Mm, my eyes are closed right now, I'm not looking~ (Ctrl+Alt+P to resume)")],
+        "busy": [("think", "Just a moment, I'm still slowly thinking about the last one...")],
+        "memory_cleared": [("happy", "Okay, my companion memory is cleared... let's get to know each other again, slowly.")],
+        "paused": [("sad", "(her bell rings softly) Okay, I'll close my eyes, no peeking. Call me when you need me~")],
+        "resumed": [("happy", "I'm back~ Keeping you company again, no hurry.")],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command; I've looked in every corner. Tell me where it is in the settings~"),
         "error": ("panic", "Mm... I didn't catch that one, and I-I forgot what I was going to say..."),

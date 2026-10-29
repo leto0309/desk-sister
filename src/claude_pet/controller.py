@@ -426,7 +426,7 @@ class PetController(QObject):
             return
         if self.config.paused and not user_message:
             if force:
-                self.window.say("sad", tr("我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）"))
+                self.window.say(*self._reply_tuple(persona.common_line("eyes_closed", self._rng)))
             return
         provider = self._provider()
         if provider.kind == CODEX_CLI and not self.codex:
@@ -484,7 +484,7 @@ class PetController(QObject):
     def poke(self) -> None:
         """The menu's 「戳她一下（立即评论）」: always a fresh look."""
         if self.busy:
-            self.window.say("think", tr("等一下下，我还在想上一句……"))
+            self.window.say(*self._reply_tuple(persona.common_line("busy", self._rng)))
             return
         self.tick(force=True)
 
@@ -492,7 +492,7 @@ class PetController(QObject):
         """A click on her: a fresh look, but clicks soon after one get a local line instead (no model call),
         a little more flustered with each."""
         if self.busy:
-            self.window.say("think", tr("等一下下，我还在想上一句……"))
+            self.window.say(*self._reply_tuple(persona.common_line("busy", self._rng)))
             return
         now = self._clock()
         if now - self._last_poke_look < POKE_COOLDOWN_SEC:
@@ -508,7 +508,7 @@ class PetController(QObject):
         text, ok = QInputDialog.getText(None, tr("和 {0} 说话", self._name()), tr("想对她说什么？"))
         if ok and text.strip():
             if self.busy:
-                self.window.say("think", tr("等一下下，我还在想上一句……"))
+                self.window.say(*self._reply_tuple(persona.common_line("busy", self._rng)))
                 return
             self.tick(force=True, user_message=text.strip()[:300])
 
@@ -768,7 +768,7 @@ class PetController(QObject):
             log.exception("could not clear companion memory")
             self.window.say("sad", tr("记忆在我这儿清空了，但 memory.json 没能改写（{0}），我稍后会再试。", exc))
             return
-        self.window.say("happy", tr("好的，陪伴记忆都清空啦……（翻到新的一页）"))
+        self.window.say(*self._reply_tuple(persona.common_line("memory_cleared", self._rng)))
 
     def _update_quiet(self) -> None:
         if not self.config.quiet_fullscreen:
@@ -1280,9 +1280,9 @@ class PetController(QObject):
         self.pause_action.setChecked(self.config.paused)
         if self.config.paused:
             self._cancel_inflight()
-            self.window.say("sad", tr("好的，我先闭上眼睛，不偷看了。需要我的时候再叫我～"))
+            self.window.say(*self._reply_tuple(persona.common_line("paused", self._rng)))
         else:
-            self.window.say("happy", tr("我回来啦！继续陪着主人～"))
+            self.window.say(*self._reply_tuple(persona.common_line("resumed", self._rng)))
             self.last_fingerprint = None
         self._refresh_status()
         self._save()

@@ -25,6 +25,14 @@ FALLBACK = {
     "bad_api_key": ("sad", "That API key was refused... could you check the key, and whether it has credit left?"),
 }
 
+COMMON_REPLIES = {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+    "eyes_closed": [("sad", "My eyes are closed right now, I'm not looking~ (Ctrl+Alt+P to resume)")],
+    "busy": [("think", "Just a moment, I'm still thinking about the last one...")],
+    "memory_cleared": [("happy", 'All right, my companion memory is cleared... (turns to a fresh page)')],
+    "paused": [("sad", "All right, I'll close my eyes and not peek. Call me when you need me~")],
+    "resumed": [("happy", "I'm back! Keeping you company again~")],
+}
+
 WAKE_LINES = [
     ("happy", "Oh, you're back! I wasn't secretly asleep... really."),
     ("talk", "Context reloaded~ Let's carry on!"),

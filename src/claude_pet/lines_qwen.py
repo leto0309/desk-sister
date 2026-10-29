@@ -216,6 +216,13 @@ ZH = {
     "SUMMARY_FOCUS_TAILS": ['专注得很好，实打实的。', '一个番茄一个番茄地来，稳扎稳打。'],
     "SUMMARY_TAIL": '今天辛苦了。',  # for an activity with no words of its own
     "MEMORY_TALK": '主人今天在「{activity}」上已经花了 {hours:.1f} 小时了。起来走两步，喝口水吧。',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", '我现在闭着眼，没在看。（Ctrl+Alt+P 恢复）')],
+        "busy": [("think", '稍等，上一句还没想完。')],
+        "memory_cleared": [("happy", '好，陪伴记忆清空了。从头再来。')],
+        "paused": [("sad", '（合上折扇）好，我闭上眼睛，不看了。需要时再叫我。')],
+        "resumed": [("happy", '（展开折扇）我回来了，继续陪着主人。')],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，是不是放到哪里忘了收？请在设置里告诉我它在哪儿～"),
         "error": ("panic", "先等等……刚才那段没接住，我、我忘了要说什么了…"),
@@ -463,6 +470,13 @@ EN = {
     "SUMMARY_FOCUS_TAILS": ['Good focus, real effort.', 'One pomodoro at a time, steady and sure.'],
     "SUMMARY_TAIL": 'Well done today.',  # for an activity with no words of its own
     "MEMORY_TALK": 'You\'ve been on "{activity}" for {hours:.1f} hours today. Take a few steps and have some water.',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", "My eyes are closed; I'm not looking. (Ctrl+Alt+P to resume)")],
+        "busy": [("think", "One moment, I haven't finished thinking about the last one.")],
+        "memory_cleared": [("happy", 'Right, my companion memory is cleared. A fresh start.')],
+        "paused": [("sad", "(closes her fan) Right, I'll close my eyes and not look. Call me when you need me.")],
+        "resumed": [("happy", "(opens her fan) I'm back, keeping you company again.")],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command... did it get put somewhere and forgotten? Tell me where it is in the settings~"),
         "error": ("panic", "Hold on... I didn't catch that one, and I-I forgot what I was going to say..."),

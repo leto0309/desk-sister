@@ -341,3 +341,47 @@ def test_stated_outcomes_and_plans_are_never_assumed():
                                   "No deadlines today.", "这么多文档都整理好了", "I saw it all~"])
 def test_the_outcome_check_rejects_what_it_should(line):
     assert STATED.search(line)
+
+
+def common(girl, english=False):
+    module = persona.girl_lines(girl)
+    if module is None:  # Claude's are the shared tables
+        return (persona_en if english else persona).COMMON_REPLIES
+    return (module.EN if english else module.ZH)["COMMON_REPLIES"]
+
+
+@pytest.mark.parametrize("girl", list(characters.CHARACTERS))
+def test_her_own_words_for_the_common_actions(girl):
+    for english in (False, True):
+        table = common(girl, english)
+        assert set(table) == set(persona.COMMON_REPLIES)
+        for kind, lines in table.items():
+            for mood, text in lines:
+                assert mood in persona.MOODS and not bedtime.mentions(text), (kind, text)
+        assert all("Ctrl+Alt+P" in t for _m, t in table["eyes_closed"])  # how to let her look again
+        if girl != "claude":  # turning pages is Claude's (she holds a book)
+            assert not [t for _m, t in entries(table) if re.search(r"翻到新的一页|turns to a fresh page", t)]
+    every = [t for g in characters.CHARACTERS for english in (False, True) for _m, t in entries(common(g, english))]
+    assert len(set(every)) == len(every)  # nobody borrows another girl's words
+
+
+@pytest.mark.parametrize("girl", list(characters.CHARACTERS))
+def test_she_answers_the_menu_in_her_own_words(pet, girl):
+    pet.set_character(girl)
+    table = common(girl)
+
+    def said(kind):
+        return pet.window.full_text in {t for _m, t in table[kind]}
+
+    pet.toggle_pause()
+    assert pet.config.paused and said("paused")
+    pet.poke()  # asked to look while her eyes are closed
+    assert said("eyes_closed")
+    pet.toggle_pause()
+    assert not pet.config.paused and said("resumed")
+    pet.busy = True
+    pet.poke()
+    assert said("busy")
+    pet.busy = False
+    pet.clear_companion_memory()
+    assert said("memory_cleared")

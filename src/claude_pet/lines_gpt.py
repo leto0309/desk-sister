@@ -216,6 +216,13 @@ ZH = {
     "SUMMARY_FOCUS_TAILS": ['专注力满分，这一程走得很稳！', '一个番茄一个番茄地拿下，记进行程日志了～'],
     "SUMMARY_TAIL": '今天的行程完成，辛苦啦～',  # for an activity with no words of its own
     "MEMORY_TALK": '报告：主人今天在「{activity}」上已经花了 {hours:.1f} 小时啦，停一停、起来走走、喝口水吧～',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", '我现在在营地闭眼待命，没在看哦～（Ctrl+Alt+P 恢复）')],
+        "busy": [("think", '稍等，上一句的路线我还在规划……')],
+        "memory_cleared": [("happy", '好的，陪伴记忆清空了……行程日志开了新的一页。')],
+        "paused": [("sad", '收到，我先闭上眼睛回营地待命，不偷看了。需要我的时候再叫我～')],
+        "resumed": [("happy", '归队！继续陪着主人前进～')],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，我的地图上没有它。请在设置里告诉我它在哪儿～"),
         "error": ("panic", "诶、等一下！刚才那段出岔子了，我、我忘了要说什么…"),
@@ -463,6 +470,13 @@ EN = {
     "SUMMARY_FOCUS_TAILS": ['Full marks for focus; a very steady stretch!', 'One pomodoro after another, all in the trip log~'],
     "SUMMARY_TAIL": "Today's itinerary is done. Well done~",  # for an activity with no words of its own
     "MEMORY_TALK": 'Report: you\'ve been on "{activity}" for {hours:.1f} hours today. Stop for a walk and some water~',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", "I'm on standby at camp with my eyes closed, not looking~ (Ctrl+Alt+P to resume)")],
+        "busy": [("think", "One moment, I'm still planning the route for the last one...")],
+        "memory_cleared": [("happy", 'All right, my companion memory is cleared... a fresh page in the trip log.')],
+        "paused": [("sad", "Copy that. I'll close my eyes and stand by at camp, no peeking. Call me when you need me~")],
+        "resumed": [("happy", 'Back with the team! Onward together~')],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command; it isn't on my map. Tell me where it is in the settings~"),
         "error": ("panic", "Huh, wait! Something went wrong just now, and I-I forgot what I was going to say..."),

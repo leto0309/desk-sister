@@ -216,6 +216,13 @@ ZH = {
     "SUMMARY_FOCUS_TAILS": ['专注力满分喵！番茄都收进收集本啦～', '一个番茄一个番茄地完成，好厉害喵！'],
     "SUMMARY_TAIL": '今天辛苦啦喵～',  # for an activity with no words of its own
     "MEMORY_TALK": '喵，主人今天在「{activity}」上已经花了 {hours:.1f} 小时啦，起来伸个懒腰、喝口水吧～',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", '我现在把眼睛闭上了喵，没在看哦～（Ctrl+Alt+P 恢复）')],
+        "busy": [("think", '等一下下喵，上一句我还在想……')],
+        "memory_cleared": [("happy", '好的，陪伴记忆都清空啦……收集本换了新的一页喵～')],
+        "paused": [("sad", '好的，我蜷起来闭上眼睛，不偷看了喵。需要我的时候再叫我～')],
+        "resumed": [("happy", '我回来啦喵！继续陪着主人～')],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，它是不是躲进纸箱里了？请在设置里告诉我它在哪儿～"),
         "error": ("panic", "呜…刚才那段我没接住，我、我忘了要说什么了…"),
@@ -463,6 +470,13 @@ EN = {
     "SUMMARY_FOCUS_TAILS": ['Full marks for focus, nya! Every pomodoro is in my collection book~', 'One pomodoro after another. So clever, nya!'],
     "SUMMARY_TAIL": 'Well done today, nya~',  # for an activity with no words of its own
     "MEMORY_TALK": 'Nya, you\'ve spent {hours:.1f} hours on "{activity}" today. Have a stretch and some water~',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", "My eyes are closed right now, nya; I'm not looking~ (Ctrl+Alt+P to resume)")],
+        "busy": [("think", "Just a moment, nya, I'm still thinking about the last one...")],
+        "memory_cleared": [("happy", 'All right, my companion memory is cleared... a fresh page in my collection book, nya~')],
+        "paused": [("sad", "All right, I'll curl up and close my eyes, no peeking, nya. Call me when you need me~")],
+        "resumed": [("happy", "I'm back, nya! Keeping you company again~")],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command... is it hiding in a cardboard box? Tell me where it is in the settings~"),
         "error": ("panic", "Uh... I didn't catch that one, and I-I forgot what I was going to say..."),

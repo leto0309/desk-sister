@@ -12,8 +12,10 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -41,21 +43,48 @@ MOMENTS = [
 ]
 
 
+STUCK_SEC = 300  # a single test this long is stuck: every thread's stack goes to the run's log
+RUN_LIMIT_SEC = 1500  # a whole run (about 4 minutes) this long is given up on, so the others still report
+
+
+def stop_tree(pid: int) -> None:
+    """End a test run this script started, with every process it started in turn."""
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True)
+    else:
+        os.kill(pid, 9)
+
+
 def run(setting: tuple[str, str]) -> tuple[str, int, list[str], str]:
     name, value = setting
+    tag = re.sub(r"[^0-9A-Za-z]", "-", value)
     # Read back as UTF-8: Chinese messages intact. Runs side by side must not write the real Credential Manager at
     # once: it then loses writes, the user's own credentials included (see tests/test_api_mode.py).
     env = dict(os.environ, **{name: value}, PYTHONIOENCODING="utf-8", DESK_SISTER_PARALLEL_RUN="1")
-    done = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "tests", "-o", "pythonpath=src", "-p", "no:cacheprovider"],
-        cwd=ROOT, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    # Each run its own temporary folder: side by side, pytest's shared one is cleaned up by one run while another
+    # still lists it (an unclosed scandir iterator then failed a run whose tests had all passed).
+    basetemp = Path(tempfile.gettempdir()) / f"desk-sister-tests-{name.lower()}-{tag}"
+    command = [sys.executable, "-m", "pytest", "-q", "tests", "-o", "pythonpath=src", "-p", "no:cacheprovider",
+               "-o", f"faulthandler_timeout={STUCK_SEC}", f"--basetemp={basetemp}"]
+    child = subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             encoding="utf-8", errors="replace")
+    try:
+        out, err = child.communicate(timeout=RUN_LIMIT_SEC)
+        code = child.returncode
+    except subprocess.TimeoutExpired:  # once a run sat idle for 12 hours with nothing to show where
+        stop_tree(child.pid)  # a venv's python.exe starts the real interpreter as its child: end both
+        out, err = child.communicate()
+        code, out = -1, f"{out}\ngave up after {RUN_LIMIT_SEC} s"
+    done = subprocess.CompletedProcess(command, code, out, err)
     failed = re.findall(r"^(?:FAILED|ERROR) (\S+)", done.stdout, re.M)
     summary = (done.stdout.strip().splitlines() or ["(no output)"])[-1]
     if done.returncode:
-        log = LOGS / f"{name}-{re.sub(r'[^0-9A-Za-z]', '-', value)}.log"
+        log = LOGS / f"{name}-{tag}.log"
         LOGS.mkdir(parents=True, exist_ok=True)
         log.write_text(f"exit code {done.returncode}\n{done.stdout}\n--- stderr ---\n{done.stderr}", encoding="utf-8")
-        summary += f"  (exit {done.returncode}; log: {log.relative_to(ROOT)})"
+        summary += f"  (exit {done.returncode}; log: {log.relative_to(ROOT)}; its files: {basetemp})"
+    else:
+        shutil.rmtree(basetemp, ignore_errors=True)  # kept only when the run failed, to look at
     return value, done.returncode, failed, summary
 
 

@@ -219,6 +219,13 @@ ZH = {
     "SUMMARY_FOCUS_TAILS": ['专注力满分！番茄都收进盆里啦～', '一个番茄一个番茄地完成，主人真棒！'],
     "SUMMARY_TAIL": '今天辛苦啦～',  # for an activity with no words of its own
     "MEMORY_TALK": '主人主人，今天在「{activity}」上已经花了 {hours:.1f} 小时啦，起来走走、喝口水吧～',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", '我现在闭着眼睛呢，盆也放下了，没在看哦～（Ctrl+Alt+P 恢复）')],
+        "busy": [("think", '等一下下，上一句我还在推理……')],
+        "memory_cleared": [("happy", '好的，陪伴记忆都清空啦……盆里空空的，重新装～')],
+        "paused": [("sad", '好的，我抱着盆闭上眼睛，不偷看了。需要我的时候叫我～')],
+        "resumed": [("happy", '主人主人，我回来啦！继续陪着你～')],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，是不是被我放进盆里弄丢了？请在设置里告诉我它在哪儿～"),
         "error": ("panic", "呜…刚才那段我没接住，我、我忘了要说什么…"),
@@ -466,6 +473,13 @@ EN = {
     "SUMMARY_FOCUS_TAILS": ['Full marks for focus! Every pomodoro is in my bowl~', "One pomodoro after another. You're amazing!"],
     "SUMMARY_TAIL": 'Well done today~',  # for an activity with no words of its own
     "MEMORY_TALK": 'Hey, hey, you\'ve spent {hours:.1f} hours on "{activity}" today. Get up, walk about and have some water~',  # {activity}, {hours}: now and then in her self-talk
+    "COMMON_REPLIES": {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+        "eyes_closed": [("sad", "My eyes are closed and my bowl is down; I'm not looking~ (Ctrl+Alt+P to resume)")],
+        "busy": [("think", "Just a moment, I'm still reasoning about the last one...")],
+        "memory_cleared": [("happy", 'All right, my companion memory is cleared... my bowl is empty, ready to fill again~')],
+        "paused": [("sad", "All right, I'll hug my bowl and close my eyes, no peeking. Call me when you need me~")],
+        "resumed": [("happy", "Hey, hey, I'm back! Keeping you company again~")],
+    },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command... did I lose it in my bowl? Tell me where it is in the settings~"),
         "error": ("panic", "Uh... I didn't catch that one, and I-I forgot what I was going to say..."),

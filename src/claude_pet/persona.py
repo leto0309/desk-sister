@@ -42,6 +42,14 @@ FALLBACK = {
     "bad_api_key": ("sad", "这个 API Key 被拒绝了……主人检查一下 Key 对不对、有没有余额吧？"),
 }
 
+COMMON_REPLIES = {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
+    "eyes_closed": [("sad", '我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）')],
+    "busy": [("think", '等一下下，我还在想上一句……')],
+    "memory_cleared": [("happy", '好的，陪伴记忆都清空啦……（翻到新的一页）')],
+    "paused": [("sad", '好的，我先闭上眼睛，不偷看了。需要我的时候再叫我～')],
+    "resumed": [("happy", '我回来啦！继续陪着主人～')],
+}
+
 WAKE_LINES = [
     ("happy", "啊，主人回来了！我刚才没有偷偷睡着哦……真的。"),
     ("talk", "上下文重新加载完毕～我们继续吧！"),
@@ -75,7 +83,8 @@ class Reply:
 # The tables with a character in them: each girl may have her own (lines_<girl>.py); the rest are shared.
 PER_GIRL = ("SELF_TALK", "TIME_TALK", "NIGHT_TALK", "SLEEP_TALK", "GREETINGS", "WEEKDAY_GREETINGS", "WAKE_LINES",
             "SLEEP_LINES", "INTRO_LINES", "HELLO_LINES", "INTERACTION_TALK", "TIMER_TALK", "FESTIVAL_LINES",
-            "BIRTHDAY_LINE", "SUMMARY_TAILS", "SUMMARY_FOCUS_TAILS", "SUMMARY_TAIL", "MEMORY_TALK", "FALLBACK")
+            "BIRTHDAY_LINE", "SUMMARY_TAILS", "SUMMARY_FOCUS_TAILS", "SUMMARY_TAIL", "MEMORY_TALK", "COMMON_REPLIES",
+            "FALLBACK")
 MERGED = ("FALLBACK",)  # a girl's own entries replace just those keys (the rest are plain system messages)
 _girl = characters.DEFAULT
 
@@ -127,6 +136,13 @@ def system_prompt(girl: str = characters.DEFAULT, address: str = characters.DEFA
 def lines(name: str) -> list[tuple[str, str]]:
     """A list of (mood, line), such as WAKE_LINES, in the current language."""
     return _table(name)
+
+
+def common_line(kind: str, rng: random.Random) -> Reply:
+    """Her words when her looks are paused or resumed, when asked while paused or still thinking, and when her
+    companion memory is cleared (COMMON_REPLIES)."""
+    mood, text = rng.choice(_table("COMMON_REPLIES")[kind])
+    return Reply(mood, text)
 
 
 def fallback(kind: str) -> Reply:
