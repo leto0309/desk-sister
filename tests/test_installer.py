@@ -83,6 +83,47 @@ def test_the_install_closes_her_before_setting_her_files_aside():
 
 
 
+def test_the_release_carries_a_checksum_manifest_that_is_checked_before_publishing():
+    package = RELEASE[RELEASE.index("package:"):RELEASE.index("publish:")]
+    publish = RELEASE[RELEASE.index("publish:"):]
+    # Written after the last file lands in dist/ and before the files are uploaded.
+    assert package.index("./devtools/build_installer.ps1") < package.index("SHA256SUMS.txt") < package.index("actions/upload-artifact")
+    assert "throw 'No release files in dist'" in package
+    assert publish.index("sha256sum --check --strict SHA256SUMS.txt") < publish.index("gh release create")
+    assert "set -euo pipefail" in publish
+
+
+def test_the_manifest_step_writes_what_sha256sum_reads(tmp_path):
+    # The workflow's own PowerShell runs against a sample dist/; Python's hashlib checks the result.
+    import hashlib
+    import shutil
+    import subprocess
+
+    import pytest
+
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        pytest.skip("pwsh is not installed")
+    block = re.search(r"- name: Write SHA256SUMS\.txt\n(?:.*\n)*?\s+run: \|\n((?: {10}.*\n)+)", RELEASE).group(1)
+    script = "\n".join(line[10:] for line in block.splitlines())
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "desk-sister.exe").write_bytes(b"exe bytes")
+    (dist / "DeskSister-Setup.exe").write_bytes(b"setup bytes")
+    subprocess.run([pwsh, "-NoProfile", "-Command", script], cwd=tmp_path, check=True, capture_output=True)
+    data = (dist / "SHA256SUMS.txt").read_bytes()
+    assert not data.startswith(b"\xef\xbb\xbf") and b"\r" not in data and data.endswith(b"\n")
+    expected = {f"{hashlib.sha256((dist / name).read_bytes()).hexdigest()}  {name}"
+                for name in ("desk-sister.exe", "DeskSister-Setup.exe")}
+    assert set(data.decode("utf-8").splitlines()) == expected
+
+    (dist / "SHA256SUMS.txt").unlink()
+    for item in dist.iterdir():
+        item.unlink()
+    empty = subprocess.run([pwsh, "-NoProfile", "-Command", script], cwd=tmp_path, capture_output=True, text=True)
+    assert empty.returncode != 0 and "No release files in dist" in empty.stdout + empty.stderr
+
+
 def test_closing_her_passes_the_folder_in_the_environment_not_in_the_command():
     code = ISS[ISS.index("procedure CloseRunningCopies"):ISS.index("// The previous version is set aside")]
     assert "SetEnvironmentVariable('DESK_SISTER_APP'" in code and "$env:DESK_SISTER_APP" in code

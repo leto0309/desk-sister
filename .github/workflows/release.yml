@@ -57,6 +57,16 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: ./devtools/build_installer.ps1 -Version $env:VERSION -Iscc $env:ISCC -Python python
+      - name: Write SHA256SUMS.txt
+        shell: pwsh
+        # sha256sum format (lower-case hash, two spaces, name; UTF-8 without BOM, LF), so `sha256sum -c` and
+        # download checkers can verify every release file.
+        run: |
+          $files = @(Get-ChildItem -LiteralPath dist -File | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object Name)
+          if (-not $files.Count) { throw 'No release files in dist' }
+          $lines = foreach ($file in $files) { '{0}  {1}' -f (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $file.Name }
+          [IO.File]::WriteAllText((Join-Path dist 'SHA256SUMS.txt'), (($lines -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
+          Get-Content -LiteralPath dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: release-files
@@ -81,4 +91,6 @@ jobs:
         run: |
           set -euo pipefail
           gh run download "$RUN_ID" --repo "$GH_REPO" --name release-files --dir release-files
+          # The files published are exactly the ones hashed on the build machine.
+          (cd release-files && sha256sum --check --strict SHA256SUMS.txt)
           gh release create "v$VERSION" release-files/* --repo "$GH_REPO" --target "$TARGET" --title "v$VERSION" --generate-notes
