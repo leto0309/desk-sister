@@ -6,6 +6,7 @@ from claude_pet import claude_client
 from claude_pet.config import Config
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
+from PySide6 import QtCore  # noqa: E402
 from claude_pet import controller as controller_module  # noqa: E402
 
 SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
@@ -47,6 +48,33 @@ def test_the_menu_opens_one_settings_window(pet):
     ctrl.open_settings()
     assert ctrl.settings_window is window  # reused, not a second window
     assert window.nav.count() == 8 and window.windowTitle() == "Desk Sister · 设置"
+
+
+def test_the_window_is_no_taller_than_before_the_memory_page(pet):
+    """v0.3.10's memory page lists asked for ~190 px each and made the window 841 px tall, above a 816 px screen."""
+    _ctrl, window, _vault, _saved = pet
+    assert window.sizeHint().height() <= 680
+
+
+class SmallScreen:
+    def __init__(self, x, y, width, height):
+        self.rect = QtCore.QRect(x, y, width, height)
+
+    def availableGeometry(self):  # noqa: N802 - like QScreen
+        return self.rect
+
+
+@pytest.mark.parametrize("screen", [(0, 0, 1366, 600), (1920, -200, 1024, 560), (0, 0, 1536, 816)])
+def test_the_window_opens_wholly_on_its_screen(pet, monkeypatch, screen):
+    """Never taller than the screen it opens on and never above its top, so the title bar can be dragged."""
+    _ctrl, window, _vault, _saved = pet
+    fake = SmallScreen(*screen)
+    monkeypatch.setattr(window, "screen", lambda: fake)
+    window.fit_on_screen()
+    area, frame = fake.rect, window.frameGeometry()  # the frame: title bar and borders included
+    assert frame.top() >= area.top() and frame.left() >= area.left()  # the title bar is on the screen
+    assert frame.bottom() <= area.bottom() or window.height() == window.minimumHeight()
+    assert frame.right() <= area.right()
 
 
 def test_general_page_applies_at_once_and_stays_in_step_with_the_menu(pet):

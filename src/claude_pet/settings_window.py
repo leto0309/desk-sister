@@ -12,10 +12,10 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+    QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton, QRadioButton, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -213,6 +213,14 @@ def _hint(text: str) -> QLabel:
     return label
 
 
+class _ShortList(QListWidget):
+    """A list that asks for little height and grows with the window: a list's own wish (about 190 px) made the
+    window taller than a small screen."""
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        return QSize(super().sizeHint().width(), 80)
+
+
 def _page(title: str) -> tuple[QWidget, QVBoxLayout]:
     page = QWidget()
     layout = QVBoxLayout(page)
@@ -270,6 +278,20 @@ class SettingsWindow(QDialog):
             button.setAutoDefault(False)
             button.setDefault(False)
         self.refresh()
+
+    def fit_on_screen(self) -> None:
+        """Its first size and place: the size it asks for, never more than the screen it opens on, and wholly on it,
+        so the title bar can always be reached and dragged."""
+        screen = (self.screen() or QApplication.primaryScreen()).availableGeometry()
+        frame = self.frameGeometry().size() - self.geometry().size()  # title bar and borders
+        # (not known before the window is first shown: allow for a usual Windows title bar and border)
+        frame_w, frame_h = frame.width() or 16, frame.height() or 40
+        width = min(max(self.sizeHint().width(), self.minimumWidth()), screen.width() - frame_w)
+        height = min(max(self.sizeHint().height(), self.minimumHeight()), screen.height() - frame_h)
+        self.resize(width, height)
+        # move() places the frame, title bar included: its top is never above the screen's
+        self.move(screen.x() + max(0, (screen.width() - width - frame_w) // 2),
+                  screen.y() + max(0, (screen.height() - height - frame_h) // 2))
 
     def _theme(self) -> None:
         """Dress the window in the current girl's colours, with her face and words in the header."""
@@ -708,11 +730,11 @@ class SettingsWindow(QDialog):
         top.addWidget(self.diary_box, 1)
         top.addWidget(forget)
         self.together_label = QLabel()
-        self.days_view = QListWidget()
+        self.days_view = _ShortList()
         self.days_view.setObjectName("rules")
         self.days_view.setMinimumHeight(60)
         self.days_view.setSelectionMode(QListWidget.SelectionMode.NoSelection)
-        self.notes_view = QListWidget()
+        self.notes_view = _ShortList()
         self.notes_view.setObjectName("rules")
         self.notes_view.setMinimumHeight(60)
         self.notes_view.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)

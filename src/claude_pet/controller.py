@@ -2241,6 +2241,7 @@ class PetController(QObject):
             from .settings_window import SettingsWindow  # Qt widgets only when first needed
 
             self.settings_window = SettingsWindow(self)
+            self.settings_window.fit_on_screen()
         self._refresh_autostart()  # it may have been changed in Task Manager meanwhile
         self.settings_window.refresh()
         self.settings_window.show()
