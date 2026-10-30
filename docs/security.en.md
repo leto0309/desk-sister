@@ -47,6 +47,13 @@ production deployments need authorisation. Secrets are configured only in GitHub
   today's time per kind; window titles are used only to classify locally and are never written to the file or the log;
   windows refused by the blocklist or the allowlist are neither recorded nor timed. A summary of the memory goes to the
   model as context with comment requests; switch it off or clear it under Settings → Companion.
+- The diary (%APPDATA%/ClaudePet/journal.json) keeps only the first day together, each day's time per kind of
+  activity, how many focus periods, reminders and chats there were, and the notes you explicitly asked her to keep
+  ("remember: ..." or on the settings page; up to 60 characters each, 50 notes); no window titles, screenshots or chat
+  text; days are kept for 180 days. When she looks or you talk, only a short overview and the newest notes go to the
+  chosen model, never more than 600 characters (300 in Chinese), marked as background and not instructions. Delete
+  notes, clear it or switch it off under Settings → Memory; switching it off or deleting cancels a request in flight,
+  and once off nothing is recorded or sent.
 - The Claude Code link is off by default; turning it on needs confirming in a dialog. It changes the user's Claude Code
   settings.json (backing it up first); the hooks it adds run only powershell.exe: they read the hook's event JSON in
   memory, parse out only the top-level session ID (letters and digits; if parsing fails, only a leading session_id is

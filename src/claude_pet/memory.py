@@ -106,6 +106,10 @@ class CompanionMemory:
         self.day = self._today()
         self.seconds: dict[str, float] = {}  # activity -> seconds today
         self.dirty = False
+        # Called with (day, seconds) when a day's totals are about to be dropped: at midnight, or at a start on a
+        # later day (then they wait in `ended` until a callback is set). The diary keeps them.
+        self.on_day_end: Callable[[str, dict[str, float]], None] | None = None
+        self.ended: tuple[str, dict[str, float]] | None = None
         self._load()
 
     # ---- persistence -------------------------------------------------------
@@ -125,13 +129,17 @@ class CompanionMemory:
         if isinstance(looks, list):
             self.looks = [look for look in map(_valid_look, looks[-MAX_LOOKS:]) if look is not None]
         seconds = data.get("seconds")
-        if data.get("day") == self.day and isinstance(seconds, dict):
-            self.seconds = {
+        if isinstance(seconds, dict):
+            valid = {
                 k: float(v) for k, v in seconds.items()
                 # range first: a 400-digit int would overflow inside isfinite(); inf/NaN fail the range too
                 if k in ACTIVITIES and isinstance(v, (int, float)) and not isinstance(v, bool)
                 and 0 <= v <= 86400 and math.isfinite(v)
             }
+            if data.get("day") == self.day:
+                self.seconds = valid
+            elif valid and isinstance(data.get("day"), str):
+                self.ended = (data["day"], valid)  # an earlier day, the pet was not running at midnight
 
     def flush(self) -> None:
         if self.path is None or not self.dirty:
@@ -153,6 +161,8 @@ class CompanionMemory:
     def _roll_day(self) -> None:
         today = self._today()
         if today != self.day:
+            if self.seconds and self.on_day_end is not None:
+                self.on_day_end(self.day, dict(self.seconds))
             self.day, self.seconds = today, {}
             self.dirty = True
 

@@ -24,7 +24,8 @@ from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROV
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
 from .autostart import Autostart, AutostartError
-from .memory import CompanionMemory, classify_activity
+from .memory import CompanionMemory, activity_name, classify_activity, duration_text
+from .journal import NOTE_MAX_CHARS, Journal, note_request
 from .config import BLINK_CHOICES, Config, app_data_dir, save_config
 from .pet_window import PetWindow
 from .walker import Walker
@@ -52,6 +53,11 @@ SIZE_SHOWN_SEC = 2.5  # how long her height stays under her feet after Ctrl + wh
 AUTH_CHECK_TTL = 1800
 AUTOSTART_LABEL = N_("开机自启")
 MEMORY_TALK_CHANCE = 0.25  # share of self-talk turns that mention today's main activity (if >= 1 h)
+PAST_RECALL_CHANCE = 0.1  # share of self-talk turns that bring up an earlier day (at most once a day)
+PAST_RECALL_DAYS = range(2, 8)  # the day before yesterday back to a week ago
+RECALL_MIN_SEC = 3600  # a day's main activity is worth bringing up from an hour
+DAYS_TOGETHER = (7, 30, 50, 100, 200, 365)  # and every 100th and 365th day
+STREAKS = (3, 5, 7, 14, 21, 30)  # and every 30th day in a row
 MEMORY_FLUSH_SEC = 60
 SELF_TALK_GAP_SEC = 60  # never talk to herself within a minute of saying anything
 WAKE_IDLE_SEC = 5
@@ -88,6 +94,7 @@ class Job:
     quiet_check: object | None = None
     allowlist: list[str] | None = None  # None: blocklist mode
     memory_context: str = ""
+    journal_context: str = ""  # the diary's few lines (days together, yesterday, the newest notes)
     backend: str = "subscription"  # a providers.PROVIDERS key
     kind: str = CLAUDE_CLI  # how that provider is called; decides which call object `call` is
     codex: str = ""  # the Codex CLI, for CODEX_CLI
@@ -222,7 +229,8 @@ class PetController(QObject):
     download_done = Signal(object, object)  # (the verified exe or None, its version or an i18n.Msg why not)
 
     def __init__(self, app: QApplication, config: Config, sprite_folder: Path, config_file: Path | None = None,
-                 autostart: Autostart | None = None, memory: CompanionMemory | None = None) -> None:
+                 autostart: Autostart | None = None, memory: CompanionMemory | None = None,
+                 journal: Journal | None = None) -> None:
         super().__init__()
         self.app = app
         self.config = config
@@ -267,6 +275,16 @@ class PetController(QObject):
         self.self_talk_timer = QTimer(self, singleShot=True, timeout=self._self_talk_tick)
         # Companion memory: in-memory only unless the app hands in a file-backed one.
         self.memory = memory if memory is not None else CompanionMemory(None)
+        # The diary (记忆库), likewise; a new one starts from the focus periods counted before it existed.
+        self.journal = journal if journal is not None else Journal(None)
+        if self.journal.created and self.focus_log.days:
+            first = min(datetime.date.fromisoformat(day) for day in self.focus_log.days)
+            self.journal.seed(min(first, self._today()),
+                              {day: int(entry["count"]) for day, entry in self.focus_log.days.items()})
+        self.memory.on_day_end = self._diary_activity  # a day's totals reach the diary before they are dropped
+        if self.memory.ended is not None:
+            self._diary_activity(*self.memory.ended)
+            self.memory.ended = None
         # Claude Code link: hooks write event names to a local file; the pet only reads that file.
         self.claude_state = agent_link.ClaudeCodeState()
         self.claude_settings = agent_link.claude_settings_path()
@@ -405,6 +423,7 @@ class PetController(QObject):
         self.focus_tracker.stop()
         self.self_talk_timer.stop()
         self._flush_memory()
+        self.journal.flush(float("inf"))
         self._unregister_hotkey()
         self.tray.hide()
         self._save()
@@ -472,6 +491,7 @@ class PetController(QObject):
             quiet_check=None if force or not self.config.quiet_fullscreen else partial(full_screen_now, self.last_external_hwnd),
             allowlist=self._allowlist(),
             memory_context=self._memory_context(),
+            journal_context=self.journal.context(self._today()) if self.config.long_memory else "",
             backend=provider.id, kind=provider.kind, codex=self.codex or "", tier=self.config.model,
         )
         self.current_call = call
@@ -507,9 +527,14 @@ class PetController(QObject):
     def chat(self) -> None:
         text, ok = QInputDialog.getText(None, tr("和 {0} 说话", self._name()), tr("想对她说什么？"))
         if ok and text.strip():
+            note = note_request(text)
+            if note is not None:  # "记住：……" is kept here and answered at once, without asking a model
+                self.remember(note)
+                return
             if self.busy:
                 self.window.say(*self._reply_tuple(persona.common_line("busy", self._rng)))
                 return
+            self._diary_count(self._today(), "chats")
             self.tick(force=True, user_message=text.strip()[:300])
 
     def _find_codex(self, then: tuple) -> None:
@@ -715,6 +740,96 @@ class PetController(QObject):
         self.window.say("happy", tr("好的，联动关掉了，hook 也移除了。"))
         self._refresh_status()
 
+    # ---- the diary (记忆库) ----------------------------------------------------
+    def _diary_activity(self, day: str, seconds: dict[str, float]) -> None:
+        if self.config.long_memory and self.config.companion_memory:
+            self.journal.set_activity(day, seconds)
+
+    def _diary_count(self, day: datetime.date, name: str) -> None:
+        if self.config.long_memory:
+            self.journal.count(day.isoformat(), name)
+
+    def _recall_line(self) -> persona.Reply | None:
+        """Once a day, her first self-talk looks back: a round number of days together, a streak of focus periods
+        or yesterday's main activity. Now and then (once a day at most) she brings up an earlier day."""
+        if not self.config.long_memory or self.asleep:
+            return None
+        today = self._today()
+        if self.config.recalled_on != today.isoformat():
+            self.config.recalled_on = today.isoformat()
+            self._save()
+            together = self.journal.days_together(today)
+            if together in DAYS_TOGETHER or (together > 1 and (together % 100 == 0 or together % 365 == 0)):
+                return persona.recall_line("together", self._rng, days=together)
+            streak = self.journal.focus_streak(today)
+            if streak in STREAKS or (streak > 0 and streak % 30 == 0):
+                return persona.recall_line("streak", self._rng, days=streak)
+            top = self.journal.top_activity(today - datetime.timedelta(days=1))
+            if top is not None and top[1] >= RECALL_MIN_SEC:
+                return self._recall_day("yesterday", *top)
+            return None
+        if self.config.past_recalled_on == today.isoformat() or self._rng.random() >= PAST_RECALL_CHANCE:
+            return None
+        found = []
+        for days_ago in PAST_RECALL_DAYS:
+            top = self.journal.top_activity(today - datetime.timedelta(days=days_ago))
+            if top is not None and top[1] >= RECALL_MIN_SEC:
+                found.append((days_ago, top))
+        if not found:
+            return None
+        self.config.past_recalled_on = today.isoformat()
+        self._save()
+        days_ago, top = self._rng.choice(found)
+        return self._recall_day("past", *top, when=persona.days_ago_text(days_ago))
+
+    def _recall_day(self, kind: str, activity: str, seconds: float, **fields) -> persona.Reply:
+        name = activity_name(activity) if i18n.english() else activity
+        return persona.recall_line(kind, self._rng, activity=name, duration=duration_text(seconds), **fields)
+
+    def remember(self, note: str) -> None:
+        """Keeps a note 主人 asked her to remember and says so; the note is shown exactly as written."""
+        if not self.config.long_memory:
+            self.window.say(*self._reply_tuple(persona.recall_line("note_off", self._rng)))
+            return
+        self._diary_count(self._today(), "chats")
+        outcome = self.journal.add_note(note)
+        if outcome == "too_long":
+            self.window.say(*self._reply_tuple(persona.recall_line("note_too_long", self._rng, limit=NOTE_MAX_CHARS)))
+        elif outcome == "full":
+            self.window.say(*self._reply_tuple(persona.recall_line("note_full", self._rng)))
+        else:
+            line = persona.recall_line("note_saved", self._rng, note="\x00")
+            self.window.say(line.mood, self._addressed(line.text).replace("\x00", self.journal.notes[-1]["text"]),
+                            verbatim=True)
+        self._sync_settings()  # an open memory page shows the new note
+
+    def set_long_memory(self, enabled: bool) -> None:
+        if not enabled:
+            self._cancel_inflight()  # a request carrying the diary must not go out after this
+        self.config.long_memory = bool(enabled)
+        self._save()
+
+    def add_note(self, text: str) -> str:
+        """A note typed on the settings page; returns the diary's answer ("ok", "too_long" or "full")."""
+        return self.journal.add_note(text) if text.strip() else "ok"
+
+    def forget_notes(self, ids: set[str]) -> None:
+        if ids:
+            self._cancel_inflight()  # a request carrying those notes must not go out after this
+            self.journal.forget_notes(ids)
+
+    def clear_journal(self) -> None:
+        if not self._confirm(tr("清空记忆库"), tr("要清空她记得的所有日子和事情吗？清空后不能恢复。")):
+            return
+        self._cancel_inflight()
+        self.journal.clear()
+        # The companion memory goes too: its count for today would otherwise be written back into the diary.
+        try:
+            self.memory.clear()
+        except OSError:
+            log.exception("could not clear companion memory")  # cleared in memory; the file is retried
+        self.window.say(*self._reply_tuple(persona.recall_line("cleared", self._rng)))
+
     # ---- companion memory ---------------------------------------------------
     def _allowlist(self) -> list[str] | None:
         return list(self.config.allowlist) if self.config.watch_mode == "allowlist" else None
@@ -746,8 +861,10 @@ class PetController(QObject):
         if now - self._memory_flush_at >= MEMORY_FLUSH_SEC:
             self._memory_flush_at = now
             self._flush_memory()
+        self.journal.flush(self._now())  # (only when something waits: a locked file is tried again now and then)
 
     def _flush_memory(self) -> None:
+        self._diary_activity(self.memory.day, self.memory.seconds)
         try:
             self.memory.flush()
         except OSError:
@@ -762,6 +879,8 @@ class PetController(QObject):
     def clear_companion_memory(self) -> None:
         # Cancel first: an in-flight request still holds the old summary, and its reply would record again.
         self._cancel_inflight()
+        self.memory.today_seconds()  # a day that ended since its last count goes to the diary first
+        self.journal.forget_activity(self.memory.day)  # then today's time goes from the diary too
         try:
             self.memory.clear()
         except OSError as exc:
@@ -888,7 +1007,7 @@ class PetController(QObject):
         text = persona.build_user_text(
             window.title if window else "", window.process_name if window else "", time.strftime("%H:%M"),
             job.recent, job.user_message, has_image=snapshot.jpeg is not None, memory=job.memory_context,
-            bedtime=job.bedtime,
+            bedtime=job.bedtime, journal=job.journal_context,
         )
         if job.kind == CLAUDE_CLI:
             args = claude_client.build_args(job.claude, job.model, self._system_prompt())
@@ -1014,6 +1133,7 @@ class PetController(QObject):
         event = self.pomodoro.due(now, self.config.focus_min * 60, self.config.break_min * 60)
         if event == "focus_done":
             self.focus_log.add(ended, self.pomodoro.focus_sec)
+            self._diary_count(datetime.date.fromtimestamp(ended), "focus")
         self.focus_log.flush(now)  # (a locked file: tried again now and then)
         if event:
             log.info("focus timer: %s", event)
@@ -1035,6 +1155,7 @@ class PetController(QObject):
                                       "\x00", timers.clock_text(reminder.due))
             # her words take the form of address; the reminder's own text stays exactly as written
             reply = persona.Reply(line.mood, self._addressed(line.text).replace("\x00", reminder.text), model=True)
+            self._diary_count(self._today(), "reminders")
         if self.asleep:
             self._wake(announce=False)
         self.window.say(reply.mood, reply.text, hold_ms=TIMER_HOLD_MS, verbatim=reply.model)
@@ -1931,8 +2052,8 @@ class PetController(QObject):
             return False
         if self._clock() - self.window.last_said_at < SELF_TALK_GAP_SEC:
             return False
-        line = None
-        if self.config.companion_memory and not self.asleep and self._rng.random() < MEMORY_TALK_CHANCE:
+        line = self._recall_line()
+        if line is None and self.config.companion_memory and not self.asleep and self._rng.random() < MEMORY_TALK_CHANCE:
             top = self.memory.top_today(3600)
             if top is not None:
                 line = persona.memory_talk_line(*top)

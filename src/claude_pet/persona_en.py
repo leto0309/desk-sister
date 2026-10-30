@@ -25,6 +25,24 @@ FALLBACK = {
     "bad_api_key": ("sad", "That API key was refused... could you check the key, and whether it has credit left?"),
 }
 
+RECALL_TALK = {  # the diary: days together, yesterday, a past day; notes she was asked to keep
+    "yesterday": [('talk', 'Yesterday you spent {duration} on "{activity}". It\'s in my notebook~ Let\'s do well today too.'),
+                  ('happy', 'Turning to yesterday\'s page: "{activity}", {duration}. Here\'s to today~')],
+    "together": [('happy', 'Today is day {days} since we met. Thank you for keeping me around~'),
+                 ('happy', "(leafs through her notebook) So we've known each other {days} days already.")],
+    "streak": [('happy', "Focus periods {days} days in a row! It's all in my notebook~"),
+               ('happy', '{days} days of focus periods in a row, lined up so neatly. Lovely.')],
+    "past": [('talk', '(turns to the page from {when}) That day you spent {duration} on "{activity}".'),
+             ('think', 'I still remember: {when}, you spent {duration} on "{activity}"~')],
+    "note_saved": [('happy', 'Noted: "{note}". I\'ll remember it~'),
+                   ('happy', '(writes it carefully in her notebook) "{note}" -- remembered.')],
+    "note_too_long": [('think', "That's a little long for my notebook... could you say it shorter? Within {limit} characters, please.")],
+    "note_full": [('sad', "My notebook is full... delete a few on the Memory page in the settings, and I'll note new ones.")],
+    "note_off": [('sad', "The diary is switched off, so I can't note it down... you can turn it on on the Memory page in the settings.")],
+    "cleared": [('happy', "The diary is cleared... (closes her notebook and opens a new one) Let's start again from today.")],
+}
+
+
 COMMON_REPLIES = {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
     "eyes_closed": [("sad", "My eyes are closed right now, I'm not looking~ (Ctrl+Alt+P to resume)")],
     "busy": [("think", "Just a moment, I'm still thinking about the last one...")],
@@ -299,6 +317,7 @@ TURN_NO_TITLE = "untitled"
 TURN_NO_PROCESS = "unknown"
 TURN_NO_IMAGE = "There is no screenshot this time."
 TURN_MEMORY = "Companion memory: {memory}"
+TURN_JOURNAL = "Diary: {journal}"
 TURN_RECENT = "You said recently (do not repeat):"
 TURN_MESSAGE = "The user says to you: \"{message}\""
 TURN_FORMAT = "Answer in the format mood|line, in English."

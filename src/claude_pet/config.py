@@ -65,6 +65,9 @@ class Config:
     quiet_fullscreen: bool = True
     self_talk: bool = True
     companion_memory: bool = True
+    long_memory: bool = True  # the diary (记忆库): days together, recall lines, notes 主人 asked her to keep
+    recalled_on: str = ""  # the day (YYYY-MM-DD) of her once-a-day look back (days together, a streak, yesterday)
+    past_recalled_on: str = ""  # the day she last brought up an earlier day
     claude_link: bool = False
     self_talk_min_sec: int = 180
     self_talk_max_sec: int = 600
@@ -127,6 +130,10 @@ class Config:
         self.quiet_fullscreen = bool(self.quiet_fullscreen)
         self.self_talk = bool(self.self_talk)
         self.companion_memory = bool(self.companion_memory)
+        self.long_memory = bool(self.long_memory)
+        for name in ("recalled_on", "past_recalled_on"):
+            if not isinstance(getattr(self, name), str) or len(getattr(self, name)) != 10:
+                setattr(self, name, "")
         self.claude_link = bool(self.claude_link)
         self.self_talk_min_sec = min(max(int(self.self_talk_min_sec), 30), 3600)
         self.self_talk_max_sec = min(max(int(self.self_talk_max_sec), self.self_talk_min_sec), 7200)

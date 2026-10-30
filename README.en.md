@@ -125,7 +125,7 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   the portable one replaces just the exe.
 - Right-click her or the tray icon: Poke her, Talk to her, Settings…, Pause watching, Quit; in "only the allowlist"
   mode there is also a one-click "Add the current program to the allowlist".
-- "Settings…" has seven pages: General, Character, How she thinks, Watching, Companion, Appearance and About; every change applies
+- "Settings…" has eight pages: General, Character, How she thinks, Watching, Companion, Memory, Appearance and About; every change applies
   at once. The comment interval (30 seconds to 10 minutes), the model (fast and cheap / smarter), the way she thinks,
   starting with Windows, the blocklist and allowlist, companionship, strolling, her height and more are set there.
 - Language: she follows the Windows display language (Chinese on a Chinese Windows, English otherwise); change it to
@@ -159,6 +159,17 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   night starts (20:00 to 2:00, 23:00 by default; it ends at 5 in the morning).
 - "Companion memory": remembers the programs you use lately and their kind of activity (coding, watching videos…) and
   how long you spent on each kind today; only program names and kinds are stored.
+- "Diary" (Memory page, on by default): she remembers the days you spent together. Each day keeps only the time per
+  kind of activity (from the companion memory) and how many focus periods, reminders and chats there were, for 180 days,
+  only on your computer in `%APPDATA%\ClaudePet\journal.json`; no window titles, screenshots or chat text. In her first
+  self-talk of the day she looks back: a round number of days together (7, 30, 100...), focus periods several days in
+  a row, or what you spent most time on yesterday; now and then an earlier day too. These are local lines, no model
+  call, in each girl's own words.
+- "Remember": say "remember: exam next Friday" when you talk to her and she notes it down word for word,
+  with no model call; up to 60 characters, 50 notes. From then on, when she looks or you talk, a short overview (days
+  together, yesterday, focus periods in the last 7 days) and the newest notes go to the model you chose, never more than
+  600 characters (300 in Chinese), however much she remembers. The "Memory" page lists the recent days, adds or deletes
+  notes, clears the diary (the companion memory too), or switches it off; when off, nothing is noted and nothing of it is sent.
 - "Daily summary" (Companion page, after 21:00 by default): once a day, the first time she may talk after that hour,
   she sums up your day from the companion memory, such as "coding about 3.2 hours, watching videos about 40 minutes,
   4 pomodoros of focus (about 1.7 hours)". Change the hour or switch it off; without companion memory she tells only the

@@ -413,6 +413,26 @@ TEXT = {
         "As she talks, every character gets a little synthesised babble syllable, like the villagers in Animal Crossing "
         "(not real speech, nothing online); a pat, being picked up, a landing and dozing off get a little sound too. "
         "Silent in full-screen quiet.",
+    # ---- the diary (记忆库) ----------------------------------------------------------------------------
+    "记忆": "Memory",
+    "记忆库：记住一起度过的日子和让她记住的事": "Diary: remember our days together and what you ask her to keep",
+    "清空记忆库": "Clear the diary",
+    "要清空她记得的所有日子和事情吗？清空后不能恢复。":
+        "Clear every day and everything she remembers? This cannot be undone.",
+    "今天是你们认识的第 {0} 天。": "Today is day {0} since you met.",
+    "最近的日子": "Recent days",
+    "还没有记下的日子。": "No days noted yet.",
+    "她记得的事（新的在上面）": "What she remembers (newest first)",
+    "想让她记住的事（{0} 字以内）": "Something for her to remember (up to {0} characters)",
+    "太长了：{0} 字以内。": "Too long: up to {0} characters.",
+    "已经记满了，先删掉几条。": "It's full; delete a few first.",
+    "说「记住：……」她就会记下。每天只记活动时长和番茄、提醒、聊天的次数，不存窗口标题、截图和聊天内容，"
+    "保留 180 天，只在这台电脑上。看屏幕和聊天时，一句概况和最近几条记下的事会发给你选的 AI（不超过 300 字）；"
+    "她回忆往事是本地台词，不调用 AI。清空记忆库也会清空陪伴记忆。":
+        "Say \"remember: ...\" and she notes it down. Each day keeps only activity time and how many focus periods, "
+        "reminders and chats; no window titles, screenshots or chat text; 180 days, on this computer only. When she "
+        "looks or you talk, a short overview and the newest notes go to the AI you chose (at most 600 characters); "
+        "her lines about earlier days are local and call no AI. Clearing the diary clears the companion memory too.",
     # ---- activities (companion memory) ---------------------------------------------------------------
     "写代码": "coding",
     "和 AI 一起干活": "working with AI",

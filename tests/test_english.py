@@ -219,7 +219,7 @@ def test_switching_language_from_the_settings(pet):
     new = ctrl.settings_window
     assert new is not window and new.isVisible() and new.windowTitle() == "Desk Sister · Settings"
     assert [new.nav.item(i).text() for i in range(new.nav.count())] == [
-        "General", "Character", "How she thinks", "Watching", "Companion", "Appearance", "About"]
+        "General", "Character", "How she thinks", "Watching", "Companion", "Memory", "Appearance", "About"]
     assert new.language_combo.currentData() == "en"
     ctrl.poke = lambda: None
     ctrl.toggle_pause()

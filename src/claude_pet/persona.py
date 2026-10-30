@@ -42,6 +42,24 @@ FALLBACK = {
     "bad_api_key": ("sad", "这个 API Key 被拒绝了……主人检查一下 Key 对不对、有没有余额吧？"),
 }
 
+RECALL_TALK = {  # the diary: days together, yesterday, a past day; notes she was asked to keep
+    "yesterday": [('talk', '昨天主人在「{activity}」上花了 {duration}，我在本子上记着呢～今天也一起加油吧。'),
+                  ('happy', '翻到昨天那页：「{activity}」{duration}。今天也请多关照～')],
+    "together": [('happy', '今天是我们认识的第 {days} 天啦，谢谢主人一直让我陪着～'),
+                 ('happy', '（翻了翻本子）原来我们已经认识 {days} 天了呀。')],
+    "streak": [('happy', '已经连续 {days} 天都完成番茄了，我都记在本子上了～'),
+               ('happy', '连续 {days} 天的番茄记录，排得整整齐齐，真好看。')],
+    "past": [('talk', '（翻到{when}那页）那天主人在「{activity}」上花了 {duration}呢。'),
+             ('think', '我还记得，{when}主人在「{activity}」上花了 {duration}呀～')],
+    "note_saved": [('happy', '记下来了：「{note}」。我会好好记住的～'),
+                   ('happy', '（认真写进本子）「{note}」——记住啦。')],
+    "note_too_long": [('think', '这句有点长，我的本子写不下……能说短一点吗？{limit} 个字以内就好。')],
+    "note_full": [('sad', '本子写满了……先在设置的「记忆」页删掉几条，我再记新的吧。')],
+    "note_off": [('sad', '记忆库现在关着，我记不下来……可以在设置的「记忆」页打开。')],
+    "cleared": [('happy', '记忆库清空了……（合上本子，又翻开新的一本）我们从今天重新开始吧。')],
+}
+
+
 COMMON_REPLIES = {  # pausing and resuming her looks, being asked while paused or still thinking, a cleared memory
     "eyes_closed": [("sad", '我现在闭着眼睛呢，没在看哦～（Ctrl+Alt+P 恢复）')],
     "busy": [("think", '等一下下，我还在想上一句……')],
@@ -84,7 +102,7 @@ class Reply:
 PER_GIRL = ("SELF_TALK", "TIME_TALK", "NIGHT_TALK", "SLEEP_TALK", "GREETINGS", "WEEKDAY_GREETINGS", "WAKE_LINES",
             "SLEEP_LINES", "INTRO_LINES", "HELLO_LINES", "INTERACTION_TALK", "TIMER_TALK", "FESTIVAL_LINES",
             "BIRTHDAY_LINE", "SUMMARY_TAILS", "SUMMARY_FOCUS_TAILS", "SUMMARY_TAIL", "MEMORY_TALK", "COMMON_REPLIES",
-            "FALLBACK")
+            "RECALL_TALK", "FALLBACK")
 MERGED = ("FALLBACK",)  # a girl's own entries replace just those keys (the rest are plain system messages)
 _girl = characters.DEFAULT
 
@@ -392,6 +410,19 @@ SLEEP_TALK = [
 MEMORY_TALK = "主人今天在「{activity}」上已经花了 {hours:.1f} 小时啦，记得起来走走、喝口水～"
 
 
+def recall_line(kind: str, rng: random.Random, **fields) -> Reply:
+    """One of her diary lines (RECALL_TALK): `kind` names the occasion, `fields` fill it in."""
+    mood, text = rng.choice(_table("RECALL_TALK")[kind])
+    return Reply(mood, text.format(**fields))
+
+
+def days_ago_text(days: int) -> str:
+    """前天 / 5 天前, in her language."""
+    if i18n.english():
+        return "the day before yesterday" if days == 2 else f"{days} days ago"
+    return "前天" if days == 2 else f"{days} 天前"
+
+
 def memory_talk_line(activity: str, seconds: float) -> Reply:
     name = activity_name(activity) if i18n.english() else activity
     return Reply("talk", _table("MEMORY_TALK").format(activity=name, hours=seconds / 3600))
@@ -483,9 +514,11 @@ def build_user_text(
     has_image: bool = True,
     memory: str = "",
     bedtime: str = "",
+    journal: str = "",
 ) -> str:
     if i18n.english():
-        return _build_user_text_en(window_title, process_name, clock, recent, user_message, has_image, memory, bedtime)
+        return _build_user_text_en(window_title, process_name, clock, recent, user_message, has_image, memory, bedtime,
+                                   journal)
     parts = [f"现在时间 {clock}。"]
     if bedtime == "ok":
         parts.append(BEDTIME_MAY)
@@ -497,6 +530,8 @@ def build_user_text(
         parts.append("这次没有截图。")
     if memory:
         parts.append(f"陪伴记忆：{memory}")
+    if journal:
+        parts.append(f"记忆库：{journal}")
     if recent:
         parts.append("你最近说过（不要重复）：\n" + "\n".join(f"- {line}" for line in recent))
     if user_message:
@@ -505,7 +540,8 @@ def build_user_text(
     return "\n".join(parts)
 
 
-def _build_user_text_en(window_title, process_name, clock, recent, user_message, has_image, memory, bedtime) -> str:
+def _build_user_text_en(window_title, process_name, clock, recent, user_message, has_image, memory, bedtime,
+                        journal="") -> str:
     en = persona_en
     parts = [en.TURN_TIME.format(clock=clock)]
     if bedtime == "ok":
@@ -519,6 +555,8 @@ def _build_user_text_en(window_title, process_name, clock, recent, user_message,
         parts.append(en.TURN_NO_IMAGE)
     if memory:
         parts.append(en.TURN_MEMORY.format(memory=memory))
+    if journal:
+        parts.append(en.TURN_JOURNAL.format(journal=journal))
     if recent:
         parts.append(en.TURN_RECENT + "\n" + "\n".join(f"- {line}" for line in recent))
     if user_message:

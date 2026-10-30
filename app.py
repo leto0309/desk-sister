@@ -63,6 +63,7 @@ def main() -> int:
 
     from claude_pet.autostart import Autostart, current_launch
     from claude_pet.controller import PetController
+    from claude_pet.journal import Journal
     from claude_pet.memory import CompanionMemory
 
     data = app_data_dir()
@@ -86,7 +87,7 @@ def main() -> int:
     icon = None if getattr(sys, "frozen", False) else Path(__file__).resolve().parent / "assets" / "icon.ico"
     autostart = Autostart(current_launch(Path(__file__).resolve(), icon))
     controller = PetController(app, load_config(), resource_root() / "assets" / "sprites", autostart=autostart,
-                               memory=CompanionMemory(data / "memory.json"))
+                               memory=CompanionMemory(data / "memory.json"), journal=Journal(data / "journal.json"))
     controller.start()
     app.aboutToQuit.connect(controller.shutdown)
     return app.exec()

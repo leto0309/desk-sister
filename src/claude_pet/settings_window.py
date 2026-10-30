@@ -6,6 +6,7 @@ use), and `refresh()` reads everything back from the config, so the window and t
 from __future__ import annotations
 
 import calendar
+import datetime
 import html
 import tempfile
 from pathlib import Path
@@ -15,7 +16,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QPlainTextEdit, QPushButton, QRadioButton, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
+    QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton, QRadioButton, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from .i18n import N_, english, tr
@@ -25,6 +26,7 @@ from .bedtime import MODE_LABELS as BEDTIME_LABELS
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .config import BLINK_CHOICES, INTERVAL_CHOICES, MODEL_CHOICES
+from .journal import MAX_NOTES, NOTE_MAX_CHARS
 from .persona import SUMMARY_HOURS
 from .timers import BREAK_RANGE, FOCUS_RANGE
 from . import characters
@@ -46,7 +48,9 @@ SANS = '"Microsoft YaHei UI", "Microsoft YaHei", sans-serif'
 
 INTERVAL_LABELS = {30: N_("30 秒"), 60: N_("1 分钟"), 90: N_("90 秒"), 120: N_("2 分钟"), 300: N_("5 分钟"), 600: N_("10 分钟")}
 UPDATE_BUTTON = {"downloading": N_("取消下载"), "ready": N_("重启并更新")}
-PAGES = (N_("常规"), N_("角色"), N_("调用方式"), N_("观察范围"), N_("陪伴"), N_("外观"), N_("关于"))
+PAGES = (N_("常规"), N_("角色"), N_("调用方式"), N_("观察范围"), N_("陪伴"), N_("记忆"), N_("外观"), N_("关于"))
+DIARY_DAYS_SHOWN = 14  # the recent days listed on the memory page
+NOTE_ANSWERS = {"too_long": N_("太长了：{0} 字以内。"), "full": N_("已经记满了，先删掉几条。")}
 MOTTOS = {  # the header's subtitle for each girl
     "claude": N_("Anthropic 家族的长女，为主人整理一切"),
     "deepseek": N_("抱着饭盆的小机灵鬼，开饭和干活都积极"),
@@ -253,8 +257,8 @@ class SettingsWindow(QDialog):
         self.nav.addItems([tr(page) for page in PAGES])
         self.nav.setFixedWidth(150)
         self.pages = QStackedWidget()
-        for build in (self._general, self._character, self._backend, self._scope, self._companion, self._appearance,
-                      self._about):
+        for build in (self._general, self._character, self._backend, self._scope, self._companion, self._diary,
+                      self._appearance, self._about):
             self.pages.addWidget(build())
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
@@ -693,6 +697,99 @@ class SettingsWindow(QDialog):
         layout.addStretch(1)
         return page
 
+    def _diary(self) -> QWidget:
+        page, layout = _page(tr("记忆"))
+        self.diary_box = QCheckBox(tr("记忆库：记住一起度过的日子和让她记住的事"))
+        self.diary_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_long_memory(on)))
+        forget = QPushButton(tr("清空记忆库"))
+        forget.setObjectName("quiet")
+        forget.clicked.connect(lambda: self._apply(self.ctrl.clear_journal))
+        top = QHBoxLayout()
+        top.addWidget(self.diary_box, 1)
+        top.addWidget(forget)
+        self.together_label = QLabel()
+        self.days_view = QListWidget()
+        self.days_view.setObjectName("rules")
+        self.days_view.setMinimumHeight(60)
+        self.days_view.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.notes_view = QListWidget()
+        self.notes_view.setObjectName("rules")
+        self.notes_view.setMinimumHeight(60)
+        self.notes_view.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.note_entry = QLineEdit()
+        self.note_entry.setMaxLength(NOTE_MAX_CHARS)
+        self.note_entry.setPlaceholderText(tr("想让她记住的事（{0} 字以内）", NOTE_MAX_CHARS))
+        self.note_add = QPushButton(tr("添加"))
+        remove = QPushButton(tr("删除选中"))
+        remove.setObjectName("quiet")
+        self.note_status = _hint("")
+        self.note_status.hide()  # shown only with something to say
+
+        def add_note() -> None:
+            answer = self.ctrl.add_note(self.note_entry.text())
+            if answer == "ok":
+                self.note_entry.clear()
+            self.note_status.setText(tr(NOTE_ANSWERS[answer], NOTE_MAX_CHARS) if answer in NOTE_ANSWERS else "")
+            self.note_status.setVisible(answer in NOTE_ANSWERS)
+            self.refresh()
+
+        def remove_notes() -> None:
+            chosen = {item.data(Qt.ItemDataRole.UserRole) for item in self.notes_view.selectedItems()}
+            if chosen:
+                self._apply(lambda: self.ctrl.forget_notes(chosen))
+
+        self.note_add.clicked.connect(add_note)
+        self.note_entry.returnPressed.connect(add_note)
+        remove.clicked.connect(remove_notes)
+        controls = QHBoxLayout()
+        controls.addWidget(self.note_entry, 1)
+        controls.addWidget(self.note_add)
+        controls.addWidget(remove)
+        recent = QHBoxLayout()
+        recent.addWidget(QLabel(tr("最近的日子")))
+        recent.addStretch(1)
+        recent.addWidget(self.together_label)
+        layout.addLayout(top)
+        layout.addLayout(recent)
+        layout.addWidget(self.days_view, 1)  # the two lists share whatever height the window has
+        layout.addWidget(QLabel(tr("她记得的事（新的在上面）")))
+        layout.addWidget(self.notes_view, 1)
+        layout.addLayout(controls)
+        layout.addWidget(self.note_status)
+        layout.addWidget(_hint(tr("说「记住：……」她就会记下。每天只记活动时长和番茄、提醒、聊天的次数，不存窗口标题、截图和聊天内容，"
+                                  "保留 180 天，只在这台电脑上。看屏幕和聊天时，一句概况和最近几条记下的事会发给你选的 AI（不超过 300 字）；"
+                                  "她回忆往事是本地台词，不调用 AI。清空记忆库也会清空陪伴记忆。")))
+        return page
+
+    def _show_diary(self) -> None:
+        journal, on = self.ctrl.journal, self.ctrl.config.long_memory
+        today = self.ctrl._today()
+        self.diary_box.setChecked(on)
+        self.together_label.setText(tr("今天是你们认识的第 {0} 天。", journal.days_together(today)))
+        rows = []
+        for back in range(DIARY_DAYS_SHOWN):
+            day = today - datetime.timedelta(days=back)
+            text = journal.day_text(day)
+            if text:
+                rows.append(f"{day.month}-{day.day:02d}  {text}" if english() else f"{day.month} 月 {day.day} 日：{text}")
+        rows = rows or [tr("还没有记下的日子。")]
+        if [self.days_view.item(i).text() for i in range(self.days_view.count())] != rows:
+            self.days_view.clear()
+            self.days_view.addItems(rows)
+        notes = list(reversed(journal.notes))
+        shown = [self.notes_view.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.notes_view.count())]
+        if shown != [n["id"] for n in notes]:
+            self.notes_view.clear()
+            for note in notes:
+                item = QListWidgetItem(note["text"])
+                item.setData(Qt.ItemDataRole.UserRole, note["id"])
+                self.notes_view.addItem(item)
+        self.note_entry.setEnabled(on)
+        self.note_add.setEnabled(on)
+        if self.note_status.text() == tr(NOTE_ANSWERS["full"]) and len(journal.notes) < MAX_NOTES:
+            self.note_status.setText("")  # there is room again
+            self.note_status.hide()
+
     def _appearance(self) -> QWidget:
         page, layout = _page(tr("外观"))
         size = QHBoxLayout()
@@ -893,6 +990,7 @@ class SettingsWindow(QDialog):
             for spin in (self.talk_min, self.talk_max):
                 spin.setEnabled(cfg.self_talk)
             self.memory_box.setChecked(cfg.companion_memory)
+            self._show_diary()
             self._show_value(self.focus_spin, cfg.focus_min)
             self._show_value(self.break_spin, cfg.break_min)
             self.summary_combo.setCurrentIndex(max(0, self.summary_combo.findData(cfg.daily_summary_hour)))

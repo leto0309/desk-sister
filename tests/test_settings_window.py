@@ -46,7 +46,7 @@ def test_the_menu_opens_one_settings_window(pet):
     assert window.isVisible()
     ctrl.open_settings()
     assert ctrl.settings_window is window  # reused, not a second window
-    assert window.nav.count() == 7 and window.windowTitle() == "Desk Sister · 设置"
+    assert window.nav.count() == 8 and window.windowTitle() == "Desk Sister · 设置"
 
 
 def test_general_page_applies_at_once_and_stays_in_step_with_the_menu(pet):
