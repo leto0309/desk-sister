@@ -241,6 +241,10 @@ ZH = {
         "note_full": [('sad', '盆已经装满啦……先在设置的「记忆」页删掉几条，我再装新的～')],
         "note_off": [('sad', '记忆库现在关着，我装不进去……可以在设置的「记忆」页打开哦～')],
         "cleared": [('happy', '记忆库清空啦，盆也洗干净了！我们从今天重新开始～')],
+        "note_forgotten": [('happy', '倒掉啦！「{note}」不在盆里了～'), ('happy', '好嘞，「{note}」从盆里捞出来了！')],
+        "note_missing": [('think', '我把盆翻了个底朝天，没找到这条……去设置的「记忆」页看看？')],
+        "note_many": [('think', '盆里有 {count} 条都对得上，我怕倒错了……说具体一点嘛～')],
+        "note_unreadable": [('sad', '记忆库这会儿打不开，盆里什么都没倒……等一下再说一次吧～')],
     },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，是不是被我放进盆里弄丢了？请在设置里告诉我它在哪儿～"),
@@ -511,6 +515,10 @@ EN = {
         "note_full": [('sad', "My bowl is full... delete a few on the Memory page in the settings, and I'll fit new ones~")],
         "note_off": [('sad', 'The diary is switched off, so nothing fits in... you can turn it on on the Memory page in the settings~')],
         "cleared": [('happy', "The diary is cleared, and my bowl is washed clean! Let's start again from today~")],
+        "note_forgotten": [('happy', 'Tipped out! "{note}" is out of my bowl~'), ('happy', 'Right, "{note}" is fished out of my bowl!')],
+        "note_missing": [('think', "I turned my bowl upside down and can't find that one... try the Memory page in the settings?")],
+        "note_many": [('think', '{count} notes in my bowl fit that, and I might tip out the wrong one... say it more exactly~')],
+        "note_unreadable": [('sad', "The diary won't open just now, so nothing is tipped out... please say it again in a moment~")],
     },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command... did I lose it in my bowl? Tell me where it is in the settings~"),

@@ -57,6 +57,10 @@ RECALL_TALK = {  # the diary: days together, yesterday, a past day; notes she wa
     "note_full": [('sad', '本子写满了……先在设置的「记忆」页删掉几条，我再记新的吧。')],
     "note_off": [('sad', '记忆库现在关着，我记不下来……可以在设置的「记忆」页打开。')],
     "cleared": [('happy', '记忆库清空了……（合上本子，又翻开新的一本）我们从今天重新开始吧。')],
+    "note_forgotten": [('happy', '（划掉）「{note}」，我不记了。'), ('happy', '好，这一行从本子上擦掉了：「{note}」。')],
+    "note_missing": [('think', '我翻了翻本子，没有找到这一条……可以到设置的「记忆」页看看。')],
+    "note_many": [('think', '本子上有 {count} 条都对得上，我不敢乱划……再说具体一点好吗？')],
+    "note_unreadable": [('sad', '记忆库这会儿打不开，我什么都没划掉……等一下再说一次吧。')],
 }
 
 

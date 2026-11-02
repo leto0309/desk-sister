@@ -50,7 +50,8 @@ production deployments need authorisation. Secrets are configured only in GitHub
 - The diary (%APPDATA%/ClaudePet/journal.json) keeps only the first day together, each day's time per kind of
   activity, how many focus periods, reminders and chats there were, and the notes you explicitly asked her to keep
   ("remember: ..." or on the settings page; up to 60 characters each, 50 notes); no window titles, screenshots or chat
-  text; days are kept for 180 days. When she looks or you talk, only a short overview and the newest notes go to the
+  text; days are kept for 180 days (a focus streak still running keeps only each day's count longer). When off, it
+  makes no file and writes nothing, and switching it back on does not add the time from while it was off. When she looks or you talk, only a short overview and the newest notes go to the
   chosen model, never more than 600 characters (300 in Chinese), marked as background and not instructions. Delete
   notes, clear it or switch it off under Settings → Memory; switching it off or deleting cancels a request in flight,
   and once off nothing is recorded or sent.

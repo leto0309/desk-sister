@@ -17,6 +17,7 @@ import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
 from . import i18n
 from .memory import ACTIVITIES, activity_name, duration_text
@@ -40,6 +41,7 @@ _NOTE_EN = re.compile(r"^\s*(?:please\s+)?remember(?:\s+that)?(?P<sep>\s*[:,]\s*
 # anything is a note ("记住：没买猫粮").
 _ASKS = re.compile(r"(?:[?？]|了吗|了没有?|吗|呢)\s*$")
 _ATTACHED = re.compile(r"^(?:了|没|吗|呢|呀|啦|么|嘛)")  # "记住了", "记住没": no note follows
+_ENDING = "。.!！~～ "  # how a sentence ends; after a colon the words are kept as written (".env", "~/notes")
 
 
 def note_request(text: str) -> str | None:
@@ -49,13 +51,50 @@ def note_request(text: str) -> str | None:
         return None
     sep = match.group("sep")
     note = " ".join(match.group("note").split()).lstrip(":：，,、 ")
-    bare = note.rstrip("。.!！~～ ")  # "你记住我的名字了吗～" is still a question
-    if ":" not in sep and "：" not in sep and (_ASKS.search(bare) or (not sep and _ATTACHED.match(note))):
+    if ":" not in sep and "：" not in sep:
+        bare = note.rstrip(_ENDING)  # "你记住我的名字了吗～" is still a question
+        if _ASKS.search(bare) or (not sep and _ATTACHED.match(note)) or bare.casefold() in ("that", "this", "it"):
+            return None  # ("Remember that.")
+        note = bare
+    return note if re.search(r"\w", note) else None  # "记住：？" is not a note
+
+
+# "忘掉：我下周考试" / "帮我忘记 我喜欢猫" / "forget: exam on Friday" / "忘掉刚才那条". A bare 忘记 is left out, unless after a
+# colon or a polite word: "忘记带伞了" tells her something, it asks for nothing. So are the idioms "forget it".
+_FORGET_ZH = re.compile(r"^\s*(?:(?:请\s*)?(?:你\s*)?(?:帮我\s*)?忘掉|(?:请\s*(?:帮我\s*)?|帮我\s*)忘记|忘记(?=\s*[:：]))"
+                        r"(?P<sep>\s*[:：，,、]\s*|\s+|)(?P<note>.*)$", re.S)
+_FORGET_EN = re.compile(r"^\s*(?:please\s+)?forget(?:\s+about)?(?:\s+that)?(?P<sep>\s*[:,]\s*|\s+)(?P<note>.*)$", re.I | re.S)
+_LAST_NOTE = re.compile(r"^(?:刚才|刚刚|上一|最后一|最新一|(?:the\s+|that\s+)?last|the\s+latest)(?:那?条|记的|个|\s+(?:one|note))?(?:笔记)?$", re.I)
+_IDIOM = re.compile(r"^(?:it|that|this|about it|me|吧|了|掉)$", re.I)
+_NOTE_WORD = re.compile(r"(?:这件事|那件事|这条|那条|的事)$")
+_QUOTES = "\"'“”‘’「」『』"
+
+
+class ForgetRequest(NamedTuple):
+    text: str
+    literal: bool  # after a colon or in quotes: exactly these words, never read as "the last one" or shortened
+
+
+def forget_request(text: str) -> ForgetRequest | None:
+    """What a chat message asks her to forget, or None if it asks for no such thing. Journal.find_notes finds it."""
+    match = _FORGET_ZH.match(text) or _FORGET_EN.match(text)
+    if not match:
         return None
-    note = note.strip("。.!！~～ ")
-    if not re.search(r"\w", note) or note.casefold() in ("that", "this", "it"):  # "记住：？", "Remember that."
+    sep = match.group("sep")
+    target = " ".join(match.group("note").split()).lstrip(":：，,、 ")
+    colon = ":" in sep or "：" in sep
+    bare = target.rstrip(_ENDING)
+    if not colon and _ASKS.search(bare):
         return None
-    return note
+    quoted = len(bare) >= 2 and bare[0] in _QUOTES and bare[-1] in _QUOTES
+    if quoted:
+        target = bare.strip(_QUOTES)
+    elif not colon:
+        target = bare
+    literal = colon or quoted
+    if not re.search(r"\w", target) or (not literal and _IDIOM.match(target)):
+        return None
+    return ForgetRequest(target, literal)
 
 
 def _date(text: object) -> datetime.date | None:
@@ -85,6 +124,13 @@ def _clean_day(entry: object) -> dict | None:
     return day if day["seconds"] or any(name in day for name in COUNTS) else None
 
 
+def _clean_skip(item: object) -> dict:
+    if not isinstance(item, dict) or not _date(item.get("day")) or not isinstance(item.get("seconds"), dict):
+        return {}
+    return {"day": item["day"], "seconds": {a: s for a, v in item["seconds"].items()
+                                            if a in ACTIVITIES and (s := _number(v, 86400))}}
+
+
 def _clean_note(item: object) -> dict | None:
     if not isinstance(item, dict):
         return None
@@ -103,13 +149,14 @@ class Journal:
         self.first_day = ""
         self.days: dict[str, dict] = {}  # "YYYY-MM-DD" -> {"seconds": {activity: s}, "focus": n, ...}
         self.notes: list[dict] = []  # {"id", "ts", "text"}, oldest first
+        # {"day", "seconds"}: the companion memory's time that day from while the diary was off, never to be recorded
+        self.skip: dict = {}
         self.unreadable = False
-        self.created = False  # there was no diary file at the start (the caller may seed it from older records)
+        self.created = False  # there was no diary file at the start (seed() may fill it from older records)
+        self.active = False  # in use (begin()): only then is a damaged file moved aside; off, its folder stays untouched
         self._pending: list[tuple] = []  # changes not saved yet, replayed if the file has to be read again
         self._retry_at = 0.0
-        self._load()
-        if not self.first_day:
-            self._change(("first_day", self._today().isoformat()))
+        self._load()  # (nothing is written until begin() or a change: a diary that is off never makes a file)
 
     # ---- persistence -------------------------------------------------------
     def _today(self) -> datetime.date:
@@ -120,6 +167,7 @@ class Journal:
             return
         try:
             data = json.loads(self.path.read_bytes().decode("utf-8"))
+            json.dumps(data, ensure_ascii=False).encode("utf-8")  # "\\ud800" reads as JSON but could never be saved
         except FileNotFoundError:
             self.created, data = True, {}
         except OSError as exc:
@@ -127,11 +175,8 @@ class Journal:
             self.unreadable = True
             return
         except ValueError as exc:
-            log.warning("damaged diary, kept aside as %s.damaged: %s", self.path.name, exc)
-            try:
-                os.replace(self.path, self.path.with_name(self.path.name + ".damaged"))
-            except OSError as move:
-                log.warning("could not move the damaged diary aside: %s", move)
+            log.warning("damaged diary, keeping it aside when it is in use: %s", exc)
+            if not self.active or not self._keep_aside():
                 self.unreadable = True  # never write over what could not be kept
                 return
             data = {}
@@ -144,8 +189,23 @@ class Journal:
                      if e is not None and _date(d)}
         notes = data.get("notes")
         self.notes = [n for n in map(_clean_note, notes if isinstance(notes, list) else ()) if n][-MAX_NOTES:]
+        self.skip = _clean_skip(data.get("skip"))
         for change in self._pending:
             self._apply(change)
+
+    def _keep_aside(self) -> bool:
+        """Moves a damaged file to a name of its own: an earlier damaged copy is never written over."""
+        for number in range(1000):
+            target = self.path.with_name(f"{self.path.name}.damaged" + (f"-{number}" if number else ""))
+            if target.exists():
+                continue
+            try:
+                os.rename(self.path, target)
+                return True
+            except OSError as exc:
+                log.warning("could not move the damaged diary aside: %s", exc)
+                return False
+        return False
 
     def _apply(self, change: tuple) -> None:
         kind = change[0]
@@ -153,14 +213,21 @@ class Journal:
             if not self.first_day or change[1] < self.first_day:
                 self.first_day = change[1]
         elif kind == "activity":  # today's running totals: they only grow, so the larger figure is the newer one
-            _, day, seconds = change
-            entry = self.days.setdefault(day, {"seconds": {}})
-            for activity, spent in seconds.items():
+            _, day, totals = change
+            for activity, spent in self._counted(day, totals).items():
+                entry = self.days.setdefault(day, {"seconds": {}})
                 entry["seconds"][activity] = max(entry["seconds"].get(activity, 0.0), spent)
         elif kind == "forget_activity":
             entry = self.days.get(change[1])
             if entry is not None:
                 entry["seconds"] = {}
+            if self.skip.get("day") == change[1]:
+                self.skip = {}
+        elif kind == "exclude":
+            _, day, totals = change
+            recorded = self.days.get(day, {}).get("seconds", {})
+            self.skip = {"day": day, "seconds": {a: s - recorded.get(a, 0.0) for a, s in totals.items()
+                                                 if s > recorded.get(a, 0.0)}}
         elif kind == "count":
             _, day, name, count = change
             entry = self.days.setdefault(day, {"seconds": {}})
@@ -174,7 +241,12 @@ class Journal:
         elif kind == "forget_notes":
             self.notes = [n for n in self.notes if n["id"] not in change[1]]
         elif kind == "clear":
-            self.days, self.notes, self.first_day = {}, [], change[1]
+            self.days, self.notes, self.first_day, self.skip = {}, [], change[1], {}
+
+    def _counted(self, day: str, totals: dict[str, float]) -> dict[str, float]:
+        """The companion memory's totals for a day, less the time from while the diary was off."""
+        skipped = self.skip.get("seconds", {}) if self.skip.get("day") == day else {}
+        return {a: s - skipped.get(a, 0.0) for a, s in totals.items() if s > skipped.get(a, 0.0)}
 
     def _change(self, change: tuple) -> None:
         if self.unreadable:
@@ -189,29 +261,56 @@ class Journal:
         if self.path is None:
             self._pending = []
             return
-        if not (self._pending or self.unreadable) or now < self._retry_at:
+        if not (self._pending or (self.unreadable and self.active)) or now < self._retry_at:
             return
         self._retry_at = now + RETRY_SEC
         if self.unreadable:
             self._load()
             if self.unreadable or not self._pending:
                 return
-        oldest = (self._today() - datetime.timedelta(days=KEEP_DAYS)).isoformat()
-        self.days = {d: e for d, e in self.days.items() if d > oldest}
+        self._drop_old_days()
         payload = {"first_day": self.first_day, "days": self.days, "notes": self.notes}
+        if self.skip:
+            payload["skip"] = self.skip
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temp = self.path.with_name(self.path.name + ".tmp")
             temp.write_text(json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
             os.replace(temp, self.path)
             self._pending = []
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # (ValueError: text that cannot be written as UTF-8)
             log.warning("could not save the diary: %s", exc)
             self.unreadable = True  # (re-read before the next try, so nothing is counted twice)
 
+    def _drop_old_days(self) -> None:
+        """Days go after KEEP_DAYS, except that a focus streak still running keeps its count (only that) so it can
+        be counted on: without them the streak would stop at KEEP_DAYS and be told again every day."""
+        today = self._today()
+        oldest = (today - datetime.timedelta(days=KEEP_DAYS)).isoformat()
+        day = today if self.days.get(today.isoformat(), {}).get("focus", 0) > 0 else today - datetime.timedelta(days=1)
+        while self.days.get(day.isoformat(), {}).get("focus", 0) > 0:
+            day -= datetime.timedelta(days=1)
+        kept = {}
+        for name, entry in self.days.items():
+            if name > oldest:
+                kept[name] = entry
+            elif name > day.isoformat():
+                kept[name] = {"seconds": {}, "focus": entry["focus"]}
+        self.days = kept
+
     # ---- recording ---------------------------------------------------------
+    def begin(self) -> None:
+        """The diary is in use: it starts today unless it has started already."""
+        self.active = True
+        if self.unreadable:
+            self._load()
+        self.created = False
+        if not self.first_day:
+            self._change(("first_day", self._today().isoformat()))
+
     def seed(self, first_day: datetime.date, focus: dict[str, int]) -> None:
         """A new diary starts from older records: the day she first counted a focus period, and those counts."""
+        self.created = False
         self._change(("first_day", first_day.isoformat()))
         for day, count in sorted(focus.items()):
             if _date(day) and count > 0:
@@ -223,12 +322,19 @@ class Journal:
             return
         clean = {a: float(s) for a, s in seconds.items() if a in ACTIVITIES and _number(s, 86400)}
         entry = self.days.get(day, {}).get("seconds", {})
-        if clean and any(spent > entry.get(activity, 0.0) for activity, spent in clean.items()):
+        # (while the file cannot be read the figures above are not its own: the totals wait and are counted then)
+        if clean and (self.unreadable or any(s > entry.get(a, 0.0) for a, s in self._counted(day, clean).items())):
             self._change(("activity", day, clean))
+
+    def exclude_activity(self, day: str, totals: dict[str, float]) -> None:
+        """The diary is switched on again: of the companion memory's totals, only what comes after this counts."""
+        clean = {a: float(s) for a, s in totals.items() if a in ACTIVITIES and _number(s, 86400)}
+        if clean or self.skip or self.unreadable:
+            self._change(("exclude", day, clean))
 
     def forget_activity(self, day: str) -> None:
         # (while the file cannot be read the day may be there all the same: the change waits for it)
-        if self.unreadable or self.days.get(day, {}).get("seconds"):
+        if self.unreadable or self.days.get(day, {}).get("seconds") or self.skip.get("day") == day:
             self._change(("forget_activity", day))
 
     def count(self, day: str, name: str) -> None:
@@ -237,7 +343,7 @@ class Journal:
 
     def add_note(self, text: str) -> str:
         """Saves one note; returns "ok", "too_long" or "full"."""
-        text = " ".join(text.split())
+        text = " ".join(text.encode("utf-8", "replace").decode("utf-8").split())  # (a stray surrogate could not be saved)
         if self.unreadable:
             self._load()  # the limit counts the notes in the file, if it can be read now
         if len(text) > NOTE_MAX_CHARS:
@@ -251,8 +357,39 @@ class Journal:
         if any(n["id"] in ids for n in self.notes):
             self._change(("forget_notes", frozenset(ids)))
 
+    def find_notes(self, request: ForgetRequest) -> list[dict] | None:
+        """The notes a request means: the very words first, whatever they look like; then (unless they were quoted or
+        after a colon) "the last one"; then notes containing them; then, shortened ("...这件事"), the same again.
+        None while the file cannot be read: what it holds is not known, so nothing can be said to be missing."""
+        if self.unreadable:
+            self._load()
+            if self.unreadable:
+                return None
+
+        def same(words: str) -> list[dict]:
+            return [n for n in self.notes if n["text"].casefold() == words]
+
+        def containing(words: str) -> list[dict]:
+            return [n for n in self.notes if words in n["text"].casefold()]
+
+        whole, bare = request.text.casefold(), request.text.rstrip(_ENDING).casefold()
+        if request.literal:  # exactly these words, their last character too: "notes.txt~" is not "notes.txt"
+            return same(whole) or containing(whole)
+        found = same(whole) or same(bare)
+        if found:
+            return found
+        if _LAST_NOTE.match(whole):
+            return self.notes[-1:]
+        found = containing(bare)
+        if found:
+            return found
+        short = _NOTE_WORD.sub("", bare).strip(_QUOTES + " ")
+        return (same(short) or containing(short)) if short and short != bare else []
+
     def clear(self) -> None:
         """Forget every day and note; she meets 主人 afresh today."""
+        self.created = False  # (the focus log is not brought back either)
+        self.active = True  # asked for: a damaged file is moved aside, not cleared
         self._change(("clear", self._today().isoformat()))
 
     # ---- reading -----------------------------------------------------------

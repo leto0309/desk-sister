@@ -16,7 +16,7 @@ from PySide6.QtCore import QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton, QRadioButton, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
+    QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton, QRadioButton, QScrollArea, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from .i18n import N_, english, tr
@@ -94,6 +94,7 @@ QComboBox QAbstractItemView {{ background: white; border: 1px solid {t.gold}; se
 QSpinBox::up-button, QSpinBox::down-button {{ width: 18px; border: none; background: transparent; }}
 QSpinBox::up-arrow {{ image: url("{arrows}/up.png"); width: 9px; height: 5px; }}
 QSpinBox::down-arrow {{ image: url("{arrows}/down.png"); width: 9px; height: 5px; }}
+QScrollArea#pageScroll {{ background: transparent; border: none; }}
 QListWidget#rules {{ background: white; border: 1px solid {t.gold}; border-radius: 6px; }}
 QListWidget#rules::item:selected {{ background: {t.peach}; color: {t.ink}; }}
 QCheckBox, QRadioButton {{ spacing: 8px; }}
@@ -221,6 +222,14 @@ class _ShortList(QListWidget):
         return QSize(super().sizeHint().width(), 80)
 
 
+class _PageScroll(QScrollArea):
+    """The pages, scrolling when the screen is too low for the tallest; on any other screen it asks for their full
+    height, so nothing scrolls."""
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        return self.widget().sizeHint() + QSize(2 * self.frameWidth(), 2 * self.frameWidth())
+
+
 def _page(title: str) -> tuple[QWidget, QVBoxLayout]:
     page = QWidget()
     layout = QVBoxLayout(page)
@@ -244,7 +253,7 @@ class SettingsWindow(QDialog):
         self.ctrl = controller
         self.setWindowTitle(tr("Desk Sister · 设置"))
         self._themed = ""  # the girl whose look the window has now
-        self.setMinimumSize(760, 560)
+        self.setMinimumSize(760, 360)  # (the pages scroll: low screens have room for the window)
         self._syncing = False
 
         frame = QFrame(self)
@@ -271,7 +280,14 @@ class SettingsWindow(QDialog):
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
         row.addWidget(self.nav)
-        row.addWidget(self.pages, 1)
+        scroll = _PageScroll()
+        scroll.setObjectName("pageScroll")
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(self.pages)
+        self.pages.setAutoFillBackground(False)  # (setWidget turns it on: a grey page)
+        scroll.viewport().setAutoFillBackground(False)
+        row.addWidget(scroll, 1)
         body.addWidget(inner, 1)
         for button in self.findChildren(QPushButton):
             # In a dialog, buttons become the Enter target by default: Enter in a number box must never clear memory.
@@ -778,7 +794,7 @@ class SettingsWindow(QDialog):
         layout.addWidget(self.notes_view, 1)
         layout.addLayout(controls)
         layout.addWidget(self.note_status)
-        layout.addWidget(_hint(tr("说「记住：……」她就会记下。每天只记活动时长和番茄、提醒、聊天的次数，不存窗口标题、截图和聊天内容，"
+        layout.addWidget(_hint(tr("说「记住：……」她就会记下，说「忘掉：……」就删掉。每天只记活动时长和番茄、提醒、聊天的次数，不存窗口标题、截图和聊天内容，"
                                   "保留 180 天，只在这台电脑上。看屏幕和聊天时，一句概况和最近几条记下的事会发给你选的 AI（不超过 300 字）；"
                                   "她回忆往事是本地台词，不调用 AI。清空记忆库也会清空陪伴记忆。")))
         return page

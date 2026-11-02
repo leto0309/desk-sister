@@ -238,6 +238,10 @@ ZH = {
         "note_full": [('sad', '行程日志写满了……先在设置的「记忆」页删掉几条，再记新的吧。')],
         "note_off": [('sad', '记忆库现在关着，日志没法记……可以在设置的「记忆」页打开。')],
         "cleared": [('happy', '记忆库已清空，行程日志换了一本新的。我们从今天重新出发。')],
+        "note_forgotten": [('happy', '收到，已从行程日志删除：「{note}」。'), ('happy', '这条记录划掉了：「{note}」。')],
+        "note_missing": [('think', '行程日志里查不到这一条……可以到设置的「记忆」页核对。')],
+        "note_many": [('think', '日志里有 {count} 条都符合，为免删错，请说得更具体一点。')],
+        "note_unreadable": [('sad', '记忆库暂时打不开，日志没有改动……稍后请再说一次。')],
     },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，我的地图上没有它。请在设置里告诉我它在哪儿～"),
@@ -508,6 +512,10 @@ EN = {
         "note_full": [('sad', "The trip log is full... delete a few on the Memory page in the settings, then I'll log new ones.")],
         "note_off": [('sad', "The diary is switched off, so I can't log it... you can turn it on on the Memory page in the settings.")],
         "cleared": [('happy', 'The diary is cleared; a new trip log is ready. We set off again from today.')],
+        "note_forgotten": [('happy', 'Copy that, deleted from the trip log: "{note}".'), ('happy', 'Entry struck out: "{note}".')],
+        "note_missing": [('think', "That entry isn't in the trip log... you can check on the Memory page in the settings.")],
+        "note_many": [('think', '{count} entries in the log fit that. To avoid deleting the wrong one, please be more exact.')],
+        "note_unreadable": [('sad', "The diary won't open for now; the log is unchanged... please say it again shortly.")],
     },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command; it isn't on my map. Tell me where it is in the settings~"),

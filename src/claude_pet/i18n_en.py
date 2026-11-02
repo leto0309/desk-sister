@@ -426,10 +426,10 @@ TEXT = {
     "想让她记住的事（{0} 字以内）": "Something for her to remember (up to {0} characters)",
     "太长了：{0} 字以内。": "Too long: up to {0} characters.",
     "已经记满了，先删掉几条。": "It's full; delete a few first.",
-    "说「记住：……」她就会记下。每天只记活动时长和番茄、提醒、聊天的次数，不存窗口标题、截图和聊天内容，"
+    "说「记住：……」她就会记下，说「忘掉：……」就删掉。每天只记活动时长和番茄、提醒、聊天的次数，不存窗口标题、截图和聊天内容，"
     "保留 180 天，只在这台电脑上。看屏幕和聊天时，一句概况和最近几条记下的事会发给你选的 AI（不超过 300 字）；"
     "她回忆往事是本地台词，不调用 AI。清空记忆库也会清空陪伴记忆。":
-        "Say \"remember: ...\" and she notes it down. Each day keeps only activity time and how many focus periods, "
+        "Say \"remember: ...\" and she notes it down; \"forget: ...\" deletes it. Each day keeps only activity time and how many focus periods, "
         "reminders and chats; no window titles, screenshots or chat text; 180 days, on this computer only. When she "
         "looks or you talk, a short overview and the newest notes go to the AI you chose (at most 600 characters); "
         "her lines about earlier days are local and call no AI. Clearing the diary clears the companion memory too.",

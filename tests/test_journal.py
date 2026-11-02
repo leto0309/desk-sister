@@ -11,7 +11,9 @@ import pytest
 
 from claude_pet import bedtime, characters, claude_client, i18n, journal, persona, persona_en
 from claude_pet.config import Config
-from claude_pet.journal import CONTEXT_MAX_CHARS, CONTEXT_NOTES, MAX_NOTES, NOTE_MAX_CHARS, Journal, note_request
+from claude_pet.journal import (
+    CONTEXT_MAX_CHARS, CONTEXT_NOTES, MAX_NOTES, NOTE_MAX_CHARS, ForgetRequest, Journal, forget_request, note_request,
+)
 from claude_pet.memory import CompanionMemory
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
@@ -20,7 +22,8 @@ from claude_pet import controller as controller_module  # noqa: E402
 SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
 FIELDS = {"yesterday": {"activity", "duration"}, "together": {"days"}, "streak": {"days"},
           "past": {"when", "activity", "duration"}, "note_saved": {"note"}, "note_too_long": {"limit"},
-          "note_full": set(), "note_off": set(), "cleared": set()}
+          "note_full": set(), "note_off": set(), "cleared": set(), "note_forgotten": {"note"}, "note_missing": set(),
+          "note_many": {"count"}, "note_unreadable": set()}
 
 
 class Clock:
@@ -65,11 +68,88 @@ def test_other_messages_are_not_notes(text):
     assert note_request(text) is None
 
 
+@pytest.mark.parametrize("text, words, literal", [
+    ("忘掉：我下周考试", "我下周考试", True), ("帮我忘记 我喜欢猫", "我喜欢猫", False), ("请忘记：周五交报告。", "周五交报告。", True),
+    ("忘记：带伞了吗", "带伞了吗", True), ("忘掉我的猫这件事", "我的猫这件事", False), ("忘掉「我喜欢猫」", "我喜欢猫", True),
+    ("forget: exam on Friday", "exam on Friday", True), ("Please forget that I like cats.", "I like cats", False),
+    ("忘掉刚才那条", "刚才那条", False), ("forget the last one", "the last one", False), ("忘掉：.env", ".env", True),
+])
+def test_a_request_to_forget_gives_the_note(text, words, literal):
+    assert forget_request(text) == ForgetRequest(words, literal)
+
+
+@pytest.mark.parametrize("text", ["忘记带伞了", "我忘掉了", "忘掉", "忘掉吧", "忘掉了吗", "忘掉我的名字了吗？", "forget it",
+                                  "Forget it.", "forget about it", "forget that", "forget me?", "forgetful", "记住：忘掉这个",
+                                  "别忘了喝水"])
+def test_other_messages_ask_to_forget_nothing(text):
+    assert forget_request(text) is None
+
+
+@pytest.mark.parametrize("text", [" 忘记带伞了", "你忘记带伞了", "你忘记了吗"])
+def test_telling_her_about_forgetting_is_no_request(text):
+    assert forget_request(text) is None
+
+
+def test_which_notes_a_request_means():
+    diary = Journal(None, Clock(at(20)))
+    for note in ("我喜欢猫", "我喜欢猫和狗", "周五交报告"):
+        diary.add_note(note)
+
+    def words(text):
+        return [n["text"] for n in diary.find_notes(forget_request(text))]
+
+    assert words("忘掉我喜欢猫") == ["我喜欢猫"]  # the same words first, though another contains them
+    assert words("忘掉报告") == ["周五交报告"] and words("忘掉喜欢") == ["我喜欢猫", "我喜欢猫和狗"]
+    assert words("忘掉没有这句") == [] and words("忘掉刚才那条") == ["周五交报告"]
+    assert words("忘掉周五交报告。") == ["周五交报告"]  # the full stop is no part of the note
+    assert words("忘掉：周五交报告。") == []  # after a colon every character counts
+    assert words("忘掉报告这件事") == ["周五交报告"]
+    assert Journal(None, Clock(at(20))).find_notes(forget_request("忘掉刚才那条")) == []
+
+
+@pytest.mark.parametrize("notes, text, left", [
+    (["周五", "周五的事"], "忘掉：周五的事", ["周五"]),  # never the shorter note
+    (["周五", "周五的事"], "忘掉周五的事", ["周五"]),
+    (["周五"], "忘掉：周五的事", ["周五"]),  # after a colon: only these words
+    (["最后一条", "别的"], "忘掉：「最后一条」", ["别的"]),  # a note with that name, not the newest
+    (["最后一条", "别的"], "忘掉最后一条", ["别的"]),
+    (["别的", "再一条"], "忘掉：最后一条", ["别的", "再一条"]),  # after a colon it is no "the last one"
+    (["别的", "再一条"], "忘掉最后一条", ["别的"]),
+    (["notes.txt"], "忘掉：「notes.txt~」", ["notes.txt"]),  # a shorter note is not the one named
+    (["notes.txt"], "忘掉：notes.txt~", ["notes.txt"]),
+    (["notes.txt", "notes.txt~"], "忘掉：notes.txt~", ["notes.txt"]),
+])
+def test_she_never_deletes_a_note_other_than_the_one_named(tmp_path, notes, text, left):
+    """Codex's review: the request was shortened before it was looked for, which could delete the wrong note."""
+    path = tmp_path / "journal.json"
+    diary = Journal(path, Clock(at(20)))
+    for note in notes:
+        diary.add_note(note)
+    found = diary.find_notes(forget_request(text))
+    diary.forget_notes({n["id"] for n in found})
+    assert [n["text"] for n in Journal(path, Clock(at(20))).notes] == left
+
+
+@pytest.mark.parametrize("text, note", [
+    ("记住：.env", ".env"), ("记住：.\\报告.txt", ".\\报告.txt"), ("记住：..\\目录", "..\\目录"), ("记住：~/notes", "~/notes"),
+    ("记住 .env", ".env"), ("记住：周五交报告。", "周五交报告。"), ("记住 周五交报告。", "周五交报告"),
+])
+def test_a_note_keeps_its_own_punctuation(tmp_path, text, note):
+    """Codex's review: stripping a leading dot or tilde changed what the note says."""
+    assert note_request(text) == note
+    path = tmp_path / "journal.json"
+    Journal(path, Clock(at(20))).add_note(note_request(text))
+    again = Journal(path, Clock(at(20)))
+    assert again.notes[0]["text"] == note and note in again.context(day(20))
+
+
 # ---- the diary file ------------------------------------------------------------------------------
 def test_a_new_diary_starts_today_and_is_saved(tmp_path):
     path = tmp_path / "journal.json"
     diary = Journal(path, Clock(at(20)))
-    assert diary.created and diary.first_day == "2026-10-20"
+    assert diary.created and diary.first_day == "" and not path.exists()  # nothing written yet
+    diary.begin()
+    assert diary.first_day == "2026-10-20" and path.exists()
     diary.set_activity("2026-10-20", {"写代码": 4000.0, "看视频": 30.0, "不存在": 50.0})
     diary.set_activity("2026-10-20", {"写代码": 3000.0})  # an older, smaller figure never wins
     diary.count("2026-10-20", "focus")
@@ -102,6 +182,23 @@ def test_old_days_are_dropped_after_half_a_year(tmp_path):
     assert sorted(Journal(tmp_path / "journal.json", clock).days) == ["2026-10-19"]
 
 
+def test_a_long_focus_streak_is_counted_past_the_days_kept(tmp_path):
+    """Codex's review: with only 180 days kept the streak stuck at 180 and was told again every day."""
+    clock = Clock(at(20))
+    path = tmp_path / "journal.json"
+    diary = Journal(path, clock)
+    for back in range(1, 201):
+        when = (day(20) - datetime.timedelta(days=back)).isoformat()
+        diary.count(when, "focus")
+        diary.set_activity(when, {"写代码": 600.0})
+    diary.count((day(20) - datetime.timedelta(days=210)).isoformat(), "focus")  # before the streak: dropped
+    again = Journal(path, clock)
+    assert again.focus_streak(day(20)) == 200
+    old = (day(20) - datetime.timedelta(days=190)).isoformat()
+    assert again.days[old] == {"seconds": {}, "focus": 1}  # past 180 days only the count stays
+    assert (day(20) - datetime.timedelta(days=210)).isoformat() not in again.days
+
+
 def test_clearing_forgets_everything_and_starts_today(tmp_path):
     diary = Journal(tmp_path / "journal.json", Clock(at(20)))
     diary.seed(day(1), {"2026-10-01": 2})
@@ -116,8 +213,75 @@ def test_a_damaged_diary_is_kept_aside_not_lost(tmp_path):
     path = tmp_path / "journal.json"
     path.write_text("{ not json", encoding="utf-8")
     diary = Journal(path, Clock(at(20)))
+    diary.begin()
     assert (tmp_path / "journal.json.damaged").read_text(encoding="utf-8") == "{ not json"
     assert diary.first_day == "2026-10-20" and json.loads(path.read_text(encoding="utf-8"))["first_day"] == "2026-10-20"
+
+
+def test_time_counts_from_the_files_own_figures_after_it_could_not_be_read(tmp_path):
+    """Codex's second review: the sum was made before the file was read, so the time while off came back."""
+    path = tmp_path / "journal.json"
+    held = tmp_path / "held.json"
+    clock = Clock(at(20))
+    path.write_text(json.dumps({"first_day": "2026-10-01", "notes": [],
+                                "days": {"2026-10-20": {"seconds": {"写代码": 600.0}}},
+                                "skip": {"day": "2026-10-20", "seconds": {"写代码": 3600.0}}}), encoding="utf-8")
+    path.rename(held)
+    path.mkdir()
+    diary = Journal(path, clock)
+    diary.begin()
+    assert diary.unreadable
+    diary.set_activity("2026-10-20", {"写代码": 4200.0})  # still locked
+    path.rmdir()
+    held.rename(path)
+    assert diary.days == {} or diary.unreadable
+    diary.set_activity("2026-10-20", {"写代码": 4200.0})  # readable by now
+    assert diary.days["2026-10-20"]["seconds"] == {"写代码": 600.0}
+    diary.set_activity("2026-10-20", {"写代码": 4800.0})
+    assert diary.days["2026-10-20"]["seconds"] == {"写代码": 1200.0}
+    assert json.loads(path.read_text(encoding="utf-8"))["days"]["2026-10-20"]["seconds"] == {"写代码": 1200.0}
+
+
+def test_switching_on_while_it_cannot_be_read_excludes_from_the_files_figures(tmp_path):
+    path = tmp_path / "journal.json"
+    held = tmp_path / "held.json"
+    clock = Clock(at(20))
+    path.write_text(json.dumps({"first_day": "2026-10-01", "notes": [],
+                                "days": {"2026-10-20": {"seconds": {"写代码": 600.0}}}}), encoding="utf-8")
+    path.rename(held)
+    path.mkdir()
+    diary = Journal(path, clock)
+    diary.exclude_activity("2026-10-20", {"写代码": 4200.0})
+    path.rmdir()
+    held.rename(path)
+    diary.begin()
+    assert diary.skip["seconds"] == {"写代码": 3600.0}  # 4200 less the 600 in the file, not less nothing
+    diary.set_activity("2026-10-20", {"写代码": 4800.0})
+    assert diary.days["2026-10-20"]["seconds"] == {"写代码": 1200.0}
+
+
+def test_each_damaged_diary_is_kept(tmp_path):
+    """Codex's review: a second damaged file wrote over the first copy."""
+    path = tmp_path / "journal.json"
+    for text in ("{ first", "{ second", "{ third"):
+        path.write_text(text, encoding="utf-8")
+        Journal(path, Clock(at(20))).begin()
+    kept = {p.name: p.read_text(encoding="utf-8") for p in tmp_path.glob("journal.json.damaged*")}
+    assert kept == {"journal.json.damaged": "{ first", "journal.json.damaged-1": "{ second", "journal.json.damaged-2": "{ third"}
+
+
+def test_text_that_cannot_be_saved_breaks_nothing(tmp_path):
+    """Codex's review: "\\ud800" reads as JSON, but saving it raised an error nothing caught."""
+    path = tmp_path / "journal.json"
+    raw = '{"first_day": "2026-10-01", "days": {}, "notes": [{"id": "a", "ts": 1, "text": "bad \\ud800 note"}]}'
+    path.write_text(raw, encoding="utf-8")
+    diary = Journal(path, Clock(at(20)))
+    diary.begin()
+    assert diary.add_note("新的") == "ok"
+    assert (tmp_path / "journal.json.damaged").read_text(encoding="utf-8") == raw  # nothing lost
+    assert [n["text"] for n in Journal(path, Clock(at(20))).notes] == ["新的"]
+    diary.add_note("bad \ud800 too")  # typed: saved without the stray half
+    assert len(Journal(path, Clock(at(20))).notes) == 2
 
 
 def test_an_unreadable_diary_is_never_written_over(tmp_path):
@@ -201,7 +365,7 @@ def test_odd_content_is_left_out(tmp_path, content):
     path = tmp_path / "journal.json"
     path.write_text(json.dumps(content, allow_nan=True), encoding="utf-8")
     diary = Journal(path, Clock(at(20)))
-    assert (diary.days, diary.notes, diary.first_day) == ({}, [], "2026-10-20")
+    assert (diary.days, diary.notes, diary.first_day) == ({}, [], "")
 
 
 def test_streak_days_together_and_a_day_in_a_line():
@@ -357,6 +521,62 @@ def test_she_keeps_a_note_word_for_word_without_asking_a_model(pet, monkeypatch)
     assert ctrl.journal.days["2026-10-20"]["chats"] == 1
 
 
+def test_she_forgets_one_note_without_asking_a_model(pet, monkeypatch):
+    ctrl, _wall = pet
+    ctrl.config.address = "小明"
+    ctrl.journal.add_note("主人下周考试")
+    ctrl.journal.add_note("我喜欢猫")
+    cancelled = []
+    monkeypatch.setattr(ctrl, "_cancel_inflight", lambda: cancelled.append(True))  # the note must not go out after this
+    chat(ctrl, monkeypatch, "忘掉：下周考试")
+    assert not ctrl.busy and cancelled and [n["text"] for n in ctrl.journal.notes] == ["我喜欢猫"]
+    assert ctrl.window.full_text in {t.format(note="\x00").replace("主人", "小明").replace("\x00", "主人下周考试")
+                                     for _m, t in lines("note_forgotten")}
+    chat(ctrl, monkeypatch, "忘掉刚才那条")
+    assert ctrl.journal.notes == []
+    chat(ctrl, monkeypatch, "忘掉刚才那条")
+    assert ctrl.window.full_text in {t for _m, t in lines("note_missing")}
+
+
+def test_she_deletes_nothing_when_unsure(pet, monkeypatch):
+    ctrl, _wall = pet
+    ctrl.journal.add_note("我喜欢猫")
+    ctrl.journal.add_note("我喜欢狗")
+    chat(ctrl, monkeypatch, "忘掉喜欢")
+    assert len(ctrl.journal.notes) == 2 and ctrl.window.full_text in {t.format(count=2) for _m, t in lines("note_many")}
+    chat(ctrl, monkeypatch, "忘掉没有这句")
+    assert len(ctrl.journal.notes) == 2 and ctrl.window.full_text in {t for _m, t in lines("note_missing")}
+    ctrl.set_long_memory(False)
+    chat(ctrl, monkeypatch, "忘掉我喜欢猫")
+    assert len(ctrl.journal.notes) == 2 and ctrl.window.full_text in {t for _m, t in lines("note_off")}
+
+
+def test_the_same_note_twice_goes_at_once(pet, monkeypatch):
+    ctrl, _wall = pet
+    ctrl.journal.add_note("我喜欢猫")
+    ctrl.journal.add_note("我喜欢猫")
+    chat(ctrl, monkeypatch, "忘掉：喜欢猫")
+    assert ctrl.journal.notes == []
+
+
+def test_a_diary_that_cannot_be_read_says_so_and_loses_nothing(app, tmp_path, monkeypatch):
+    monkeypatch.setattr(controller_module, "app_data_dir", lambda: tmp_path)
+    path = tmp_path / "journal.json"
+    path.write_text(json.dumps({"first_day": "2026-10-01", "days": {},
+                                "notes": [{"id": "a", "ts": at(1), "text": "我喜欢猫"}]}), encoding="utf-8")
+    held = tmp_path / "held.json"
+    path.rename(held)
+    path.mkdir()
+    ctrl = controller_module.PetController(app, Config(check_updates=False), SPRITES, None,
+                                           journal=Journal(path, Clock(at(20))))
+    chat(ctrl, monkeypatch, "忘掉我喜欢猫")
+    assert ctrl.window.full_text in {t for _m, t in lines("note_unreadable")}  # not "no such note"
+    path.rmdir()
+    held.rename(path)
+    chat(ctrl, monkeypatch, "忘掉我喜欢猫")
+    assert ctrl.journal.notes == []
+
+
 def test_too_long_full_and_switched_off(pet, monkeypatch):
     ctrl, _wall = pet
     chat(ctrl, monkeypatch, "记住：" + "长" * (NOTE_MAX_CHARS + 1))
@@ -491,6 +711,93 @@ def test_a_cleared_diary_gets_no_time_written_back(pet):
     ctrl.memory.add_time("看视频", 1.0)
     ctrl._flush_memory()
     assert ctrl.journal.days == {"2026-10-21": {"seconds": {"看视频": 1.0}}}  # only what came after
+
+
+def test_switched_off_no_diary_file_is_made(app, tmp_path, monkeypatch):
+    """Codex's review: with the diary off and no file, a start still wrote one, with the focus log in it."""
+    monkeypatch.setattr(controller_module, "app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(controller_module, "save_config", lambda *_a, **_k: None)
+    (tmp_path / "focus.json").write_text(json.dumps({"2026-10-19": {"count": 1, "seconds": 1500}}), encoding="utf-8")
+    path = tmp_path / "journal.json"
+    wall = Clock(at(20))
+    diary = Journal(path, wall)
+    ctrl = controller_module.PetController(app, Config(check_updates=False, long_memory=False), SPRITES, None, journal=diary)
+    ctrl._now = wall
+    ctrl._flush_memory()
+    ctrl.journal.flush(float("inf"))
+    assert not path.exists()
+    ctrl.set_long_memory(True)  # on: it starts now, with the older records
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["first_day"] == "2026-10-19" and saved["days"]["2026-10-19"]["focus"] == 1
+
+
+def test_switched_off_a_damaged_diary_stays_as_it_is(app, tmp_path, monkeypatch):
+    """Codex's second review: a start with the diary off still moved a damaged file aside."""
+    monkeypatch.setattr(controller_module, "app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(controller_module, "save_config", lambda *_a, **_k: None)
+    path = tmp_path / "journal.json"
+    path.write_text("{ not json", encoding="utf-8")
+    wall = Clock(at(20))
+    diary = Journal(path, wall)
+    ctrl = controller_module.PetController(app, Config(check_updates=False, long_memory=False), SPRITES, None, journal=diary)
+    ctrl._now = wall
+    ctrl._flush_memory()
+    diary.flush(wall.now + 1000)
+    assert path.read_text(encoding="utf-8") == "{ not json" and not list(tmp_path.glob("journal.json.*"))
+    ctrl.set_long_memory(True)  # in use: kept aside, and it starts afresh
+    assert (tmp_path / "journal.json.damaged").read_text(encoding="utf-8") == "{ not json"
+    assert json.loads(path.read_text(encoding="utf-8"))["first_day"] == "2026-10-20"
+
+
+def test_time_from_while_it_was_off_is_never_recorded(pet, tmp_path):
+    """Codex's review: switching back on wrote the whole day's total, the time while off included, and it could go
+    to a model as yesterday's summary."""
+    ctrl, wall = pet
+    ctrl.memory.now = wall
+    ctrl.memory.day = ctrl.memory._today()
+    ctrl.memory.seconds = {"写代码": 600.0}
+    ctrl.set_long_memory(False)  # 10 minutes before: they count
+    assert ctrl.journal.days["2026-10-20"]["seconds"] == {"写代码": 600.0}
+    ctrl.memory.seconds = {"写代码": 4200.0, "看视频": 1800.0}  # an hour and half an hour while off
+    ctrl.set_long_memory(True)
+    ctrl._flush_memory()
+    assert ctrl.journal.days["2026-10-20"]["seconds"] == {"写代码": 600.0}
+    ctrl.memory.seconds = {"写代码": 4800.0, "看视频": 1860.0}  # 10 and 1 more after it
+    ctrl._flush_memory()
+    assert ctrl.journal.days["2026-10-20"]["seconds"] == {"写代码": 1200.0, "看视频": 60.0}
+    restarted = Journal(tmp_path / "journal.json", wall)  # the same after a restart
+    assert restarted.skip["seconds"] == {"写代码": 3600.0, "看视频": 1800.0}
+    restarted.set_activity("2026-10-20", {"写代码": 5400.0, "看视频": 1860.0})
+    assert restarted.days["2026-10-20"]["seconds"] == {"写代码": 1800.0, "看视频": 60.0}
+    ctrl.memory.seconds = {"写代码": 5400.0, "看视频": 1860.0}
+    wall.now = at(21, 0)
+    ctrl.memory.add_time("写代码", 1.0)  # midnight
+    assert "看视频约 1 分钟" not in ctrl.journal.context(day(21))
+    assert ctrl.journal.days["2026-10-20"]["seconds"]["写代码"] == 1800.0
+
+
+def test_a_day_that_ended_while_off_is_not_recorded(pet):
+    ctrl, wall = pet
+    ctrl.memory.now = wall
+    ctrl.memory.day = ctrl.memory._today()
+    ctrl.set_long_memory(False)
+    ctrl.memory.seconds = {"写代码": 7200.0}
+    wall.now = at(21, 9)
+    ctrl.set_long_memory(True)
+    assert "2026-10-20" not in ctrl.journal.days and ctrl.memory.seconds == {}
+
+
+def test_clearing_the_memory_clears_the_skip_too(pet):
+    ctrl, wall = pet
+    ctrl.memory.now = wall
+    ctrl.memory.day = ctrl.memory._today()
+    ctrl.set_long_memory(False)
+    ctrl.memory.seconds = {"写代码": 3600.0}
+    ctrl.set_long_memory(True)
+    ctrl.clear_companion_memory()
+    ctrl.memory.seconds = {"写代码": 600.0}
+    ctrl._flush_memory()
+    assert ctrl.journal.days["2026-10-20"]["seconds"] == {"写代码": 600.0}  # counted from nothing again
 
 
 def test_a_new_diary_starts_from_the_focus_log(app, tmp_path, monkeypatch):

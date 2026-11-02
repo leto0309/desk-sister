@@ -40,6 +40,10 @@ RECALL_TALK = {  # the diary: days together, yesterday, a past day; notes she wa
     "note_full": [('sad', "My notebook is full... delete a few on the Memory page in the settings, and I'll note new ones.")],
     "note_off": [('sad', "The diary is switched off, so I can't note it down... you can turn it on on the Memory page in the settings.")],
     "cleared": [('happy', "The diary is cleared... (closes her notebook and opens a new one) Let's start again from today.")],
+    "note_forgotten": [('happy', '(crosses it out) "{note}": forgotten.'), ('happy', 'All right, that line is off my notebook: "{note}".')],
+    "note_missing": [('think', "I leafed through my notebook and can't find that one... have a look on the Memory page in the settings.")],
+    "note_many": [('think', "{count} notes in my notebook fit that, and I won't cross out the wrong one... could you be more exact?")],
+    "note_unreadable": [('sad', "The diary won't open just now, so nothing is crossed out... please say it again in a moment.")],
 }
 
 

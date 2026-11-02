@@ -25,7 +25,7 @@ from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
 from .autostart import Autostart, AutostartError
 from .memory import CompanionMemory, activity_name, classify_activity, duration_text
-from .journal import NOTE_MAX_CHARS, Journal, note_request
+from .journal import NOTE_MAX_CHARS, ForgetRequest, Journal, forget_request, note_request
 from .config import BLINK_CHOICES, Config, app_data_dir, save_config
 from .pet_window import PetWindow
 from .walker import Walker
@@ -277,10 +277,7 @@ class PetController(QObject):
         self.memory = memory if memory is not None else CompanionMemory(None)
         # The diary (记忆库), likewise; a new one starts from the focus periods counted before it existed.
         self.journal = journal if journal is not None else Journal(None)
-        if self.journal.created and self.focus_log.days:
-            first = min(datetime.date.fromisoformat(day) for day in self.focus_log.days)
-            self.journal.seed(min(first, self._today()),
-                              {day: int(entry["count"]) for day, entry in self.focus_log.days.items()})
+        self._begin_diary()
         self.memory.on_day_end = self._diary_activity  # a day's totals reach the diary before they are dropped
         if self.memory.ended is not None:
             self._diary_activity(*self.memory.ended)
@@ -531,6 +528,10 @@ class PetController(QObject):
             if note is not None:  # "记住：……" is kept here and answered at once, without asking a model
                 self.remember(note)
                 return
+            request = forget_request(text)
+            if request is not None:  # "忘掉：……" too: it never needs a model, and the note must not go to one
+                self.forget(request)
+                return
             if self.busy:
                 self.window.say(*self._reply_tuple(persona.common_line("busy", self._rng)))
                 return
@@ -741,6 +742,16 @@ class PetController(QObject):
         self._refresh_status()
 
     # ---- the diary (记忆库) ----------------------------------------------------
+    def _begin_diary(self) -> None:
+        """Only with the diary on: switched off, not even its file is made."""
+        if not self.config.long_memory:
+            return
+        if self.journal.created and self.focus_log.days:
+            first = min(datetime.date.fromisoformat(day) for day in self.focus_log.days)
+            self.journal.seed(min(first, self._today()),
+                              {day: int(entry["count"]) for day, entry in self.focus_log.days.items()})
+        self.journal.begin()
+
     def _diary_activity(self, day: str, seconds: dict[str, float]) -> None:
         if self.config.long_memory and self.config.companion_memory:
             self.journal.set_activity(day, seconds)
@@ -803,10 +814,38 @@ class PetController(QObject):
                             verbatim=True)
         self._sync_settings()  # an open memory page shows the new note
 
+    def forget(self, request: ForgetRequest) -> None:
+        """Deletes the one note a request means. Several, or none: says so and deletes nothing."""
+        if not self.config.long_memory:
+            self.window.say(*self._reply_tuple(persona.recall_line("note_off", self._rng)))
+            return
+        self._diary_count(self._today(), "chats")
+        notes = self.journal.find_notes(request)
+        if notes is None:
+            self.window.say(*self._reply_tuple(persona.recall_line("note_unreadable", self._rng)))
+        elif not notes:
+            self.window.say(*self._reply_tuple(persona.recall_line("note_missing", self._rng)))
+        elif len({n["text"].casefold() for n in notes}) > 1:
+            self.window.say(*self._reply_tuple(persona.recall_line("note_many", self._rng, count=len(notes))))
+        else:
+            self.forget_notes({n["id"] for n in notes})
+            line = persona.recall_line("note_forgotten", self._rng, note="\x00")
+            self.window.say(line.mood, self._addressed(line.text).replace("\x00", notes[0]["text"]), verbatim=True)
+        self._sync_settings()
+
     def set_long_memory(self, enabled: bool) -> None:
-        if not enabled:
+        enabled = bool(enabled)
+        if enabled == self.config.long_memory:
+            return
+        if enabled:
+            self.memory.today_seconds()  # still off: a day that ended meanwhile is not recorded
+            self.journal.exclude_activity(self.memory.day, self.memory.seconds)  # nor is today's time so far
+            self.config.long_memory = True
+            self._begin_diary()
+        else:
             self._cancel_inflight()  # a request carrying the diary must not go out after this
-        self.config.long_memory = bool(enabled)
+            self._diary_activity(self.memory.day, self.memory.seconds)  # the time up to now still counts
+            self.config.long_memory = False
         self._save()
 
     def add_note(self, text: str) -> str:

@@ -239,6 +239,10 @@ ZH = {
         "note_full": [('sad', '我能记的地方满了……先在设置的「记忆」页删掉几条，再告诉我新的吧～')],
         "note_off": [('sad', '记忆库现在关着，我记不下来哦……可以在设置的「记忆」页打开～')],
         "cleared": [('happy', '记忆库清空了……没关系，我们从今天起慢慢重新认识吧～')],
+        "note_forgotten": [('happy', '好，「{note}」我轻轻放下了～'), ('happy', '（铃铛轻轻响）「{note}」不记了，放心吧。')],
+        "note_missing": [('think', '我慢慢找了一遍，没有这一条呢……去设置的「记忆」页看看好吗？')],
+        "note_many": [('think', '有 {count} 条都对得上，我怕删错了……再说具体一点好吗？')],
+        "note_unreadable": [('sad', '记忆库这会儿打不开，我什么都没删哦……等一下再说一次吧～')],
     },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，我把每个角落都找过了。请在设置里告诉我它在哪儿～"),
@@ -509,6 +513,10 @@ EN = {
         "note_full": [('sad', "There's no room left to remember... delete a few on the Memory page in the settings, then tell me new ones~")],
         "note_off": [('sad', "The diary is switched off, so I can't remember it... you can turn it on on the Memory page in the settings~")],
         "cleared": [('happy', "The diary is cleared... that's all right, let's slowly get to know each other again from today~")],
+        "note_forgotten": [('happy', 'Okay, I\'ve gently let go of "{note}"~'), ('happy', '(her bell rings softly) "{note}" is forgotten, don\'t worry.')],
+        "note_missing": [('think', "I looked slowly and that one isn't there... shall we check the Memory page in the settings?")],
+        "note_many": [('think', "{count} notes fit that, and I'm afraid of deleting the wrong one... could you say a little more?")],
+        "note_unreadable": [('sad', "The diary won't open just now, so I haven't deleted anything... please say it again in a moment~")],
     },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command; I've looked in every corner. Tell me where it is in the settings~"),

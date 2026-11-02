@@ -54,6 +54,8 @@ def test_the_window_is_no_taller_than_before_the_memory_page(pet):
     """v0.3.10's memory page lists asked for ~190 px each and made the window 841 px tall, above a 816 px screen."""
     _ctrl, window, _vault, _saved = pet
     assert window.sizeHint().height() <= 680
+    assert window.minimumSizeHint().height() <= 360  # and it can be lower: the pages scroll
+    assert not window.pages.autoFillBackground() and not window.pages.parentWidget().autoFillBackground()  # no grey page
 
 
 class SmallScreen:
@@ -64,7 +66,7 @@ class SmallScreen:
         return self.rect
 
 
-@pytest.mark.parametrize("screen", [(0, 0, 1366, 600), (1920, -200, 1024, 560), (0, 0, 1536, 816)])
+@pytest.mark.parametrize("screen", [(0, 0, 1366, 600), (1920, -200, 1024, 560), (0, 0, 1536, 816), (0, 0, 1024, 420)])
 def test_the_window_opens_wholly_on_its_screen(pet, monkeypatch, screen):
     """Never taller than the screen it opens on and never above its top, so the title bar can be dragged."""
     _ctrl, window, _vault, _saved = pet
@@ -73,7 +75,7 @@ def test_the_window_opens_wholly_on_its_screen(pet, monkeypatch, screen):
     window.fit_on_screen()
     area, frame = fake.rect, window.frameGeometry()  # the frame: title bar and borders included
     assert frame.top() >= area.top() and frame.left() >= area.left()  # the title bar is on the screen
-    assert frame.bottom() <= area.bottom() or window.height() == window.minimumHeight()
+    assert frame.bottom() <= area.bottom()  # no exception for low screens: the pages scroll
     assert frame.right() <= area.right()
 
 

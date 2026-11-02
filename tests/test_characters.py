@@ -403,7 +403,7 @@ def test_the_pet_shows_the_new_art(pet):
     assert all(part.size() == sprite.size() for part in pet.window.parts.values())
 
 
-STILL_FOR_NOW = {"gemini": ("sad",), "qwen": ("sad",), "glm": ("sad",)}  # parts not made yet (requirement 54)
+STILL_FOR_NOW = {}  # girl -> moods whose parts are not made yet (requirement 54): none now
 
 
 @pytest.mark.parametrize("girl", GIRLS)
@@ -466,8 +466,9 @@ def test_missing_face_parts_are_logged_in_one_line(app, tmp_path, caplog):
 def test_a_new_girls_expression_moves_only_with_its_own_parts(pet):
     from claude_pet.pet_window import MOOD_PARTS
 
-    pet.set_character("gemini")  # every expression made but sad (see STILL_FOR_NOW)
+    pet.set_character("gemini")
     window = pet.window
+    window.parts = {name: part for name, part in window.parts.items() if not name.startswith("sad_")}  # one not made
     window.walking = 0
 
     def keys() -> list[int]:  # the overlays over her sprite, by identity
@@ -478,7 +479,7 @@ def test_a_new_girls_expression_moves_only_with_its_own_parts(pet):
         own = [n for n in ("mouth_open", "eyes_closed") if n in names and f"{mood}_{n}" in window.parts]
         assert keys() == [window.parts[f"{mood}_{n}"].cacheKey() for n in own], mood  # none: she keeps still
     window.mood = "sad"
-    assert keys() == []  # not made yet: she keeps still
+    assert keys() == []  # no parts: she keeps still
     window.mood = "think"
     assert keys() == [window.parts[n].cacheKey() for n in ("think_mouth_open", "think_eyes_closed")]
     window.mood = "talk"

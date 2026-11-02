@@ -238,6 +238,10 @@ ZH = {
         "note_full": [('sad', '收集本贴满了喵……先在设置的「记忆」页删掉几条，我再收新的～')],
         "note_off": [('sad', '记忆库现在关着喵，我收不进去……可以在设置的「记忆」页打开～')],
         "cleared": [('happy', '记忆库清空了喵，收集本换了新的一本～我们从今天重新开始收集吧！')],
+        "note_forgotten": [('happy', '「{note}」从收集本上撕掉了喵～'), ('happy', '好的喵，这张不收藏了：「{note}」。')],
+        "note_missing": [('think', '收集本里找不到这条喵……去设置的「记忆」页看看？')],
+        "note_many": [('think', '收集本里有 {count} 条都对得上喵，我怕撕错……说具体一点好不好～')],
+        "note_unreadable": [('sad', '记忆库这会儿打不开喵，什么都没撕……等一下再说一次吧～')],
     },
     "FALLBACK": {
         "no_claude": ("sad", "主人…我找不到 claude 命令了，它是不是躲进纸箱里了？请在设置里告诉我它在哪儿～"),
@@ -508,6 +512,10 @@ EN = {
         "note_full": [('sad', "My collection book is full, nya... delete a few on the Memory page in the settings, and I'll collect new ones~")],
         "note_off": [('sad', "The diary is switched off, nya, so I can't keep it... you can turn it on on the Memory page in the settings~")],
         "cleared": [('happy', "The diary is cleared, nya, and I've got a new collection book~ Let's start collecting again from today!")],
+        "note_forgotten": [('happy', '"{note}" is torn out of my collection book, nya~'), ('happy', 'All right, nya, not keeping this one: "{note}".')],
+        "note_missing": [('think', "That one isn't in my collection book, nya... try the Memory page in the settings?")],
+        "note_many": [('think', '{count} notes fit that, nya, and I might tear out the wrong one... could you be more exact~')],
+        "note_unreadable": [('sad', "The diary won't open just now, nya, so nothing is torn out... please say it again in a moment~")],
     },
     "FALLBACK": {
         "no_claude": ("sad", "I can't find the claude command... is it hiding in a cardboard box? Tell me where it is in the settings~"),

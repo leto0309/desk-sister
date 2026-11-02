@@ -89,8 +89,7 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   right-click menu always looks. Drag her to move her (the place is remembered).
 - Hold Ctrl and scroll the wheel over her: change her height (10 pixels a notch, 100 to 600); her feet stay put.
 - She blinks now and then (except when happy or flustered), and her mouth moves while her words appear in the bubble,
-  with each mood's own mouth shapes. All six girls do; only the sad face of Gemini, Qwen and GLM keeps still for now
-  (a few pictures are still to come). The "Appearance" page sets how often she blinks (off / few / normal / often) and
+  with each mood's own mouth shapes. All six girls do. The "Appearance" page sets how often she blinks (off / few / normal / often) and
   can switch the moving mouth off.
 - "Character" page: choose your AI girl; set "What she calls you" (used in her prompt and her local lines); edit the
   current girl's persona prompt, applied with "Save persona" and undone any time with "Restore default". Chinese and
@@ -166,7 +165,7 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   a row, or what you spent most time on yesterday; now and then an earlier day too. These are local lines, no model
   call, in each girl's own words.
 - "Remember": say "remember: exam next Friday" when you talk to her and she notes it down word for word,
-  with no model call; up to 60 characters, 50 notes. From then on, when she looks or you talk, a short overview (days
+  with no model call; up to 60 characters, 50 notes. "forget: exam next Friday" or "forget the last one" deletes a note, with no model call either. From then on, when she looks or you talk, a short overview (days
   together, yesterday, focus periods in the last 7 days) and the newest notes go to the model you chose, never more than
   600 characters (300 in Chinese), however much she remembers. The "Memory" page lists the recent days, adds or deletes
   notes, clears the diary (the companion memory too), or switches it off; when off, nothing is noted and nothing of it is sent.
