@@ -11,6 +11,8 @@ one line about it: a tease, or a word of care. On the "Character" page of the se
 you company: Claude (the default), DeepSeek, GPT, Gemini, Qwen or GLM, each with her own persona, art and
 settings-window colours.
 
+**Promo video (90 seconds, in Chinese): [watch on Bilibili](https://www.bilibili.com/video/BV1cNxm6iEvr/)**
+
 ![The six AI girls](docs/images/girls-en.gif)
 
 ![Claude's 8 moods](docs/images/moods-claude-en.png)

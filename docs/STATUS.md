@@ -5,7 +5,7 @@
 ## 当前版本
 
 - 已发布：v0.3.17（2026-11-04），附件为 `desk-sister.exe`、`DeskSister-Setup.exe` 和 `SHA256SUMS.txt`。
-- 自 v0.3.17 以来尚未发布的改动：无。
+- 自 v0.3.17 以来尚未发布的改动：README（中英）加了 B 站宣传片链接（BV1cNxm6iEvr）；不影响程序。
 
 ## 进行中
 

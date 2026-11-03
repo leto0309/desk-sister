@@ -9,6 +9,8 @@
 一个住在 Windows 桌面角落的 Q 版少女，隔一会儿看一眼你当前的窗口，用一句话吐槽或关心你。可以在设置的「角色」页
 选择陪你的 AI 娘：Claude（默认）、DeepSeek、GPT、Gemini、通义千问、GLM，各有自己的人设、立绘和设置窗口配色。
 
+**宣传片（90 秒）：[在 B 站观看](https://www.bilibili.com/video/BV1cNxm6iEvr/)**
+
 ![六位 AI 娘](docs/images/girls.gif)
 
 ![Claude 的 8 种表情](docs/images/moods.png)
