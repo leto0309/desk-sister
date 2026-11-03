@@ -239,6 +239,8 @@ def test_time_counts_from_the_files_own_figures_after_it_could_not_be_read(tmp_p
     assert diary.days["2026-10-20"]["seconds"] == {"写代码": 600.0}
     diary.set_activity("2026-10-20", {"写代码": 4800.0})
     assert diary.days["2026-10-20"]["seconds"] == {"写代码": 1200.0}
+    clock.now += journal.RETRY_SEC  # saved at the next try, each second in the app
+    diary.flush(clock.now)
     assert json.loads(path.read_text(encoding="utf-8"))["days"]["2026-10-20"]["seconds"] == {"写代码": 1200.0}
 
 
@@ -258,6 +260,78 @@ def test_switching_on_while_it_cannot_be_read_excludes_from_the_files_figures(tm
     assert diary.skip["seconds"] == {"写代码": 3600.0}  # 4200 less the 600 in the file, not less nothing
     diary.set_activity("2026-10-20", {"写代码": 4800.0})
     assert diary.days["2026-10-20"]["seconds"] == {"写代码": 1200.0}
+
+
+def test_the_waiting_list_does_not_grow_while_the_file_cannot_be_read(tmp_path):
+    """Codex's review: every report, even of the same totals, added an entry for as long as the file was locked."""
+    path = tmp_path / "journal.json"
+    held = tmp_path / "held.json"
+    clock = Clock(at(20))
+    path.write_text(json.dumps({"first_day": "2026-10-01", "notes": [],
+                                "days": {"2026-10-20": {"seconds": {"写代码": 600.0}}},
+                                "skip": {"day": "2026-10-20", "seconds": {"写代码": 3600.0}}}), encoding="utf-8")
+    path.rename(held)
+    path.mkdir()
+    diary = Journal(path, clock)
+    diary.begin()
+    for _ in range(120):
+        diary.set_activity("2026-10-20", {"写代码": 4200.0})
+    assert len(diary._pending) <= 2  # (the start, and the totals)
+    diary.set_activity("2026-10-20", {"写代码": 4800.0, "看视频": 60.0})  # newer figures replace them
+    assert len(diary._pending) <= 2
+    diary.exclude_activity("2026-10-20", {"写代码": 5000.0})  # never merged across a change of what totals mean
+    diary.set_activity("2026-10-20", {"写代码": 5100.0})
+    assert [c[0] for c in diary._pending][-3:] == ["activity", "exclude", "activity"]
+    path.rmdir()
+    held.rename(path)
+    clock.now += journal.RETRY_SEC
+    diary.flush(clock.now)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    # 600 in the file, 4800 - 3600 = 1200 before the exclusion, which then skips 5000 - 1200 = 3800: 100 more after it
+    assert saved["days"]["2026-10-20"]["seconds"] == {"写代码": 1300.0, "看视频": 60.0}
+    assert diary._pending == []
+
+
+def test_switched_off_later_a_damaged_diary_stays_as_it_is(tmp_path):
+    """Codex's review: only a diary off from the start left a damaged file alone."""
+    path = tmp_path / "journal.json"
+    clock = Clock(at(20))
+    diary = Journal(path, clock)
+    diary.begin()
+    diary.add_note("我喜欢猫")
+    diary.pause()  # switched off
+    path.write_text("{ damaged", encoding="utf-8")
+    diary.unreadable = True  # as after a failed read or write
+    clock.now += journal.RETRY_SEC
+    diary.flush(clock.now)
+    assert path.read_text(encoding="utf-8") == "{ damaged" and not list(tmp_path.glob("journal.json.*"))
+    diary.clear()  # asked for: moved aside, and it stays off afterwards
+    assert (tmp_path / "journal.json.damaged").read_text(encoding="utf-8") == "{ damaged" and not diary.active
+    path.write_text("{ again", encoding="utf-8")
+    diary.unreadable = True
+    clock.now += journal.RETRY_SEC
+    diary.flush(clock.now)
+    assert path.read_text(encoding="utf-8") == "{ again"
+    diary.begin()  # switched on again
+    assert (tmp_path / "journal.json.damaged-1").read_text(encoding="utf-8") == "{ again"
+
+
+def test_a_note_waiting_when_it_is_switched_off_is_still_saved(tmp_path):
+    path = tmp_path / "journal.json"
+    held = tmp_path / "held.json"
+    clock = Clock(at(20))
+    diary = Journal(path, clock)
+    diary.begin()
+    path.rename(held)
+    path.mkdir()
+    diary.unreadable = True
+    diary.add_note("我喜欢猫")
+    diary.pause()
+    path.rmdir()
+    held.rename(path)
+    clock.now += journal.RETRY_SEC
+    diary.flush(clock.now)
+    assert [n["text"] for n in json.loads(path.read_text(encoding="utf-8"))["notes"]] == ["我喜欢猫"]
 
 
 def test_each_damaged_diary_is_kept(tmp_path):
@@ -774,6 +848,15 @@ def test_time_from_while_it_was_off_is_never_recorded(pet, tmp_path):
     ctrl.memory.add_time("写代码", 1.0)  # midnight
     assert "看视频约 1 分钟" not in ctrl.journal.context(day(21))
     assert ctrl.journal.days["2026-10-20"]["seconds"]["写代码"] == 1800.0
+
+
+def test_switching_it_off_tells_the_diary(pet):
+    ctrl, _wall = pet
+    assert ctrl.journal.active
+    ctrl.set_long_memory(False)
+    assert not ctrl.journal.active
+    ctrl.set_long_memory(True)
+    assert ctrl.journal.active
 
 
 def test_a_day_that_ended_while_off_is_not_recorded(pet):

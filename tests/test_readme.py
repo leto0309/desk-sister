@@ -127,3 +127,18 @@ def test_setting_names_match_the_english_interface():
                  "Stroll along the bottom of the screen", "Fast and cheap", "Smarter", "Settings…"):
         assert name in shown, name
         assert name in text, name
+
+
+def test_the_ui_preview_never_says_it_saved_what_it_did_not(tmp_path):
+    """Codex's review: a failed save still printed [ok], and the old picture stayed in the README."""
+    import importlib.util
+
+    QtGui = pytest.importorskip("PySide6.QtGui")
+    spec = importlib.util.spec_from_file_location("make_ui_preview", ROOT / "devtools" / "make_ui_preview.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    sheet = QtGui.QImage(4, 4, QtGui.QImage.Format.Format_ARGB32)
+    with pytest.raises(SystemExit, match="could not save"):
+        tool.save_sheet(sheet, tmp_path / "no such folder" / "ui.png")
+    tool.save_sheet(sheet, tmp_path / "ui.png")
+    assert (tmp_path / "ui.png").exists()

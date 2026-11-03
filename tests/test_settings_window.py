@@ -212,6 +212,40 @@ def test_a_taken_shortcut_is_shown_told_once_and_tried_again(pet):
     assert tried == []  # held: nothing more to try
 
 
+def test_enter_on_cancel_cancels_in_both_dialogs(pet):
+    """Codex's review: with the focus on Cancel, Enter pressed the default button, so a "forget: ..." went through."""
+    from PySide6.QtTest import QTest
+
+    from claude_pet import characters, chat_dialog, reminder_dialog
+
+    theme = characters.get("claude").theme
+    chat = chat_dialog.ChatDialog("Claude", theme, QtGui.QPixmap())
+    reminder = reminder_dialog.ReminderDialog(None, 1000.0, "claude")
+    chat.entry.setText("忘掉：我下周考试")
+    reminder.text.setText("喝水")
+    for dialog in (chat, reminder):
+        dialog.show()
+        results = []
+        dialog.finished.connect(results.append)
+        cancel = next(b for b in dialog.findChildren(QtWidgets.QPushButton) if b.text() == "算了")
+        cancel.setFocus()
+        QTest.keyClick(cancel, QtCore.Qt.Key.Key_Return)
+        assert results == [QtWidgets.QDialog.DialogCode.Rejected], dialog.windowTitle()
+    back = chat_dialog.ChatDialog("Claude", theme, QtGui.QPixmap())  # to Cancel and back to the box: Enter sends
+    back.entry.setText("你好")
+    back.show()
+    back.activateWindow()
+    assert QTest.qWaitForWindowActive(back)
+    results = []
+    back.finished.connect(results.append)
+    cancel = next(b for b in back.findChildren(QtWidgets.QPushButton) if b.text() == "算了")
+    cancel.setFocus()
+    back.entry.setFocus()
+    assert back.send_button.isDefault() and not cancel.isDefault()
+    QTest.keyClick(back.entry, QtCore.Qt.Key.Key_Return)
+    assert results == [QtWidgets.QDialog.DialogCode.Accepted]
+
+
 def test_general_page_applies_at_once_and_stays_in_step_with_the_menu(pet):
     ctrl, window, _vault, saved = pet
     window.interval_combo.setCurrentIndex(window.interval_combo.findData(300))

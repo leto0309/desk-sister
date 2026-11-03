@@ -308,6 +308,11 @@ class Journal:
         if not self.first_day:
             self._change(("first_day", self._today().isoformat()))
 
+    def pause(self) -> None:
+        """The diary is switched off: from now on a damaged file is left as it is. What was noted while it was on
+        and could not be saved yet may still be saved: it is 主人's, and quitting would lose it."""
+        self.active = False
+
     def seed(self, first_day: datetime.date, focus: dict[str, int]) -> None:
         """A new diary starts from older records: the day she first counted a focus period, and those counts."""
         self.created = False
@@ -321,6 +326,17 @@ class Journal:
         if not _date(day):
             return
         clean = {a: float(s) for a, s in seconds.items() if a in ACTIVITIES and _number(s, 86400)}
+        if self.unreadable:
+            self._load()
+        last = self._pending[-1] if self._pending else None
+        if clean and last is not None and last[:2] == ("activity", day):
+            # Still waiting to be saved: one entry with the latest totals, not one more each minute. Only the very
+            # last can be merged: an exclusion or a clearing after it changes what the totals mean.
+            merged = {a: max(last[2].get(a, 0.0), clean.get(a, 0.0)) for a in {*last[2], *clean}}
+            if merged != last[2]:
+                self._pending[-1] = ("activity", day, merged)
+                self._apply(self._pending[-1])
+            return
         entry = self.days.get(day, {}).get("seconds", {})
         # (while the file cannot be read the figures above are not its own: the totals wait and are counted then)
         if clean and (self.unreadable or any(s > entry.get(a, 0.0) for a, s in self._counted(day, clean).items())):
@@ -389,8 +405,9 @@ class Journal:
     def clear(self) -> None:
         """Forget every day and note; she meets 主人 afresh today."""
         self.created = False  # (the focus log is not brought back either)
-        self.active = True  # asked for: a damaged file is moved aside, not cleared
+        in_use, self.active = self.active, True  # asked for: a damaged file is moved aside, not cleared
         self._change(("clear", self._today().isoformat()))
+        self.active = in_use
 
     # ---- reading -----------------------------------------------------------
     def days_together(self, today: datetime.date) -> int:

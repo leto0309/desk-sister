@@ -86,7 +86,7 @@ class ChatDialog(QDialog):
         self.send_button.clicked.connect(self.accept)
         cancel = QPushButton(tr("算了"))
         cancel.setObjectName("quiet")
-        cancel.setAutoDefault(False)
+        cancel.setAutoDefault(True)  # Enter on it cancels (without this, Enter there pressed Send)
         cancel.clicked.connect(self.reject)
         buttons = QHBoxLayout()
         buttons.addStretch(1)

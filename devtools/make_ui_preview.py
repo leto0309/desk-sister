@@ -10,7 +10,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"  # the same picture at any screen scaling
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -41,6 +40,11 @@ def framed(picture: QPixmap, gold: str) -> QPixmap:
     painter.drawPath(card)
     painter.end()
     return out
+
+
+def save_sheet(sheet: QImage, out: Path) -> None:
+    if not sheet.save(str(out)):  # a locked file or a full disk: never say it worked, the old picture would stay
+        raise SystemExit(f"could not save {out}")
 
 
 def render(app: QApplication, lang: str, out: Path) -> None:
@@ -76,11 +80,12 @@ def render(app: QApplication, lang: str, out: Path) -> None:
             x += picture.width() + GAP
         y += max(p.height() for p in row) + GAP
     painter.end()
-    sheet.save(str(out))
+    save_sheet(sheet, out)
     print(f"[ok] {out.name} {width}x{height}")
 
 
 def main() -> None:
+    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"  # the same picture at any screen scaling
     app = QApplication([])
     render(app, "zh", ROOT / "docs" / "images" / "ui.png")
     render(app, "en", ROOT / "docs" / "images" / "ui-en.png")

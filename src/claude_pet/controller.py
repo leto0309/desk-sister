@@ -970,6 +970,7 @@ class PetController(QObject):
             self._cancel_inflight()  # a request carrying the diary must not go out after this
             self._diary_activity(self.memory.day, self.memory.seconds)  # the time up to now still counts
             self.config.long_memory = False
+            self.journal.pause()
         self._save()
 
     def add_note(self, text: str) -> str:
