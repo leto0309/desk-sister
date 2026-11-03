@@ -122,8 +122,15 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   confirm she quits and comes back as the new version a few seconds later. If the swap fails, the old version starts
   again. A download in progress can be cancelled. The installed version downloads the installer and runs it silently;
   the portable one replaces just the exe.
-- Right-click her or the tray icon: Poke her, Talk to her, Settings…, Pause watching, Quit; in "only the allowlist"
-  mode there is also a one-click "Add the current program to the allowlist".
+- Right-click her or the tray icon: Poke her, Talk to her, Play Balatro with me, Focus timer and reminders, Settings…,
+  Pause watching, Quit; in "only the allowlist" mode there is also a one-click "Add the current program to the allowlist".
+- "Play Balatro with me": she plays Balatro herself through the BalatroBot mod, talking about her moves in her bubble
+  ("keeping the pair of kings for a full house"). While she plays, what you say with "Talk to her" is a suggestion she
+  weighs for her next move. No screenshots, your mouse and keyboard stay yours, and she stops after 8 antes or a lost run.
+  She is no expert: she usually loses around antes 1-4. You install Lovely, Steamodded and BalatroBot yourself first
+  (versions and steps in [docs/balatro.en.md](docs/balatro.en.md)); while that mod is installed the game is muted and runs
+  at 4x speed. Every move in a hand or the shop is one model call; the settings' General page chooses a relaxed way of
+  playing (fast, little allowance) or a careful one (slow, far more allowance).
 - "Settings…" has eight pages: General, Character, How she thinks, Watching, Companion, Memory, Appearance and About; every change applies
   at once. The comment interval (30 seconds to 10 minutes), the model (fast and cheap / smarter), the way she thinks,
   starting with Windows, the blocklist and allowlist, companionship, strolling, her height and more are set there.

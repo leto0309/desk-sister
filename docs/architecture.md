@@ -24,7 +24,8 @@ pet_window.PetWindow：透明置顶窗口，立绘 + 打字机气泡；托盘/�
 | src/claude_pet/pet_window.py | 窗口绘制、拖动/点击、全局热键消息 |
 | src/claude_pet/api_client.py | 可选 API Key 模式：官方 anthropic SDK 调用、错误映射、可取消 |
 | src/claude_pet/credstore.py | Windows 凭据管理器读写 API Key |
-| src/claude_pet/controller.py | 调度、节流、睡眠、菜单、配置保存 |
+| src/claude_pet/controller.py | 调度、节流、睡眠、菜单、配置保存；打牌模式的步骤调度（与看屏幕共用工作线程、代号和取消机制） |
+| src/claude_pet/balatro.py | 陪玩 Balatro：127.0.0.1 上 BalatroBot mod 的 JSON-RPC 客户端、牌局文字摘要与提示、模型操作的白名单校验、本地出牌规则 |
 | devtools/process_sprites.py | 把 assets/raw 生成图处理成统一裁剪的 assets/sprites |
 
 立绘：参考 ZipZipPipe 的原设（原图不入库，见 ASSETS-LICENSE.md）；assets/raw/（不入库）由 Codex 的 gpt-image 生成；

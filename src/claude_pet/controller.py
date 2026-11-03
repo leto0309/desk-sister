@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 
@@ -19,7 +19,7 @@ from PySide6.QtGui import QAction, QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
 from .i18n import N_, tr
-from . import __version__, agent_link, i18n, api_client, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, characters, providers, reminder_dialog, timers, updates, voice
+from . import __version__, agent_link, i18n, api_client, balatro, balatro_names, bedtime, capture, claude_client, days, codex_client, credstore, openai_client, persona, characters, providers, reminder_dialog, timers, updates, voice
 from .providers import ANTHROPIC, CLAUDE_CLI, CODEX_CLI, OPENAI_COMPATIBLE, PROVIDERS
 from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
@@ -66,6 +66,17 @@ NOTICE_AWAKE_SEC = 120  # after a Claude Code notice wakes her, she stays awake 
 ERROR_MAX = 80  # characters of an error reason shown under the pet
 AUTOSTART_QUIT_GRACE_MS = 30_000  # longest wait for a running autostart change when quitting
 INTERVAL_LABELS = {30: N_("30 秒"), 60: N_("1 分钟"), 90: N_("90 秒"), 120: N_("2 分钟"), 300: N_("5 分钟"), 600: N_("10 分钟")}
+# Playing Balatro: how long her line about a move stays before the move is made, and the pauses between steps.
+GAME_FIRST_MS = 1500
+GAME_ACT_MS = 1800
+GAME_STEP_MS = 800
+GAME_WAIT_MS = 1500  # between screens (cards dealt, scoring): look again
+GAME_BUSY_MS = 1000  # something else is running: try again
+GAME_MODEL_RETRY_MS = (15_000, 30_000, 60_000)  # a failed model call (often passing): wait and ask again, no move spent
+GAME_RULES_AFTER = 3  # refused moves in a row before local rules take over from the model
+GAME_REFUSED_STOP = 6  # refused moves in a row before she stops playing
+GAME_SAY_GAP_SEC = 15  # at least this long between her lines about moves
+SUGGESTIONS_MAX = 5
 
 
 @dataclass
@@ -101,6 +112,7 @@ class Job:
     codex: str = ""  # the Codex CLI, for CODEX_CLI
     tier: str = "haiku"  # fast / smarter; Codex turns it into a reasoning effort
     bedtime: str = ""  # at night: "ok" (may remind 主人 to rest) or "no"; "" during the day
+    thinking_tokens: int | None = None  # the Claude CLI's own default
 
 
 @dataclass
@@ -113,6 +125,87 @@ class Outcome:
     result: claude_client.ClaudeResult | None = None
     auth_ok: bool | None = None
     window: capture.WindowInfo | None = None  # the window that was actually looked at
+
+
+@dataclass
+class GameSession:
+    """A game of Balatro she is playing with 主人 (only through the BalatroBot mod's local API)."""
+    link: balatro.BalatroLink
+    suggestions: deque = field(default_factory=deque)  # what 主人 said, waiting for the next decision
+    recent: deque = field(default_factory=lambda: deque(maxlen=4))  # her last lines about moves
+    next: str = "step"  # step: look at the game and decide; act: make the decided move
+    decision: balatro.Decision | None = None
+    refused: int = 0  # moves the game refused in a row
+    last_error: str = ""
+    fingerprint: tuple | None = None  # the game as it was when the decision was made
+    model_failures: int = 0  # failed model calls in a row
+    looked: bool = False  # the game has been looked at once (an ended run seen first is the last one, not ours)
+    said_at: float = float("-inf")  # when she last said a line about a move (time.monotonic)
+    build: str = ""  # the poker hand she is building this run around
+    deciding: str = ""  # what she will remember of the decided move, once it is really made
+    no_auto_use: bool = False  # the game refused a card used by itself: no more of that
+
+
+class _GameStop:
+    """The cancel flag of a job that only talks to the game (no model call to stop)."""
+
+    def __init__(self) -> None:
+        self._event = threading.Event()
+
+    @property
+    def cancelled(self) -> bool:
+        return self._event.is_set()
+
+    def cancel(self) -> None:
+        self._event.set()
+
+
+@dataclass
+class GameJob:
+    """Copied on the UI thread, like Job: the worker never reads live state."""
+    generation: int
+    step: str  # "step" or "act"
+    link: balatro.BalatroLink
+    call: object
+    kind: str
+    backend: str
+    claude: str
+    codex: str
+    model: str
+    tier: str
+    need_auth: bool
+    deck: str
+    target_ante: int
+    address: str
+    system_prompt: str
+    suggestions: list[str]
+    recent: list[str]
+    last_error: str
+    rules_only: bool
+    first: bool = False  # the first look since she started playing
+    model_failures: int = 0
+    action: balatro.Action | None = None
+    fingerprint: tuple | None = None  # the game the action was decided on
+    quiet_check: object | None = None  # never set: a game step is not an automatic look
+    thinking_tokens: int | None = None  # a move a minute at the CLI's default, thousands of tokens each
+    build: str = ""
+    no_auto_use: bool = False
+
+
+@dataclass
+class GameOutcome:
+    generation: int
+    kind: str  # decided | acted | refused | changed | retry | stop | wait | cancelled
+    mood: str = "talk"
+    text: str = ""
+    decision: balatro.Decision | None = None
+    used: int = 0  # suggestions the model saw: taken off the queue
+    error: str = ""
+    auth_ok: bool | None = None
+    codex: str = ""
+    fingerprint: tuple | None = None
+    model_ok: bool = False  # a model call answered
+    note: str = ""  # what she remembers of the decided move
 
 
 def error_summary(result: claude_client.ClaudeResult, timeout_sec: int) -> str:
@@ -228,6 +321,7 @@ class PetController(QObject):
     update_found = Signal(object, bool)  # (latest released version or None, asked by 主人)
     download_progress = Signal(int, int)  # (bytes so far, of)
     download_done = Signal(object, object)  # (the verified exe or None, its version or an i18n.Msg why not)
+    game_ready = Signal(object)  # a GameOutcome
 
     def __init__(self, app: QApplication, config: Config, sprite_folder: Path, config_file: Path | None = None,
                  autostart: Autostart | None = None, memory: CompanionMemory | None = None,
@@ -313,6 +407,12 @@ class PetController(QObject):
         self.generation = 0
         self.current_call: claude_client.ClaudeCall | api_client.ApiCall | None = None
         self.auth_ok_until = 0.0
+
+        # Playing Balatro with 主人: only through the BalatroBot mod on 127.0.0.1, never the screen or the mouse.
+        self.game: GameSession | None = None
+        self._game_link = balatro.BalatroLink  # builds the link from the port (a test seam)
+        self.game_timer = QTimer(self, singleShot=True, timeout=self._game_next)
+        self.game_ready.connect(self._on_game)
 
         self.reply_ready.connect(self._on_reply)
         self.codex_found.connect(self._on_codex_found)
@@ -409,6 +509,7 @@ class PetController(QObject):
 
     def shutdown(self) -> None:
         self._cancel_inflight()
+        self.game_timer.stop()
         self.focus_log.flush(float("inf"))  # one last try for anything a locked file kept from being saved
         self.voice.stop()
         self._download_cancel.set()
@@ -468,18 +569,8 @@ class PetController(QObject):
             if gate:
                 self._refresh_status()
                 return
-        cwd = app_data_dir()
-        cwd.mkdir(parents=True, exist_ok=True)
         self.generation += 1
-        key = partial(self._load_key, provider.vault_entry)  # read on the worker, never kept in the Job
-        if provider.kind == ANTHROPIC:
-            call = api_client.ApiCall(self.config.timeout_sec, load_key=key)
-        elif provider.kind == OPENAI_COMPATIBLE:
-            call = openai_client.OpenAICompatCall(provider, self.config.timeout_sec, load_key=key)
-        elif provider.kind == CODEX_CLI:
-            call = codex_client.CodexCall(self.config.timeout_sec, cwd=str(cwd))
-        else:
-            call = claude_client.ClaudeCall(self.config.timeout_sec, cwd=str(cwd))
+        call = self._new_call(provider)
         job = Job(
             bedtime=self._bedtime(), generation=self.generation, force=force, user_message=user_message,
             may_capture=not self.config.paused, hwnd=self.last_external_hwnd,
@@ -500,8 +591,24 @@ class PetController(QObject):
         QTimer.singleShot((self.config.timeout_sec * 2 + 60) * 1000, partial(self._watchdog, job.generation, force))
         self._spawn(partial(self._work, job))
 
+    def _new_call(self, provider: providers.Provider):
+        """A cancellable call object for the chosen provider; the key is read on the worker, never kept here."""
+        cwd = app_data_dir()
+        cwd.mkdir(parents=True, exist_ok=True)
+        key = partial(self._load_key, provider.vault_entry)
+        if provider.kind == ANTHROPIC:
+            return api_client.ApiCall(self.config.timeout_sec, load_key=key)
+        if provider.kind == OPENAI_COMPATIBLE:
+            return openai_client.OpenAICompatCall(provider, self.config.timeout_sec, load_key=key)
+        if provider.kind == CODEX_CLI:
+            return codex_client.CodexCall(self.config.timeout_sec, cwd=str(cwd))
+        return claude_client.ClaudeCall(self.config.timeout_sec, cwd=str(cwd))
+
     def poke(self) -> None:
         """The menu's 「戳她一下（立即评论）」: always a fresh look."""
+        if self.game is not None:
+            self._say_playing()
+            return
         if self.busy:
             self.window.say(*self._reply_tuple(persona.common_line("busy", self._rng)))
             return
@@ -510,6 +617,9 @@ class PetController(QObject):
     def _on_poked(self) -> None:
         """A click on her: a fresh look, but clicks soon after one get a local line instead (no model call),
         a little more flustered with each."""
+        if self.game is not None:
+            self._say_playing()
+            return
         if self.busy:
             self.window.say(*self._reply_tuple(persona.common_line("busy", self._rng)))
             return
@@ -537,6 +647,9 @@ class PetController(QObject):
             request = forget_request(text)
             if request is not None:  # "忘掉：……" too: it never needs a model, and the note must not go to one
                 self.forget(request)
+                return
+            if self.game is not None:  # while playing, words are suggestions for her next move: never "busy"
+                self.suggest(text)
                 return
             if self.busy:
                 self.window.say(*self._reply_tuple(persona.common_line("busy", self._rng)))
@@ -593,6 +706,8 @@ class PetController(QObject):
     def _auto_gate(self) -> str | None:
         """Why an automatic (timer) look must not happen now; None when it may. Pokes skip this."""
         now = self._clock()
+        if self.game is not None:
+            return "playing Balatro"
         if self.asleep:
             return "asleep"
         if self.quiet:
@@ -965,7 +1080,8 @@ class PetController(QObject):
             idle = None
         if idle is None:
             return
-        if not self.asleep and not self.busy and idle >= self.config.sleep_after_sec and self._clock() >= self.awake_until:
+        if (not self.asleep and not self.busy and self.game is None  # 主人 may just be watching her play
+                and idle >= self.config.sleep_after_sec and self._clock() >= self.awake_until):
             self.asleep = True
             reply = persona.pick(persona.lines("SLEEP_LINES"))
             if self.quiet:
@@ -1027,6 +1143,18 @@ class PetController(QObject):
                        auth_ok=auth_ok, window=snapshot.window if snapshot.jpeg is not None else None)
 
     def _ask_claude(self, job: Job, snapshot: Snapshot) -> tuple[claude_client.ClaudeResult, bool | None]:
+        window = snapshot.window
+        text = persona.build_user_text(
+            window.title if window else "", window.process_name if window else "", time.strftime("%H:%M"),
+            job.recent, job.user_message, has_image=snapshot.jpeg is not None, memory=job.memory_context,
+            bedtime=job.bedtime, journal=job.journal_context,
+        )
+        return self._run_model(job, self._system_prompt(), text, snapshot.jpeg)
+
+    def _run_model(self, job: Job | GameJob, system_prompt: str, text: str,
+                   jpeg: bytes | None) -> tuple[claude_client.ClaudeResult, bool | None]:
+        """One model call with the chosen provider (worker thread). Nothing is sent unless a subscription CLI is
+        logged in with the subscription; an automatic look that went full screen meanwhile is skipped quietly."""
         self.thinking.emit(job.generation)
         started = time.monotonic()
         auth_ok = None
@@ -1048,20 +1176,14 @@ class PetController(QObject):
         if job.quiet_check is not None and job.quiet_check():
             # Went full screen while the subscription was checked: skip quietly, not a failure.
             return claude_client.ClaudeResult(False, error="quiet", cancelled=True), auth_ok
-        window = snapshot.window
-        text = persona.build_user_text(
-            window.title if window else "", window.process_name if window else "", time.strftime("%H:%M"),
-            job.recent, job.user_message, has_image=snapshot.jpeg is not None, memory=job.memory_context,
-            bedtime=job.bedtime, journal=job.journal_context,
-        )
         if job.kind == CLAUDE_CLI:
-            args = claude_client.build_args(job.claude, job.model, self._system_prompt())
-            result = job.call.run(args, claude_client.build_message(text, snapshot.jpeg))
+            args = claude_client.build_args(job.claude, job.model, system_prompt, job.thinking_tokens)
+            result = job.call.run(args, claude_client.build_message(text, jpeg))
         elif job.kind == CODEX_CLI:
-            result = job.call.ask(job.codex, job.model, self._system_prompt(), text, snapshot.jpeg,
+            result = job.call.ask(job.codex, job.model, system_prompt, text, jpeg,
                                   effort=codex_client.EFFORTS.get(job.tier, "low"))
         else:
-            result = job.call.ask(job.model, self._system_prompt(), text, snapshot.jpeg)
+            result = job.call.ask(job.model, system_prompt, text, jpeg)
         source = "claude" if job.kind == CLAUDE_CLI else job.backend
         log.info("%s call ok=%s in %.1fs", source, result.ok, time.monotonic() - started)
         if not result.ok:
@@ -1078,7 +1200,7 @@ class PetController(QObject):
         if generation == self.generation and self.busy:
             log.warning("request %d did not finish; abandoning it", generation)
             self.last_error = tr("任务卡住，已放弃")
-            self._cancel_inflight()
+            self._cancel_inflight()  # while playing, this also schedules the next step: the game goes on
             if not force and generation <= self.notice_generation:
                 return  # an automatic look older than a Claude Code notice: never cover the notice
             self.window.say(*self._reply_tuple(persona.fallback("timeout")))
@@ -1091,6 +1213,10 @@ class PetController(QObject):
         self.generation += 1
         self.busy = False
         self._refresh_status()
+        if self.game is not None:
+            # A game step cancelled by something else (switching the provider, the lists...): the game goes on.
+            # Pausing and quitting stop the game timer right after this.
+            self._game_schedule("step", GAME_STEP_MS)
 
     def _on_reply(self, outcome: Outcome) -> None:
         if outcome.generation != self.generation:
@@ -1167,6 +1293,284 @@ class PetController(QObject):
     @staticmethod
     def _reply_tuple(reply: persona.Reply) -> tuple[str, str]:
         return reply.mood, reply.text
+
+    # ---- playing Balatro (balatro.py) ------------------------------------
+    # Each step is a job like a look: copied on the UI thread, run on a worker, answered through game_ready, and
+    # dropped when the generation moved on (pause, quit, stop). She says what she will do, then does it.
+    def toggle_game(self) -> None:
+        if self.game is None:
+            self.start_game()
+        else:
+            self.stop_game(self._addressed(tr("不玩啦，我接着陪主人～")))
+
+    def start_game(self) -> None:
+        if self.game is not None or self.quit_pending:
+            return
+        if self.config.paused:
+            self.window.say(*self._reply_tuple(persona.common_line("eyes_closed", self._rng)))
+            self._sync_game_action()
+            return
+        if self.busy:
+            self._cancel_inflight()  # a look in progress gives way to the game
+        self._wake(announce=False)  # playing while asleep would keep her voice off and be interrupted by her waking
+        self.game = GameSession(self._game_link(self.config.balatro_port))
+        self._sync_game_action()
+        self._refresh_status()
+        self.window.say("happy", tr("好，我来打 Balatro！有建议随时用「和她说话」告诉我～"))
+        self._game_schedule("step", GAME_FIRST_MS)
+
+    def stop_game(self, line: str = "", mood: str = "talk") -> None:
+        if self.game is None:
+            return
+        self.game = None
+        self.game_timer.stop()
+        if self.busy:
+            self._cancel_inflight()
+        self._sync_game_action()
+        self._refresh_status()
+        if line:
+            self.window.say(mood, line)
+
+    def suggest(self, text: str) -> None:
+        """What 主人 says while she plays: a suggestion for her next decision that needs the model."""
+        game = self.game
+        if game is None:
+            return
+        if len(game.suggestions) >= SUGGESTIONS_MAX:
+            self.window.say("think", tr("建议有点多啦，我先消化前面的～"))
+            return
+        game.suggestions.append(balatro.clean_suggestion(text))
+        self._diary_count(self._today(), "chats")
+        self._refresh_status()
+        self.window.say("happy", tr("收到！下一步我会参考～"))
+
+    def _say_playing(self) -> None:
+        self.window.say("talk", tr("我在专心打牌呢～有话就用「和她说话」告诉我。"))
+
+    def _sync_game_action(self) -> None:
+        action = getattr(self, "game_action", None)
+        if action is not None:
+            action.setChecked(self.game is not None)
+
+    def _game_schedule(self, step: str, delay_ms: int) -> None:
+        if self.game is None:
+            return
+        self.game.next = step
+        self.game_timer.start(delay_ms)
+
+    def _game_next(self) -> None:
+        game = self.game
+        if game is None or self.quit_pending or self.config.paused:
+            return  # resuming starts again from a fresh look
+        if self.busy:
+            self.game_timer.start(GAME_BUSY_MS)
+            return
+        provider = self._provider()
+        act = game.next == "act" and game.decision is not None
+        if not act and provider.kind == CLAUDE_CLI and not self.claude:
+            self.claude = claude_client.find_claude(self.config.claude_path)
+            if not self.claude:
+                reply = persona.fallback("no_claude")
+                self.stop_game(reply.text, reply.mood)
+                return
+        self.generation += 1
+        job = GameJob(
+            generation=self.generation, step="act" if act else "step", link=game.link,
+            call=_GameStop() if act else self._new_call(provider), kind=provider.kind, backend=provider.id,
+            claude=self.claude or "", codex=self.codex or "",
+            model=providers.model_for(provider, self.config.model, self.config.custom_models.get(provider.id, "")),
+            tier=self.config.model, need_auth=time.monotonic() >= self.auth_ok_until, deck=self.config.balatro_deck,
+            target_ante=self.config.balatro_target_ante, address=self.config.address,
+            system_prompt=self._system_prompt(), suggestions=list(game.suggestions), recent=list(game.recent),
+            last_error=game.last_error, rules_only=game.refused >= GAME_RULES_AFTER, first=not game.looked, model_failures=game.model_failures,
+            action=game.decision.action if act else None, fingerprint=game.fingerprint if act else None,
+            thinking_tokens=self.config.balatro_thinking_tokens, build=game.build, no_auto_use=game.no_auto_use,
+        )
+        self.current_call = job.call
+        self.busy = True
+        self._refresh_status()
+        QTimer.singleShot((self.config.timeout_sec * 2 + 60) * 1000, partial(self._watchdog, job.generation, True))
+        self._spawn(partial(self._game_work, job))
+
+    def _game_work(self, job: GameJob) -> None:
+        """Worker thread: make the decided move, or look at the game and decide the next one."""
+        try:
+            outcome = self._game_act(job) if job.step == "act" else self._game_look(job)
+        except balatro.LinkError as exc:
+            if exc.kind == "api":
+                outcome = GameOutcome(job.generation, "refused", error=exc.message)
+            elif exc.kind == "offline":
+                outcome = GameOutcome(job.generation, "stop", "sad",
+                                      tr("连不上 Balatro：要先打开游戏，并装好 BalatroBot mod。"))
+            else:
+                outcome = GameOutcome(job.generation, "stop", "sad", tr("游戏那边的回答我看不懂……先不玩了。"))
+        except Exception as exc:  # never leave her busy because of an unexpected error
+            log.exception("game step failed")
+            outcome = GameOutcome(job.generation, "stop", "panic", tr("打牌时出了点意外，先不玩了……"),
+                                  error=f"internal: {type(exc).__name__}: {exc}")
+        self.game_ready.emit(outcome)
+
+    def _game_act(self, job: GameJob) -> GameOutcome:
+        if job.call.cancelled:
+            return GameOutcome(job.generation, "cancelled")
+        if job.fingerprint is not None:
+            # 主人 may have moved a card since she decided: an old index must not hit another card.
+            current = balatro.fingerprint(job.link.gamestate())
+            if job.call.cancelled:  # paused or stopped during that read: a move once sent cannot be taken back
+                return GameOutcome(job.generation, "cancelled")
+            if current != job.fingerprint:
+                return GameOutcome(job.generation, "changed")
+        job.link.rpc(job.action.method, job.action.params)  # a refusal comes back as LinkError("api")
+        return GameOutcome(job.generation, "acted")
+
+    def _game_look(self, job: GameJob) -> GameOutcome:
+        if job.first and not i18n.english():
+            balatro.set_names(balatro_names.load())  # (the game may have been updated since the last time)
+        state = job.link.gamestate()
+        if job.call.cancelled:
+            return GameOutcome(job.generation, "cancelled")
+        outcome = self._game_decide(job, state)
+        if outcome.decision is not None:
+            outcome.note = balatro.move_note(outcome.decision, state)
+        # Only a move with indices depends on where the cards are. Cashing out has none, and the hand is still
+        # flying back to the deck then: the game refuses it by itself if the screen has moved on.
+        if outcome.decision is not None and outcome.decision.action.params:
+            outcome.fingerprint = balatro.fingerprint(state)
+        return outcome
+
+    def _game_decide(self, job: GameJob, state: dict) -> GameOutcome:
+        phase, automatic = balatro.next_step(state, job.target_ante)
+        if phase == "over" and job.first:  # a run that really ended before she started: back to the menu, a new one
+            job.link.rpc("menu")
+            return GameOutcome(job.generation, "acted", "talk", tr("上一局已经结束了，重新开一局～"))
+        if phase == "won" and job.first:  # past the target but maybe still going (主人's own run): never thrown away
+            return GameOutcome(job.generation, "stop", "talk", tr("这一局已经过了目标底注，我就不接手了。"))
+        if phase == "menu":
+            job.link.rpc("start", {"deck": job.deck, "stake": balatro.STAKE})
+            return GameOutcome(job.generation, "acted", "happy", tr("开一局{0}！", balatro.deck_name(job.deck)))
+        if phase == "won":
+            return GameOutcome(job.generation, "stop", "happy", tr("打满 {0} 个底注啦！这局我们赢了～", job.target_ante))
+        if phase == "over":
+            return GameOutcome(job.generation, "stop", "sad",
+                               tr("输在第 {0} 个底注……下次再来！", balatro.ante(state)))
+        if phase == "wait":
+            return GameOutcome(job.generation, "wait")
+        if automatic is not None:  # choosing the blind, cashing out: no model needed
+            return GameOutcome(job.generation, "decided",
+                               decision=balatro.Decision(automatic, "talk", balatro.describe(automatic, state), False))
+        # (主人's word comes first; after a refusal the model decides, and no card is used by itself again this game)
+        use = balatro.card_to_use(state) if not (job.last_error or job.suggestions or job.no_auto_use) else None
+        if use is not None:
+            return GameOutcome(job.generation, "decided",
+                               decision=balatro.Decision(use, "happy", balatro.describe(use, state), False))
+        if job.rules_only:
+            return self._game_rule(job, state, "")
+        if job.kind == CODEX_CLI and not job.codex:
+            job.codex = codex_client.find_codex() or ""
+            if not job.codex:
+                return GameOutcome(job.generation, "stop", *self._reply_tuple(persona.fallback("no_codex")))
+        text = balatro.build_prompt(state, job.target_ante, job.address, job.suggestions, job.recent, job.last_error, job.build)
+        result, auth_ok = self._run_model(job, job.system_prompt, text, None)
+        if job.call.cancelled or result.cancelled:
+            return GameOutcome(job.generation, "cancelled")
+        if result.no_api_key or result.bad_api_key or result.not_subscription:
+            kind = "no_api_key" if result.no_api_key else "bad_api_key" if result.bad_api_key else \
+                "not_chatgpt" if job.kind == CODEX_CLI else "not_subscription"
+            return GameOutcome(job.generation, "stop", *self._reply_tuple(persona.fallback(kind)), auth_ok=auth_ok)
+        if not result.ok and job.model_failures < len(GAME_MODEL_RETRY_MS):
+            # The game has no clock: a call that failed is no reason to spend a hand on a guess.
+            return GameOutcome(job.generation, "retry", error=result.error, auth_ok=auth_ok, codex=job.codex)
+        decision = balatro.parse_decision(result.text, state, guarded=not job.suggestions) if result.ok else None
+        if decision is None:
+            outcome = self._game_rule(job, state, result.error if not result.ok else "not an allowed move")
+        else:
+            outcome = GameOutcome(job.generation, "decided", decision=decision)
+        if outcome.decision is not None and outcome.decision.action.method == "next_round" and not job.suggestions and not job.last_error:
+            instead = balatro.leaving_move(state)  # not with too few jokers or money to spare (主人's word and a refusal come first)
+            if instead is not None:
+                outcome.decision = balatro.Decision(instead, "think", balatro.describe(instead, state), False, outcome.decision.build)
+        outcome.used = len(job.suggestions) if result.ok else 0  # a failed call keeps them for the next one
+        outcome.auth_ok, outcome.codex, outcome.model_ok = auth_ok, job.codex, result.ok
+        return outcome
+
+    @staticmethod
+    def _game_rule(job: GameJob, state: dict, why: str) -> GameOutcome:
+        decision = balatro.fallback(state)
+        if decision is None:
+            return GameOutcome(job.generation, "wait")
+        if why:
+            log.info("game move by local rule: %s", why[:200])
+        return GameOutcome(job.generation, "decided", decision=decision)
+
+    def _on_game(self, outcome: GameOutcome) -> None:
+        if outcome.generation != self.generation:
+            return  # paused, stopped, quit or abandoned while the step was running
+        self.current_call = None
+        self.busy = False
+        if outcome.auth_ok:
+            self.auth_ok_until = time.monotonic() + AUTH_CHECK_TTL
+        if outcome.codex:
+            self.codex = outcome.codex
+        self._refresh_status()
+        game = self.game
+        if game is None or outcome.kind == "cancelled":
+            return
+        game.looked = True
+        if outcome.kind == "stop":
+            if outcome.error:
+                log.warning("stopped playing: %s", outcome.error[:300])
+            self.stop_game(outcome.text, outcome.mood)
+        elif outcome.kind == "wait":
+            self._game_schedule("step", GAME_WAIT_MS)
+        elif outcome.kind == "retry":
+            log.warning("model call failed while playing, asking again: %s", outcome.error[:200])
+            delay = GAME_MODEL_RETRY_MS[game.model_failures]
+            if game.model_failures == 0:
+                self.window.say("think", tr("脑子卡了一下，等等再想这手～"))
+            game.model_failures += 1
+            self._game_schedule("step", delay)
+        elif outcome.kind == "decided":
+            if outcome.model_ok:
+                game.model_failures = 0
+            for _ in range(min(outcome.used, len(game.suggestions))):
+                game.suggestions.popleft()  # the model saw them
+            if outcome.used:
+                self._refresh_status()
+            game.decision, game.fingerprint = outcome.decision, outcome.fingerprint
+            game.deciding = outcome.note or outcome.decision.text
+            if outcome.decision.build and outcome.decision.build != game.build:
+                log.info("building around %s now (was %s)", outcome.decision.build, game.build or "nothing")
+                game.build = outcome.decision.build
+            # A move takes seconds: a line for each is more than anyone can read. An answer to 主人 and a new blind are always said.
+            now = time.monotonic()
+            if outcome.used or outcome.decision.action.method == "select" or now - game.said_at >= GAME_SAY_GAP_SEC:
+                game.said_at = now
+                self.window.say(outcome.decision.mood, outcome.decision.text, verbatim=outcome.decision.by_model)
+            self._game_schedule("act", GAME_ACT_MS)
+        elif outcome.kind == "acted":
+            game.decision, game.refused, game.last_error = None, 0, ""
+            if game.deciding:
+                game.recent.append(game.deciding)  # told to her as done: only now is it
+                game.deciding = ""
+            if outcome.text:
+                self.window.say(outcome.mood, outcome.text)
+            self._game_schedule("step", GAME_STEP_MS)
+        elif outcome.kind in ("refused", "changed"):
+            if outcome.kind == "refused" and game.decision is not None and not game.decision.by_model and game.decision.action.method == "use":
+                log.info("the game refused a card used by itself: %s", outcome.error[:200])
+                game.no_auto_use = True
+            game.decision, game.deciding = None, ""
+            game.refused += 1  # counted either way: a game that never holds still must not cost calls for ever
+            game.last_error = outcome.error
+            if game.refused >= GAME_REFUSED_STOP:
+                self.stop_game(tr("一直被游戏拒绝，先不玩了……"), "sad")
+                return
+            if outcome.kind == "changed":
+                self.window.say("think", tr("牌局变了，我重新看看～"))
+            else:
+                log.info("the game refused a move: %s", outcome.error[:200])
+                self.window.say("sad", tr("这步不行，我换个做法～"))  # (the mod's English reason goes to the model)
+            self._game_schedule("step", GAME_STEP_MS)
 
     # ---- focus timer and reminders ---------------------------------------
     def _update_timers(self) -> None:
@@ -1332,6 +1736,9 @@ class PetController(QObject):
         menu = QMenu()
         menu.addAction(tr("戳她一下（立即评论）"), self.poke)
         menu.addAction(tr("和她说话…"), self.chat)
+        self.game_action = QAction(tr("陪我玩 Balatro"), menu, checkable=True, checked=self.game is not None)
+        self.game_action.triggered.connect(lambda _checked: self.toggle_game())
+        menu.addAction(self.game_action)
         self.timer_menu = menu.addMenu(tr("番茄钟与提醒"))
         self.timer_menu.aboutToShow.connect(self._fill_timer_menu)
         self._fill_timer_menu()
@@ -1447,10 +1854,13 @@ class PetController(QObject):
         self.pause_action.setChecked(self.config.paused)
         if self.config.paused:
             self._cancel_inflight()
+            self.game_timer.stop()  # the game waits at this step
             self.window.say(*self._reply_tuple(persona.common_line("paused", self._rng)))
         else:
             self.window.say(*self._reply_tuple(persona.common_line("resumed", self._rng)))
             self.last_fingerprint = None
+            if self.game is not None:
+                self._game_schedule("step", GAME_FIRST_MS)  # from a fresh look: the game may have moved
         self._refresh_status()
         self._save()
 
@@ -2093,7 +2503,7 @@ class PetController(QObject):
             # Fresh look, not the last heartbeat's: the user may have gone full screen a moment ago.
             self._track_foreground()
             self._update_quiet()
-        if not self.config.self_talk or self.quit_pending or self.busy or self.quiet:
+        if not self.config.self_talk or self.quit_pending or self.busy or self.quiet or self.game is not None:
             return False
         if self.window.full_text:  # a bubble is still on screen
             return False
@@ -2235,6 +2645,11 @@ class PetController(QObject):
         self.config.model = model
         self._save()
 
+    def set_balatro_thinking(self, tokens: int) -> None:
+        """From the next move on, if she is playing: each step reads it afresh."""
+        self.config.balatro_thinking_tokens = tokens
+        self._save()
+
     def _remember_position(self, x: int, y: int) -> None:
         self.config.x, self.config.y = x, y
         self._save()
@@ -2245,6 +2660,9 @@ class PetController(QObject):
             self.window.set_status(tr("身高 {0} 像素", self.config.sprite_height))
         elif self.config.paused:
             self.window.set_status(tr("已暂停"))
+        elif self.game is not None:
+            waiting = len(self.game.suggestions)
+            self.window.set_status(tr("打牌中") + (tr("（{0} 条建议待参考）", waiting) if waiting else ""))
         elif self.busy:
             self.window.set_status(tr("思考中…"))
         elif self.quiet:

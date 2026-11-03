@@ -142,6 +142,26 @@ def test_general_page_applies_at_once_and_stays_in_step_with_the_menu(pet):
     assert window.model_combo.currentData() == "haiku"
 
 
+def test_the_way_of_playing_balatro_is_chosen_on_the_general_page(pet):
+    ctrl, window, _vault, _saved = pet
+    assert ctrl.config.balatro_thinking_tokens == 0 and window.balatro_combo.currentData() == 0  # relaxed unless chosen
+    assert "额度消耗高" in window.balatro_combo.itemText(1)
+    window.balatro_combo.setCurrentIndex(1)
+    assert ctrl.config.balatro_thinking_tokens == 2000
+    window.balatro_combo.setCurrentIndex(0)
+    assert ctrl.config.balatro_thinking_tokens == 0
+
+
+def test_a_limit_set_by_hand_shows_as_careful_and_is_not_overwritten(pet):
+    ctrl, window, _vault, _saved = pet
+    ctrl.config.balatro_thinking_tokens = 4000
+    window.refresh()
+    assert window.balatro_combo.currentData() == 2000 and ctrl.config.balatro_thinking_tokens == 4000
+    ctrl.config.balatro_thinking_tokens = 0
+    window.refresh()
+    assert window.balatro_combo.currentData() == 0
+
+
 def test_the_backend_page_never_shows_the_key(pet):
     ctrl, window, vault, _saved = pet
     ctrl._confirm = lambda title, text: False
@@ -391,7 +411,7 @@ def test_invalid_text_put_back_by_qt_changes_nothing(pet, typed):
 def test_the_menu_keeps_only_what_is_wanted_at_hand(pet):
     ctrl, _window, _vault, _saved = pet
     labels = [a.text() for a in ctrl.tray.contextMenu().actions() if not a.isSeparator()]
-    assert labels[:5] == ["戳她一下（立即评论）", "和她说话…", "番茄钟与提醒", "设置…", "暂停观察 (Ctrl+Alt+P)"]
+    assert labels[:6] == ["戳她一下（立即评论）", "和她说话…", "陪我玩 Balatro", "番茄钟与提醒", "设置…", "暂停观察 (Ctrl+Alt+P)"]
     assert labels[-1] == "退出"
     for gone in ("观察范围", "Claude Code 联动", "陪伴记忆", "自言自语", "沿屏幕底部溜达", "评论间隔", "调用方式", "模型",
                  "开机自启", "打开日志文件夹"):

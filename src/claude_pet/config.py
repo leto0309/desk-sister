@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .characters import CHARACTERS, MAX_PERSONA, clean_address
 from .characters import DEFAULT as DEFAULT_CHARACTER
+from .balatro import DECKS as BALATRO_DECKS
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
 from .days import clean_birthday
@@ -23,6 +24,8 @@ CONFIG_VERSION = 2  # 2: voice_style "" (her own voice) became the default
 BLINK_CHOICES = ("off", "few", "normal", "often")
 INTERVAL_CHOICES = (30, 60, 90, 120, 300, 600)
 MODEL_CHOICES = ("haiku", "sonnet")  # tiers: fast and cheap / smarter (each provider maps them to its models)
+BALATRO_RELAXED_TOKENS = 0  # the settings' two ways of playing: about 5 s a move, 50-260 output tokens
+BALATRO_CAREFUL_TOKENS = 2000  # about 18 s a move, 1300-2300 output tokens
 WATCH_MODES = ("blocklist", "allowlist")
 
 # Matched case-insensitively against the foreground window title and process name.
@@ -98,6 +101,10 @@ class Config:
     bedtime_reminder: str = "nightly"  # off | nightly | every_2h (see bedtime.py)
     night_start_hour: int = 23
     bedtime_reminded_at: float = 0.0  # wall-clock time of the last reminder, shared by comments and self-talk
+    balatro_deck: str = "BLUE"  # the deck of a new Balatro run she starts (balatro.DECKS)
+    balatro_target_ante: int = 8  # she stops once this many antes are won; never into endless mode
+    balatro_port: int = 12346  # the BalatroBot mod's port on 127.0.0.1 (its BALATROBOT_PORT)
+    balatro_thinking_tokens: int = BALATRO_RELAXED_TOKENS  # the Claude subscription's hidden reasoning per move
     x: int | None = None
     y: int | None = None
     config_version: int = CONFIG_VERSION  # what the file was written by (see load_config)
@@ -149,7 +156,11 @@ class Config:
             self.head_motion = False
         if not isinstance(self.body_motion, bool):
             self.body_motion = True
-        for name, default, (low, high) in (("focus_min", 25, FOCUS_RANGE), ("break_min", 5, BREAK_RANGE)):
+        if self.balatro_deck not in BALATRO_DECKS:
+            self.balatro_deck = "BLUE"
+        for name, default, (low, high) in (("focus_min", 25, FOCUS_RANGE), ("break_min", 5, BREAK_RANGE),
+                                           ("balatro_target_ante", 8, (1, 8)), ("balatro_port", 12346, (1024, 65535)),
+                                           ("balatro_thinking_tokens", 0, (0, 8000))):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int):
                 value = default

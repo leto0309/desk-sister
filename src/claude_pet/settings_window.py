@@ -25,7 +25,7 @@ from .updates import RELEASES_PAGE
 from .bedtime import MODE_LABELS as BEDTIME_LABELS
 from .bedtime import MODES as BEDTIME_MODES
 from .bedtime import NIGHT_STARTS
-from .config import BLINK_CHOICES, INTERVAL_CHOICES, MODEL_CHOICES
+from .config import BALATRO_CAREFUL_TOKENS, BALATRO_RELAXED_TOKENS, BLINK_CHOICES, INTERVAL_CHOICES, MODEL_CHOICES
 from .journal import MAX_NOTES, NOTE_MAX_CHARS
 from .persona import SUMMARY_HOURS
 from .timers import BREAK_RANGE, FOCUS_RANGE
@@ -364,12 +364,20 @@ class SettingsWindow(QDialog):
             lambda _i: self._apply(lambda: self.ctrl.set_language(self.language_combo.currentData())))
         grid.addWidget(QLabel(tr("语言 / Language")), 2, 0)
         grid.addWidget(self.language_combo, 2, 1)
+        self.balatro_combo = QComboBox()
+        self.balatro_combo.addItem(tr("陪玩模式（快，省额度）"), BALATRO_RELAXED_TOKENS)
+        self.balatro_combo.addItem(tr("认真模式（慢，额度消耗高很多）"), BALATRO_CAREFUL_TOKENS)
+        self.balatro_combo.currentIndexChanged.connect(
+            lambda _i: self._apply(lambda: self.ctrl.set_balatro_thinking(self.balatro_combo.currentData())))
+        grid.addWidget(QLabel(tr("打牌模式")), 3, 0)
+        grid.addWidget(self.balatro_combo, 3, 1)
         self.autostart_box = QCheckBox(tr("开机自启"))
         self.autostart_box.toggled.connect(lambda on: self._apply(lambda: self.ctrl.set_autostart(on)))
         layout.addWidget(self.pause_box)
         layout.addLayout(grid)
         layout.addWidget(self.autostart_box)
         layout.addWidget(_hint(tr("评论间隔越短、选 Sonnet，消耗的额度越多。开机自启写在你自己的「启动」文件夹里，也可以在任务管理器里管理。")))
+        layout.addWidget(_hint(tr("打牌模式只影响陪玩 Balatro，且只对 Claude 订阅生效：陪玩模式每步约 5 秒；认真模式每步约 18 秒，消耗的额度约为陪玩模式的 10–20 倍。")))
         layout.addStretch(1)
         return page
 
@@ -994,6 +1002,7 @@ class SettingsWindow(QDialog):
             for index in range(self.model_combo.count()):
                 self.model_combo.setItemText(index, model_label(provider, self.model_combo.itemData(index)))
             self.model_combo.setCurrentIndex(max(0, self.model_combo.findData(cfg.model)))
+            self.balatro_combo.setCurrentIndex(1 if cfg.balatro_thinking_tokens else 0)  # (config.json may hold another limit)
             self.autostart_box.setChecked(self.ctrl.autostart_on)
             self.autostart_box.setEnabled(self.ctrl.autostart_enabled)
             self.autostart_box.setText(self.ctrl.autostart_text)

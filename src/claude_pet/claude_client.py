@@ -64,7 +64,9 @@ def _prefix(executable: str | list[str]) -> list[str]:
     return [executable] if isinstance(executable, str) else list(executable)
 
 
-def build_args(executable: str | list[str], model: str, system_prompt: str) -> list[str]:
+def build_args(executable: str | list[str], model: str, system_prompt: str, thinking_tokens: int | None = None) -> list[str]:
+    """thinking_tokens: a limit on the model's hidden reasoning (0: none); None leaves it to the CLI."""
+    limit = [] if thinking_tokens is None else ["--settings", json.dumps({"env": {"MAX_THINKING_TOKENS": str(thinking_tokens)}})]
     return _prefix(executable) + [
         "-p",
         "--input-format", "stream-json",
@@ -77,6 +79,7 @@ def build_args(executable: str | list[str], model: str, system_prompt: str) -> l
         "--no-session-persistence",
         "--model", model,
         "--system-prompt", system_prompt,
+        *limit,
     ]
 
 

@@ -72,6 +72,26 @@ production deployments need authorisation. Secrets are configured only in GitHub
 - The CLI runs with `--tools ""`, `--safe-mode`, empty setting sources and `--strict-mcp-config`: the model cannot run
   commands, read or write files, or call MCP; no option that skips permissions is ever used.
 
+## Playing Balatro with you (started from the right-click menu, off by default)
+
+- The game is read and played only through the BalatroBot mod's JSON-RPC at `http://127.0.0.1:<balatro_port>`; the
+  system proxy settings are not used and redirects are not followed, so the requests never leave this computer. No screenshots, no simulated mouse or
+  keyboard, and no changes to game files; you install the mod yourself (docs/balatro.en.md).
+- For the game's Chinese card names, a game started in Chinese reads the Steam path from the registry and its
+  `libraryfolders.vdf`, then two language files (at most 2 MB each) from `Balatro.exe`. Read only, never run or changed;
+  the names (at most 30 characters each) go to the model like the rest of the game. These translations are not in this repository.
+- The chosen model gets text only: the game (ante, score, money, hand, jokers, shop and so on), her last few lines about
+  moves, why the last move was refused, and what you said while she played (marked as suggestions, not host rules).
+  The call is made exactly as for a look (subscription check, `--tools ""` and the rest).
+- The model cannot act on the game itself: it answers with one line of JSON, which the pet checks against what the
+  current screen allows (play / discard / use a consumable; buy / sell / reroll / leave the shop; take a card from a pack
+  or skip it) and against the real index ranges before sending it to the mod. Anything else is not sent and simple
+  rules decide instead. Starting a run, choosing the blind and cashing out follow fixed rules. `start` is only called at
+  the main menu, with the configured deck on White Stake; the mod's debugging methods (`add`, `set`, `save`, `load`,
+  `screenshot` and so on) are never called.
+- Pausing, quitting or unticking the menu item cancels the call in progress and drops late results; refused moves in a
+  row or an unreachable game end the game mode by themselves.
+
 ## Codex mode (ChatGPT subscription, optional, off by default)
 
 - Before switching, a dialog explains: a ChatGPT subscription login only, all tools off, screenshots briefly written to
