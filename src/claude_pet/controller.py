@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPoint, QTimer, Signal
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
 from .i18n import N_, tr
@@ -25,6 +25,7 @@ from .autostart import FOREIGN as AUTOSTART_FOREIGN
 from .autostart import ON as AUTOSTART_ON
 from .autostart import Autostart, AutostartError
 from .memory import CompanionMemory, activity_name, classify_activity, duration_text
+from . import chat_dialog, menu_style
 from .journal import NOTE_MAX_CHARS, ForgetRequest, Journal, forget_request, note_request
 from .config import BLINK_CHOICES, Config, app_data_dir, save_config
 from .pet_window import PetWindow
@@ -255,6 +256,7 @@ class PetController(QObject):
         self.focus_log = timers.FocusLog(app_data_dir() / "focus.json")
         self._focus_event: str | None = None  # the timer's latest news, waiting for her to be free to say it
         self._ask_reminder = reminder_dialog.ask
+        self._ask_chat = chat_dialog.ask
         self.recent: deque[str] = deque(maxlen=6)
         self.busy = False
         self.asleep = False
@@ -522,8 +524,12 @@ class PetController(QObject):
             self._last_poke_look, self._pokes_since_look = now, 0
 
     def chat(self) -> None:
-        text, ok = QInputDialog.getText(None, tr("和 {0} 说话", self._name()), tr("想对她说什么？"))
-        if ok and text.strip():
+        character = characters.get(self.config.character)
+        idle = self.window.sprites.get("idle", QPixmap())
+        x, y, w, h = character.head
+        face = idle.copy(int(x * idle.width()), int(y * idle.height()), int(w * idle.width()), int(h * idle.height()))
+        text = self._ask_chat(self._name(), character.theme, face)
+        if text:
             note = note_request(text)
             if note is not None:  # "记住：……" is kept here and answered at once, without asking a model
                 self.remember(note)
@@ -1344,6 +1350,7 @@ class PetController(QObject):
         # The autostart switch is in the settings window; its state is read in the background.
         self.autostart_on, self.autostart_enabled, self.autostart_text = False, False, tr(AUTOSTART_LABEL)
         self._refresh_autostart()
+        menu_style.apply(menu, characters.get(self.config.character).theme)
         return menu
 
     @staticmethod
@@ -1951,6 +1958,7 @@ class PetController(QObject):
         self.recent.clear()  # (another girl, other lines: what was said recently no longer applies)
         character = characters.get(girl)
         self.window.set_character(girl, self._art_folder(girl), tr(character.name), character.theme.main)
+        menu_style.apply(self.tray.contextMenu(), character.theme)
         self._save()
         log.info("now %s", girl)
         self.window.say(*self._reply_tuple(persona.pick(persona.lines("INTRO_LINES"))))  # her own hello

@@ -140,6 +140,8 @@ TEXT = {
     # ---- menu, dialogs, bubbles -----------------------------------------------------------------------
     "和 {0} 说话": "Talk to {0}",
     "想对她说什么？": "What would you like to say to her?",
+    "说「记住：……」她就会记下，说「忘掉：……」就删掉。": "Say \"remember: ...\" and she notes it down; \"forget: ...\" deletes it.",
+    "发送": "Send",
     "戳她一下（立即评论）": "Poke her (comment now)",
     "和她说话…": "Talk to her…",
     "设置…": "Settings…",

@@ -507,7 +507,7 @@ def lines(kind, english=False):
 
 
 def chat(ctrl, monkeypatch, text):
-    monkeypatch.setattr(controller_module.QInputDialog, "getText", lambda *_a, **_k: (text, True))
+    ctrl._ask_chat = lambda *_a: text
     ctrl.chat()
 
 

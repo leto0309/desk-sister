@@ -6,7 +6,7 @@ from claude_pet import claude_client
 from claude_pet.config import Config
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
-from PySide6 import QtCore  # noqa: E402
+from PySide6 import QtCore, QtGui  # noqa: E402
 from claude_pet import controller as controller_module  # noqa: E402
 
 SPRITES = Path(__file__).resolve().parents[1] / "assets" / "sprites"
@@ -77,6 +77,55 @@ def test_the_window_opens_wholly_on_its_screen(pet, monkeypatch, screen):
     assert frame.top() >= area.top() and frame.left() >= area.left()  # the title bar is on the screen
     assert frame.bottom() <= area.bottom()  # no exception for low screens: the pages scroll
     assert frame.right() <= area.right()
+
+
+def test_the_menu_wears_her_colours_and_follows_a_switch(pet):
+    from claude_pet import characters
+
+    ctrl, _window, _vault, _saved = pet
+    menu = ctrl.tray.contextMenu()
+    for girl in ("deepseek", "gemini", "claude"):
+        ctrl.set_character(girl)
+        theme = characters.get(girl).theme
+        sheet = ctrl.tray.contextMenu().styleSheet()
+        assert theme.main in sheet and theme.deep in sheet and theme.ivory in sheet
+    assert ctrl.tray.contextMenu() is menu  # the same menu, its items and their actions untouched
+    for each in (menu, ctrl.timer_menu):  # the submenu too: rounded corners need a see-through window
+        assert each.testAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+        assert each.windowFlags() & QtCore.Qt.WindowType.FramelessWindowHint
+        assert each.windowFlags() & QtCore.Qt.WindowType.Popup  # it still closes like a menu
+    ctrl.set_language("en")  # the menu is rebuilt in the other language, in the same colours
+    assert characters.get("claude").theme.main in ctrl.tray.contextMenu().styleSheet()
+    assert ctrl.timer_menu.testAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+
+
+def test_the_chat_dialog_wears_her_colours(pet):
+    from PySide6.QtTest import QTest
+
+    from claude_pet import characters, chat_dialog
+
+    ctrl, _window, _vault, _saved = pet
+    ctrl.set_character("gemini")
+    asked = []
+    ctrl._ask_chat = lambda name, theme, face: asked.append((name, theme, face.isNull()))  # cancelled
+    ctrl.chat()
+    assert asked == [("Gemini", characters.get("gemini").theme, False)] and not ctrl.busy  # cancelled: nothing happens
+    theme = characters.get("gemini").theme
+    dialog = chat_dialog.ChatDialog("Gemini", theme, QtGui.QPixmap())
+    assert theme.main in dialog.styleSheet() and "Gemini" in dialog.windowTitle()
+    assert dialog.entry.maxLength() == 300 and not dialog.send_button.isEnabled()
+    dialog.entry.setText("   ")
+    assert not dialog.send_button.isEnabled()  # spaces are not a message
+    dialog.entry.setText("  你好 ")
+    assert dialog.send_button.isEnabled() and dialog.message() == "你好"
+    dialog.show()
+    results = []
+    dialog.finished.connect(results.append)
+    QTest.keyClick(dialog.entry, QtCore.Qt.Key.Key_Return)
+    assert results == [QtWidgets.QDialog.DialogCode.Accepted]  # Enter sends
+    dialog.show()
+    QTest.keyClick(dialog.entry, QtCore.Qt.Key.Key_Escape)
+    assert results[-1] == QtWidgets.QDialog.DialogCode.Rejected  # Esc cancels
 
 
 def test_general_page_applies_at_once_and_stays_in_step_with_the_menu(pet):
