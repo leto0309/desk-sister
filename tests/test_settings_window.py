@@ -128,6 +128,51 @@ def test_the_chat_dialog_wears_her_colours(pet):
     assert results[-1] == QtWidgets.QDialog.DialogCode.Rejected  # Esc cancels
 
 
+def test_no_scrollbar_where_the_window_fits(pet, monkeypatch):
+    """v0.3.12's window was sized before its style sheet counted: the pages came out taller and a stray bar showed."""
+    from claude_pet.settings_window import SettingsWindow
+
+    ctrl, _window, _vault, _saved = pet
+    window = SettingsWindow(ctrl)  # a new one, as it is the first time: never shown, its style sheet not yet counted
+    fake = SmallScreen(0, 0, 1536, 1000)
+    monkeypatch.setattr(window, "screen", lambda: fake)
+    window.fit_on_screen()
+    window.grab()  # lays everything out
+    scroll = window.pages.parentWidget().parentWidget()
+    assert scroll.verticalScrollBar().maximum() == 0 and scroll.horizontalScrollBar().maximum() == 0
+    fake.rect = QtCore.QRect(0, 0, 1024, 460)  # too low: it scrolls instead of leaving the screen
+    window.fit_on_screen()
+    window.grab()
+    assert scroll.verticalScrollBar().maximum() > 0 and window.frameGeometry().bottom() <= fake.rect.bottom()
+
+
+def test_the_windows_wear_her_face_as_their_icon(pet, app):
+    ctrl, _window, _vault, _saved = pet
+    ctrl.set_character("gemini")
+    first = app.windowIcon().pixmap(32, 32).toImage()
+    assert not app.windowIcon().isNull() and not first.isNull()
+    ctrl.set_character("deepseek")
+    assert app.windowIcon().pixmap(32, 32).toImage() != first  # it follows a switch
+
+
+def test_her_portrait_comes_from_the_full_size_art(pet):
+    """It was cut from the sprite at her height on the screen (220 px): too few pixels for a sharp picture."""
+    from claude_pet import characters
+
+    ctrl, window, _vault, _saved = pet
+    ctrl.set_sprite_height(120)
+    head = characters.get(ctrl.config.character).head
+    face = ctrl.window.face_picture(head)
+    assert face.height() >= 180 and face.height() > ctrl.window.sprites["idle"].height() * head[3] * 2
+    window._themed = ""
+    window.refresh()
+    assert window.header.portrait.height() == face.height()
+    asked = []
+    ctrl._ask_chat = lambda _name, _theme, picture: asked.append(picture.height())
+    ctrl.chat()
+    assert asked == [face.height()]
+
+
 def test_general_page_applies_at_once_and_stays_in_step_with_the_menu(pet):
     ctrl, window, _vault, saved = pet
     window.interval_combo.setCurrentIndex(window.interval_combo.findData(300))

@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPoint, QTimer, Signal
-from PySide6.QtGui import QAction, QIcon, QPixmap
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon
 
 from .i18n import N_, tr
@@ -349,7 +349,7 @@ class PetController(QObject):
         self.reminders = timers.Reminders(app_data_dir() / "reminders.json")
         self.focus_log = timers.FocusLog(app_data_dir() / "focus.json")
         self._focus_event: str | None = None  # the timer's latest news, waiting for her to be free to say it
-        self._ask_reminder = reminder_dialog.ask
+        self._ask_reminder = lambda clock: reminder_dialog.ask(clock, self.config.character)
         self._ask_chat = chat_dialog.ask
         self.recent: deque[str] = deque(maxlen=6)
         self.busy = False
@@ -472,6 +472,7 @@ class PetController(QObject):
         # Remembers the user's window, so menus or dialogs of the pet never become the thing it looks at.
         self.focus_tracker = QTimer(self, interval=1000, timeout=self._heartbeat)
         self.tray = QSystemTrayIcon(QIcon(self.window.sprites["idle"]), self)
+        self._update_window_icon()
         self.tray.setToolTip("Desk Sister")
         self.tray.setContextMenu(self._build_menu())
         self.tray.activated.connect(self._on_tray)
@@ -635,10 +636,7 @@ class PetController(QObject):
 
     def chat(self) -> None:
         character = characters.get(self.config.character)
-        idle = self.window.sprites.get("idle", QPixmap())
-        x, y, w, h = character.head
-        face = idle.copy(int(x * idle.width()), int(y * idle.height()), int(w * idle.width()), int(h * idle.height()))
-        text = self._ask_chat(self._name(), character.theme, face)
+        text = self._ask_chat(self._name(), character.theme, self.window.face_picture(character.head))
         if text:
             note = note_request(text)
             if note is not None:  # "记住：……" is kept here and answered at once, without asking a model
@@ -2359,6 +2357,11 @@ class PetController(QObject):
             return edited, True
         return characters.default_persona(self.config.character, i18n.english()), False
 
+    def _update_window_icon(self) -> None:
+        """Her round face on the title bar of every window of the pet (settings, talking, reminders)."""
+        character = characters.get(self.config.character)
+        self.app.setWindowIcon(QIcon(chat_dialog.round_portrait(self.window.face_picture(character.head), character.theme)))
+
     def set_character(self, girl: str) -> None:
         if girl not in characters.CHARACTERS or girl == self.config.character:
             return
@@ -2369,6 +2372,7 @@ class PetController(QObject):
         character = characters.get(girl)
         self.window.set_character(girl, self._art_folder(girl), tr(character.name), character.theme.main)
         menu_style.apply(self.tray.contextMenu(), character.theme)
+        self._update_window_icon()
         self._save()
         log.info("now %s", girl)
         self.window.say(*self._reply_tuple(persona.pick(persona.lines("INTRO_LINES"))))  # her own hello

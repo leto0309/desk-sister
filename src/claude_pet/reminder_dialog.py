@@ -7,15 +7,45 @@ from PySide6.QtCore import QTime
 from PySide6.QtWidgets import (QButtonGroup, QDialog, QDialogButtonBox, QGridLayout, QLabel, QLineEdit, QRadioButton,
                                QSpinBox, QTimeEdit, QVBoxLayout)
 
-from . import timers
+from . import characters, timers
+from .characters import Theme
 from .i18n import tr
 
 
+def stylesheet(t: Theme) -> str:
+    """The same look as the talk-to-her box."""
+    from .settings_window import arrow_folder  # (only when the dialog opens)
+
+    font = '"Microsoft YaHei UI", "Microsoft YaHei", sans-serif'
+    arrows = arrow_folder(t.deep)
+    return f"""
+QDialog {{ background: {t.ivory}; }}
+QLabel, QRadioButton {{ color: {t.ink}; font-family: {font}; font-size: 10pt; }}
+QLineEdit, QSpinBox, QTimeEdit {{ background: white; color: {t.ink}; border: 1px solid {t.gold}; border-radius: 8px;
+    padding: 6px 8px; font-family: {font}; font-size: 10pt; selection-background-color: {t.main}; }}
+QLineEdit:focus, QSpinBox:focus, QTimeEdit:focus {{ border: 1px solid {t.main}; }}
+QSpinBox::up-button, QSpinBox::down-button, QTimeEdit::up-button, QTimeEdit::down-button {{
+    width: 18px; border: none; background: transparent; }}
+QSpinBox::up-arrow, QTimeEdit::up-arrow {{ image: url("{arrows}/up.png"); width: 9px; height: 5px; }}
+QSpinBox::down-arrow, QTimeEdit::down-arrow {{ image: url("{arrows}/down.png"); width: 9px; height: 5px; }}
+QPushButton {{ color: white; border: 1px solid {t.deep}; border-radius: 14px; padding: 6px 22px; font-family: {font};
+    font-size: 10pt; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {t.deep}, stop:1 {t.main}); }}
+QPushButton:hover {{ background: {t.main}; }}
+QPushButton:disabled {{ background: {t.disabled}; border-color: {t.disabled}; }}
+QPushButton#quiet {{ color: {t.deep}; background: {t.ivory}; border: 1px solid {t.main}; }}
+QPushButton#quiet:hover {{ background: {t.cream}; }}
+"""
+
+
 class ReminderDialog(QDialog):
-    def __init__(self, parent=None, now: float | None = None) -> None:
+    def __init__(self, parent=None, now: float | None = None, girl: str = characters.DEFAULT) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("添加提醒"))
+        self.setStyleSheet(stylesheet(characters.get(girl).theme))
+        self.setMinimumWidth(400)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 14)
+        layout.setSpacing(10)
         layout.addWidget(QLabel(tr("提醒主人什么？")))
         self.text = QLineEdit()
         self.text.setMaxLength(timers.MAX_TEXT)
@@ -46,6 +76,7 @@ class ReminderDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText(tr("好"))
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("算了"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("quiet")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -63,9 +94,9 @@ class ReminderDialog(QDialog):
         return timers.due_at(now, moment.hour(), moment.minute()), text
 
 
-def ask(clock) -> tuple[float, str] | None:
+def ask(clock, girl: str = characters.DEFAULT) -> tuple[float, str] | None:
     """(when, what) or None if cancelled. When is worked out as the dialog closes, from the clock then."""
-    dialog = ReminderDialog(None, clock())
+    dialog = ReminderDialog(None, clock(), girl)
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
     return dialog.chosen(clock())

@@ -261,6 +261,19 @@ class PetWindow(QWidget):
         self._feet = (centre, place)
         self.update()
 
+    def face_picture(self, head: tuple[float, float, float, float]) -> QPixmap:
+        """Her face from the full-size art (`head`: fractions of the idle sprite): a sprite at her height on the
+        screen has too few pixels for a portrait."""
+        idle = QPixmap(str(self.sprite_folder / "idle.png"))
+        if idle.isNull():
+            idle = embedded_sprite("idle", girl=self.character)
+        if idle.isNull():
+            idle = self.sprites.get("idle", QPixmap())  # (a placeholder)
+        if idle.isNull():
+            return idle
+        x, y, w, h = head
+        return idle.copy(int(x * idle.width()), int(y * idle.height()), int(w * idle.width()), int(h * idle.height()))
+
     def _load_art(self, height: int) -> tuple[dict[str, QPixmap], dict[str, QPixmap]]:
         """Her sprites and face parts: files when present, else her embedded copy (if she has one yet)."""
         embedded = self.character

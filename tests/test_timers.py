@@ -736,3 +736,22 @@ def test_a_log_locked_at_start_comes_back_by_itself(pet, tmp_path, monkeypatch):
     pet._fill_timer_menu()
     assert pet.timer_menu.actions()[0].text() == "今天已完成 3 个番茄"
     assert path.read_text(encoding="utf-8") == '{"2026-11-03": {"count": 3, "seconds": 4500}}'  # read, not rewritten
+
+
+def test_the_reminder_dialog_wears_her_colours(app, tmp_path, monkeypatch):
+    from claude_pet import characters, reminder_dialog
+
+    theme = characters.get("gemini").theme
+    dialog = reminder_dialog.ReminderDialog(None, 1000.0, "gemini")
+    assert theme.main in dialog.styleSheet() and theme.ivory in dialog.styleSheet()
+    assert not dialog.ok_button.isEnabled()
+    dialog.text.setText("喝水")
+    assert dialog.ok_button.isEnabled() and dialog.chosen(1000.0)[1] == "喝水"  # it works as before
+    monkeypatch.setattr(controller_module, "app_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(controller_module, "save_config", lambda *_a, **_k: None)
+    ctrl = controller_module.PetController(app, Config(check_updates=False), SPRITES, None)
+    ctrl.set_character("gemini")
+    asked = []
+    monkeypatch.setattr(reminder_dialog, "ask", lambda clock, girl: asked.append(girl))
+    ctrl.add_reminder()
+    assert asked == ["gemini"]  # the current girl

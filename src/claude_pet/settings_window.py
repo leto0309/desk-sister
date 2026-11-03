@@ -95,6 +95,12 @@ QSpinBox::up-button, QSpinBox::down-button {{ width: 18px; border: none; backgro
 QSpinBox::up-arrow {{ image: url("{arrows}/up.png"); width: 9px; height: 5px; }}
 QSpinBox::down-arrow {{ image: url("{arrows}/down.png"); width: 9px; height: 5px; }}
 QScrollArea#pageScroll {{ background: transparent; border: none; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 2px 0; }}
+QScrollBar::handle:vertical {{ background: {t.gold}; border-radius: 4px; min-height: 24px; }}
+QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 0 2px; }}
+QScrollBar::handle:horizontal {{ background: {t.gold}; border-radius: 4px; min-width: 24px; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 QListWidget#rules {{ background: white; border: 1px solid {t.gold}; border-radius: 6px; }}
 QListWidget#rules::item:selected {{ background: {t.peach}; color: {t.ink}; }}
 QCheckBox, QRadioButton {{ spacing: 8px; }}
@@ -169,9 +175,12 @@ class BaroqueHeader(QWidget):
         p.setClipPath(clip)
         p.fillRect(oval, QColor(t.ivory))
         if not self.portrait.isNull():
-            face = self.portrait.scaled(int(oval.width()), int(oval.height()), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            ratio = self.devicePixelRatioF()  # in screen pixels: at 125% a picture in window units looks soft
+            face = self.portrait.scaled(round(oval.width() * ratio), round(oval.height() * ratio),
+                                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                                         Qt.TransformationMode.SmoothTransformation)
-            p.drawPixmap(int(cx - face.width() / 2), int(cy - face.height() / 2), face)
+            face.setDevicePixelRatio(ratio)
+            p.drawPixmap(QPointF(cx - face.width() / ratio / 2, cy - face.height() / ratio / 2), face)
         p.restore()
         p.setPen(QPen(QColor(t.gold), 3))
         p.drawEllipse(oval.adjusted(3, 3, -3, -3))
@@ -227,7 +236,8 @@ class _PageScroll(QScrollArea):
     height, so nothing scrolls."""
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
-        return self.widget().sizeHint() + QSize(2 * self.frameWidth(), 2 * self.frameWidth())
+        pages = self.widget().sizeHint().expandedTo(self.widget().minimumSizeHint())
+        return pages + QSize(2 * self.frameWidth(), 2 * self.frameWidth())
 
 
 def _page(title: str) -> tuple[QWidget, QVBoxLayout]:
@@ -280,7 +290,7 @@ class SettingsWindow(QDialog):
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
         row.addWidget(self.nav)
-        scroll = _PageScroll()
+        scroll = self.page_scroll = _PageScroll()
         scroll.setObjectName("pageScroll")
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidgetResizable(True)
@@ -299,12 +309,24 @@ class SettingsWindow(QDialog):
         """Its first size and place: the size it asks for, never more than the screen it opens on, and wholly on it,
         so the title bar can always be reached and dragged."""
         screen = (self.screen() or QApplication.primaryScreen()).availableGeometry()
+        # The style sheet makes things bigger: count it in, or the pages turn out taller than the window made for them
+        # and scroll. grab() lays it all out without showing anything; the layouts then have to ask again.
+        self.grab()
+        for widget in [self, *self.findChildren(QWidget)]:
+            widget.updateGeometry()
+            if widget.layout() is not None:
+                widget.layout().invalidate()
         frame = self.frameGeometry().size() - self.geometry().size()  # title bar and borders
         # (not known before the window is first shown: allow for a usual Windows title bar and border)
         frame_w, frame_h = frame.width() or 16, frame.height() or 40
         width = min(max(self.sizeHint().width(), self.minimumWidth()), screen.width() - frame_w)
         height = min(max(self.sizeHint().height(), self.minimumHeight()), screen.height() - frame_h)
         self.resize(width, height)
+        self.grab()  # wrapped text is as tall as its width makes it: only now is the last of it known
+        short = self.pages.height() - self.page_scroll.viewport().height()
+        if short > 0:
+            height = min(height + short, screen.height() - frame_h)
+            self.resize(width, height)
         # move() places the frame, title bar included: its top is never above the screen's
         self.move(screen.x() + max(0, (screen.width() - width - frame_w) // 2),
                   screen.y() + max(0, (screen.height() - height - frame_h) // 2))
@@ -330,11 +352,7 @@ class SettingsWindow(QDialog):
         return html.replace(LINK_COLOR, characters.get(self.ctrl.config.character).theme.deep)
 
     def _portrait(self) -> QPixmap:
-        idle = self.ctrl.window.sprites.get("idle", QPixmap())
-        if idle.isNull():
-            return idle
-        x, y, w, h = characters.get(self.ctrl.config.character).head
-        return idle.copy(int(x * idle.width()), int(y * idle.height()), int(w * idle.width()), int(h * idle.height()))
+        return self.ctrl.window.face_picture(characters.get(self.ctrl.config.character).head)
 
     # ---- pages ---------------------------------------------------------
     def _general(self) -> QWidget:

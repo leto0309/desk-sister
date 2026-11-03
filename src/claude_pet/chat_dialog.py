@@ -45,7 +45,11 @@ def round_portrait(face: QPixmap, theme: Theme, size: int = PORTRAIT) -> QPixmap
     painter.fillPath(circle, QColor(theme.cream))
     if not face.isNull():
         painter.setClipPath(circle)
-        painter.drawPixmap(area.toRect(), face)
+        target = area.toRect()
+        fitted = face.scaled(target.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                             Qt.TransformationMode.SmoothTransformation)
+        painter.drawPixmap(target.x() + (target.width() - fitted.width()) // 2,
+                           target.y() + (target.height() - fitted.height()) // 2, fitted)
         painter.setClipping(False)
     painter.setPen(QPen(QColor(theme.gold), 3))
     painter.drawEllipse(area)
