@@ -131,13 +131,19 @@ In subscription mode she looks for Claude Code in this order: claude_path in the
   (versions and steps in [docs/balatro.en.md](docs/balatro.en.md)); while that mod is installed the game is muted and runs
   at 4x speed. Every move in a hand or the shop is one model call; the settings' General page chooses a relaxed way of
   playing (fast, little allowance) or a careful one (slow, far more allowance).
+- The right-click menu, "Talk to her" and "Add a reminder" wear the current girl's colours, and the windows' title bars
+  show her face; they follow a switch of girl.
+
+  ![The menu and the dialogs](docs/images/ui-en.png)
+
 - "Settings…" has eight pages: General, Character, How she thinks, Watching, Companion, Memory, Appearance and About; every change applies
   at once. The comment interval (30 seconds to 10 minutes), the model (fast and cheap / smarter), the way she thinks,
   starting with Windows, the blocklist and allowlist, companionship, strolling, her height and more are set there.
 - Language: she follows the Windows display language (Chinese on a Chinese Windows, English otherwise); change it to
   中文 or English on the "General" page. The menu, the settings window, her own lines and the model's replies all
   switch with it.
-- Ctrl+Alt+P: pause / resume watching.
+- Ctrl+Alt+P: pause / resume watching. If another program holds it, the right-click menu and the settings say so, she tells
+  you (once a day), and it is tried again every minute.
 - No model call when the screen has not changed; she falls asleep after 10 minutes without keyboard or mouse input
   and wakes when you move the mouse. She comments on her own only after 20 seconds on the same window.
 - During full-screen games, videos and slideshows she neither looks nor talks; anything she saved up she says when you

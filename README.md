@@ -104,11 +104,15 @@ Claude 桌面版自带的 claude-code。
 - 「陪我玩 Balatro」：她通过 BalatroBot mod 自己打 Balatro，边打边在气泡里解说（比如「留这对 K，凑葫芦」）；
   打牌时「和她说话」说的是建议，她会在下一步参考。不截图、不动你的鼠标键盘，打满 8 个底注或输了就停。她水平一般，通常输在底注 1–4。
   需要先自己装好 Lovely、Steamodded 和 BalatroBot（版本和步骤见 [docs/balatro.md](docs/balatro.md)）；装着这个 mod 时游戏会静音、4 倍速。每一步出牌或商店决定调用一次模型，设置「常规」页可选陪玩模式（快、省额度）或认真模式（慢、额度消耗高很多）。
+- 右键菜单、「和她说话」和「添加提醒」都用当前角色的配色，窗口标题栏是她的头像，切换角色时跟着变。
+
+  ![右键菜单和对话框](docs/images/ui.png)
+
 - 「设置…」：分「常规、角色、调用方式、观察范围、陪伴、记忆、外观、关于」八页，改动立即生效。评论间隔（30 秒～10 分钟）、
   模型（快速省钱 / 更聪明）、调用方式、开机自启、黑名单和白名单、陪伴、溜达、她的身高等都在这里调整。
 - 语言：默认跟随 Windows 显示语言（中文系统用中文，其他用英文），可以在「常规」页改成中文或 English。
   切换后菜单、设置窗口、她的台词和模型的回复都会换成那种语言。
-- Ctrl+Alt+P：暂停/继续观察。
+- Ctrl+Alt+P：暂停/继续观察。被别的程序占用时，右键菜单和设置页会标出来，她也会说一句（一天一次），并且每分钟自动重试。
 - 画面没变化时不调用模型；离开键盘鼠标 10 分钟她会睡着，一动鼠标就醒。同一个窗口停留满 20 秒才会自动评论。
 - 全屏游戏、视频、幻灯片时她不看也不说，攒着的话等你退出全屏再说。
 - 连续失败 3 次会暂停自动观察 30 分钟，脚下显示原因；戳她仍会回答。
@@ -170,7 +174,7 @@ PowerShell 7：`./scripts/verify.ps1` 运行测试（pytest、compileall、ruff�
 重新生成立绘后执行 `python devtools/process_sprites.py assets/raw assets/sprites`，
 再执行 `python devtools/embed_sprites.py` 更新内嵌立绘（否则测试会提示过期），
 `python devtools/make_icon.py` 更新程序图标 assets/icon.ico，`python devtools/make_previews.py` 更新 README 里的
-预览图（docs/images/ 中的 girls*.gif 和 moods-*.png，中英文各一套）。
+预览图（docs/images/ 中的 girls*.gif 和 moods-*.png，中英文各一套）；`devtools/make_ui_preview.py` 生成界面预览图 ui*.png。
 维护者从开发仓库同步到公开仓库：`./devtools/Sync-PublicRepo.ps1`（先列出变化，加 `-Push` 才提交、核对、扫描密钥并推送）。
 
 ## 致谢与许可

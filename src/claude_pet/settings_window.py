@@ -1015,6 +1015,8 @@ class SettingsWindow(QDialog):
                 self.address_edit.setText(cfg.address)
             self._show_persona()
             self.pause_box.setChecked(cfg.paused)
+            self.pause_box.setText(tr("暂停观察（Ctrl+Alt+P 被别的程序占用）") if self.ctrl.hotkey_taken
+                                   else tr("暂停观察（Ctrl+Alt+P 也可以）"))
             self.interval_combo.setCurrentIndex(max(0, self.interval_combo.findData(cfg.interval_sec)))
             provider = PROVIDERS.get(cfg.backend, PROVIDERS["subscription"])
             for index in range(self.model_combo.count()):

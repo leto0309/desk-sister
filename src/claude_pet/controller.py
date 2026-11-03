@@ -54,6 +54,7 @@ SIZE_SHOWN_SEC = 2.5  # how long her height stays under her feet after Ctrl + wh
 AUTH_CHECK_TTL = 1800
 AUTOSTART_LABEL = N_("开机自启")
 MEMORY_TALK_CHANCE = 0.25  # share of self-talk turns that mention today's main activity (if >= 1 h)
+HOTKEY_RETRY_SEC = 60  # Ctrl+Alt+P taken: how often it is tried again (another program may let go of it)
 PAST_RECALL_CHANCE = 0.1  # share of self-talk turns that bring up an earlier day (at most once a day)
 PAST_RECALL_DAYS = range(2, 8)  # the day before yesterday back to a week ago
 RECALL_MIN_SEC = 3600  # a day's main activity is worth bringing up from an hour
@@ -351,6 +352,9 @@ class PetController(QObject):
         self._focus_event: str | None = None  # the timer's latest news, waiting for her to be free to say it
         self._ask_reminder = lambda clock: reminder_dialog.ask(clock, self.config.character)
         self._ask_chat = chat_dialog.ask
+        self.hotkey_taken = False  # another program holds Ctrl+Alt+P
+        self._hotkey_retry_at = 0.0
+        self._hotkey_retried = False  # told only once a retry failed too: a moment's clash is not worth a word
         self.recent: deque[str] = deque(maxlen=6)
         self.busy = False
         self.asleep = False
@@ -728,6 +732,7 @@ class PetController(QObject):
         self._update_claude_link()
         self._flush_deferred()
         self._update_memory()
+        self._update_hotkey()
         if self._greeting_due and not self.asleep and not self.window.full_text:
             if self._greeting_due == self._today().isoformat():
                 self._greet_if_new_day()  # one that had to wait (full screen, quitting) comes now
@@ -1741,7 +1746,7 @@ class PetController(QObject):
         self.timer_menu.aboutToShow.connect(self._fill_timer_menu)
         self._fill_timer_menu()
         menu.addAction(tr("设置…"), self.open_settings)
-        self.pause_action = QAction(tr("暂停观察 (Ctrl+Alt+P)"), menu, checkable=True, checked=self.config.paused)
+        self.pause_action = QAction(self._pause_text(), menu, checkable=True, checked=self.config.paused)
         self.pause_action.triggered.connect(lambda _checked: self.toggle_pause())
         menu.addAction(self.pause_action)
         # About the window in front right now, so it stays here (shown in "only the allowlist" mode).
@@ -2776,15 +2781,50 @@ class PetController(QObject):
         self._remember_position(self.window.x(), self.window.y())  # saves too
 
     # ---- hotkey ------------------------------------------------------
+    def _pause_text(self) -> str:
+        return tr("暂停观察（快捷键被占用）") if self.hotkey_taken else tr("暂停观察 (Ctrl+Alt+P)")
+
     def _register_hotkey(self) -> None:
-        if sys.platform != "win32":
+        self.hotkey_taken = not self._try_hotkey()
+        if self.hotkey_taken:
+            log.warning("Ctrl+Alt+P is already taken by another program")
+            self._hotkey_retried = False
+            self._hotkey_retry_at = self._clock() + HOTKEY_RETRY_SEC
+            self._show_hotkey_state()
+
+    def _show_hotkey_state(self) -> None:
+        self.pause_action.setText(self._pause_text())
+        self._sync_settings()
+
+    def _update_hotkey(self) -> None:
+        """Each second while Ctrl+Alt+P is taken: try it again now and then, and tell 主人 once a day if it stays taken;
+        without this, pressing it just does nothing and only the log knows why."""
+        if not self.hotkey_taken:
             return
+        now = self._clock()
+        if now >= self._hotkey_retry_at:
+            self._hotkey_retry_at = now + HOTKEY_RETRY_SEC
+            if self._try_hotkey():
+                self.hotkey_taken = False
+                log.info("Ctrl+Alt+P is free again")
+                self._show_hotkey_state()
+                return
+            self._hotkey_retried = True
+        today = self._today().isoformat()
+        if (self._hotkey_retried and self.config.hotkey_told_on != today and not self.window.full_text
+                and not (self.quiet or self.asleep or self.quit_pending)):
+            self.config.hotkey_told_on = today
+            self._save()
+            self.window.say("think", tr("Ctrl+Alt+P 被别的程序占用了，现在按它不会暂停。要暂停可以用右键菜单。"))
+
+    def _try_hotkey(self) -> bool:
+        if sys.platform != "win32":
+            return True
         import ctypes
 
         mod_alt, mod_control, mod_norepeat = 0x0001, 0x0002, 0x4000
         hwnd = int(self.window.winId())
-        if not ctypes.windll.user32.RegisterHotKey(hwnd, HOTKEY_ID, mod_alt | mod_control | mod_norepeat, ord("P")):
-            log.warning("Ctrl+Alt+P is already taken by another program")
+        return bool(ctypes.windll.user32.RegisterHotKey(hwnd, HOTKEY_ID, mod_alt | mod_control | mod_norepeat, ord("P")))
 
     def _unregister_hotkey(self) -> None:
         if sys.platform == "win32":

@@ -69,6 +69,7 @@ class Config:
     self_talk: bool = True
     companion_memory: bool = True
     long_memory: bool = True  # the diary (记忆库): days together, recall lines, notes 主人 asked her to keep
+    hotkey_told_on: str = ""  # the day (YYYY-MM-DD) she last said Ctrl+Alt+P is taken, so she says it once a day
     recalled_on: str = ""  # the day (YYYY-MM-DD) of her once-a-day look back (days together, a streak, yesterday)
     past_recalled_on: str = ""  # the day she last brought up an earlier day
     claude_link: bool = False
@@ -138,7 +139,7 @@ class Config:
         self.self_talk = bool(self.self_talk)
         self.companion_memory = bool(self.companion_memory)
         self.long_memory = bool(self.long_memory)
-        for name in ("recalled_on", "past_recalled_on"):
+        for name in ("recalled_on", "past_recalled_on", "hotkey_told_on"):
             if not isinstance(getattr(self, name), str) or len(getattr(self, name)) != 10:
                 setattr(self, name, "")
         self.claude_link = bool(self.claude_link)

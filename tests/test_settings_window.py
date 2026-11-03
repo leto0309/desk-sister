@@ -173,6 +173,45 @@ def test_her_portrait_comes_from_the_full_size_art(pet):
     assert asked == [face.height()]
 
 
+def test_a_taken_shortcut_is_shown_told_once_and_tried_again(pet):
+    ctrl, window, _vault, _saved = pet
+    now = [100.0]
+    ctrl._clock = lambda: now[0]
+    ctrl.window.clock = ctrl._clock
+    ctrl.window.clear_bubble()
+    free = [False]
+    ctrl._try_hotkey = lambda: free[0]
+    ctrl._register_hotkey()
+    assert ctrl.hotkey_taken and "占用" in ctrl.pause_action.text() and "占用" in window.pause_box.text()
+    ctrl._update_hotkey()
+    assert ctrl.window.full_text == ""  # a moment's clash is not worth a word
+    now[0] += 60
+    ctrl.window.say("talk", "我在说话")
+    ctrl._update_hotkey()
+    assert ctrl.window.full_text == "我在说话" and ctrl.config.hotkey_told_on == ""  # she waits for her turn
+    ctrl.window.clear_bubble()
+    ctrl._update_hotkey()
+    assert "Ctrl+Alt+P" in ctrl.window.full_text and ctrl.config.hotkey_told_on == ctrl._today().isoformat()
+    ctrl.window.clear_bubble()
+    now[0] += 60
+    ctrl._update_hotkey()
+    assert ctrl.window.full_text == "" and ctrl.hotkey_taken  # once a day
+    ctrl._register_hotkey()  # a restart the same day
+    now[0] += 60
+    ctrl._update_hotkey()
+    assert ctrl.window.full_text == ""
+    free[0] = True
+    now[0] += 60
+    ctrl._update_hotkey()  # the other program let go
+    assert not ctrl.hotkey_taken and ctrl.pause_action.text() == "暂停观察 (Ctrl+Alt+P)"
+    assert "也可以" in window.pause_box.text()
+    tried = []
+    ctrl._try_hotkey = lambda: tried.append(1) or True
+    now[0] += 600
+    ctrl._update_hotkey()
+    assert tried == []  # held: nothing more to try
+
+
 def test_general_page_applies_at_once_and_stays_in_step_with_the_menu(pet):
     ctrl, window, _vault, saved = pet
     window.interval_combo.setCurrentIndex(window.interval_combo.findData(300))

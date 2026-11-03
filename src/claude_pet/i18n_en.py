@@ -140,6 +140,10 @@ TEXT = {
     # ---- menu, dialogs, bubbles -----------------------------------------------------------------------
     "和 {0} 说话": "Talk to {0}",
     "想对她说什么？": "What would you like to say to her?",
+    "暂停观察（快捷键被占用）": "Pause watching (shortcut taken)",
+    "暂停观察（Ctrl+Alt+P 被别的程序占用）": "Pause watching (Ctrl+Alt+P is held by another program)",
+    "Ctrl+Alt+P 被别的程序占用了，现在按它不会暂停。要暂停可以用右键菜单。":
+        "Another program holds Ctrl+Alt+P, so pressing it won't pause me now. The right-click menu can.",
     "说「记住：……」她就会记下，说「忘掉：……」就删掉。": "Say \"remember: ...\" and she notes it down; \"forget: ...\" deletes it.",
     "发送": "Send",
     "戳她一下（立即评论）": "Poke her (comment now)",

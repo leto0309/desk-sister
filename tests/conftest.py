@@ -60,6 +60,16 @@ def _seeded_randomness() -> None:
 _seeded_randomness()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_hotkey(monkeypatch):
+    """Ctrl+Alt+P is global: a test must neither take it from a pet in real use nor depend on whether one is running."""
+    try:
+        from claude_pet.controller import PetController
+    except ImportError:  # no Qt here
+        return
+    monkeypatch.setattr(PetController, "_try_hotkey", lambda _self: True)
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _files_keep_real_time():
     """Files are stamped by the real clock: the one place that compares the two (the start-up sweep of Codex
