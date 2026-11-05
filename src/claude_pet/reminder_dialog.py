@@ -21,6 +21,10 @@ def stylesheet(t: Theme) -> str:
     return f"""
 QDialog {{ background: {t.ivory}; }}
 QLabel, QRadioButton {{ color: {t.ink}; font-family: {font}; font-size: 10pt; }}
+QRadioButton {{ spacing: 8px; }}
+QRadioButton::indicator {{ width: 15px; height: 15px; border: 1px solid {t.gold}; border-radius: 8px; background: white; }}
+QRadioButton::indicator:hover {{ border: 1px solid {t.main}; }}
+QRadioButton::indicator:checked {{ background: {t.main}; border: 1px solid {t.deep}; }}
 QLineEdit, QSpinBox, QTimeEdit {{ background: white; color: {t.ink}; border: 1px solid {t.gold}; border-radius: 8px;
     padding: 6px 8px; font-family: {font}; font-size: 10pt; selection-background-color: {t.main}; }}
 QLineEdit:focus, QSpinBox:focus, QTimeEdit:focus {{ border: 1px solid {t.main}; }}

@@ -744,6 +744,8 @@ def test_the_reminder_dialog_wears_her_colours(app, tmp_path, monkeypatch):
     theme = characters.get("gemini").theme
     dialog = reminder_dialog.ReminderDialog(None, 1000.0, "gemini")
     assert theme.main in dialog.styleSheet() and theme.ivory in dialog.styleSheet()
+    checked = dialog.styleSheet().split("QRadioButton::indicator:checked")[1].split("}")[0]
+    assert theme.main in checked  # not the system's blue
     assert not dialog.ok_button.isEnabled()
     dialog.text.setText("喝水")
     assert dialog.ok_button.isEnabled() and dialog.chosen(1000.0)[1] == "喝水"  # it works as before

@@ -316,6 +316,36 @@ def test_switched_off_later_a_damaged_diary_stays_as_it_is(tmp_path):
     assert (tmp_path / "journal.json.damaged-1").read_text(encoding="utf-8") == "{ again"
 
 
+def test_a_clearing_that_had_to_wait_is_finished_while_it_is_switched_off(tmp_path):
+    """Codex's review of v0.3.17: asked for while a damaged file was held by another program, it never got done."""
+    path = tmp_path / "journal.json"
+    held = tmp_path / "held.json"
+    clock = Clock(at(20))
+    diary = Journal(path, clock)
+    diary.begin()
+    diary.add_note("我喜欢猫")
+    diary.pause()
+    held.write_text("{ damaged", encoding="utf-8")
+    path.unlink()
+    path.mkdir()  # reading a folder fails like a file another program holds
+    diary.unreadable = True
+    diary.clear()
+    assert path.is_dir()  # not done yet
+    path.rmdir()
+    held.rename(path)
+    clock.now += journal.RETRY_SEC
+    diary.flush(clock.now)
+    assert (tmp_path / "journal.json.damaged").read_text(encoding="utf-8") == "{ damaged"
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["notes"] == [] and saved["days"] == {} and diary._pending == [] and not diary.active
+    path.write_text("{ again", encoding="utf-8")  # done: a later damaged file is left alone again while it is off
+    diary.unreadable = True
+    clock.now += journal.RETRY_SEC
+    diary.flush(clock.now)
+    diary._load()
+    assert path.read_text(encoding="utf-8") == "{ again"
+
+
 def test_a_note_waiting_when_it_is_switched_off_is_still_saved(tmp_path):
     path = tmp_path / "journal.json"
     held = tmp_path / "held.json"

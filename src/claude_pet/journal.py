@@ -154,6 +154,7 @@ class Journal:
         self.unreadable = False
         self.created = False  # there was no diary file at the start (seed() may fill it from older records)
         self.active = False  # in use (begin()): only then is a damaged file moved aside; off, its folder stays untouched
+        self._clearing = False  # a clearing, asked for, is not saved yet: a damaged file may be moved aside for it
         self._pending: list[tuple] = []  # changes not saved yet, replayed if the file has to be read again
         self._retry_at = 0.0
         self._load()  # (nothing is written until begin() or a change: a diary that is off never makes a file)
@@ -176,7 +177,7 @@ class Journal:
             return
         except ValueError as exc:
             log.warning("damaged diary, keeping it aside when it is in use: %s", exc)
-            if not self.active or not self._keep_aside():
+            if not (self.active or self._clearing) or not self._keep_aside():
                 self.unreadable = True  # never write over what could not be kept
                 return
             data = {}
@@ -278,6 +279,7 @@ class Journal:
             temp.write_text(json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
             os.replace(temp, self.path)
             self._pending = []
+            self._clearing = False
         except (OSError, ValueError) as exc:  # (ValueError: text that cannot be written as UTF-8)
             log.warning("could not save the diary: %s", exc)
             self.unreadable = True  # (re-read before the next try, so nothing is counted twice)
@@ -405,9 +407,8 @@ class Journal:
     def clear(self) -> None:
         """Forget every day and note; she meets 主人 afresh today."""
         self.created = False  # (the focus log is not brought back either)
-        in_use, self.active = self.active, True  # asked for: a damaged file is moved aside, not cleared
+        self._clearing = True  # asked for: a damaged file is moved aside, even if that has to wait for it to be readable
         self._change(("clear", self._today().isoformat()))
-        self.active = in_use
 
     # ---- reading -----------------------------------------------------------
     def days_together(self, today: datetime.date) -> int:
