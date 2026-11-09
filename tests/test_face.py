@@ -156,7 +156,7 @@ def test_missing_or_damaged_parts_only_leave_the_sprite(app, tmp_path, monkeypat
 
 def test_no_extra_timer_runs_for_the_face(window):
     assert len(window.findChildren(QTimer)) == 3  # typing, bubble and the existing gentle bob
-    assert set(pet_window.FACE_MOODS) == {"idle", "talk", "happy", "think", "panic", "angry", "sad"}
+    assert set(pet_window.FACE_MOODS) == {"idle", "talk", "happy", "think", "panic", "angry", "sad", "shy"}
 
 
 @pytest.mark.parametrize("missing", ["mouth_open", "mouth_closed"])

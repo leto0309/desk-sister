@@ -41,7 +41,7 @@ def test_relative_links_exist(doc):
 
 def test_every_girl_is_shown_with_previews_in_the_readmes_language():
     zh, en = ZH.read_text(encoding="utf-8"), EN.read_text(encoding="utf-8")
-    assert "(docs/images/girls.gif)" in zh and "(docs/images/moods.png)" in zh
+    assert "(docs/images/girls.gif)" in zh and "(docs/images/moods-claude.png)" in zh
     assert "(docs/images/girls-en.gif)" in en
     assert "(docs/images/ui.png)" in zh and "(docs/images/ui-en.png)" in en
     for girl in CHARACTERS:

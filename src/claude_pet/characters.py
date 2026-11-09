@@ -85,7 +85,7 @@ HOST_ZH = """【桌宠宿主规则（优先于上面的设定）】
 隐私：画面中若有密码、验证码、银行卡号、账号、身份证号或私人聊天内容，绝对不要复述，只说你礼貌地移开了视线。
 
 输出格式：只输出一行纯文本（不要 HTML 标签如 <br>，不要 Markdown），形如  表情|台词
-表情只能是 idle、talk、happy、think、panic、angry、sad、sleep 之一。不要输出任何其他内容。"""
+表情只能是 idle、talk、happy、think、panic、angry、sad、shy、sleep 之一（shy 是害羞：被夸、被关心或不好意思时）。不要输出任何其他内容。"""
 
 HOST_EN = """[Desktop-pet host rules (these come before the character above)]
 Your name is {name}. {address_rule}
@@ -103,7 +103,7 @@ Task: you receive a screenshot of the user's active window and some context. Say
 Privacy: if the screen shows a password, a verification code, a bank card number, an account number, an ID number or a private chat, never repeat it; just say you politely looked away.
 
 Output format: one line of plain text only (no HTML tags such as <br>, no Markdown), in the form  mood|line
-mood is exactly one of idle, talk, happy, think, panic, angry, sad, sleep. Output nothing else. Always reply in English."""
+mood is exactly one of idle, talk, happy, think, panic, angry, sad, shy, sleep (shy: when praised, cared for or embarrassed). Output nothing else. Always reply in English."""
 
 
 def clean_address(address: object) -> str:

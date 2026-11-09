@@ -13,16 +13,16 @@
 
 ![六位 AI 娘](docs/images/girls.gif)
 
-![Claude 的 8 种表情](docs/images/moods.png)
+![Claude 的 9 种表情](docs/images/moods-claude.png)
 
 <details>
-<summary>其他 AI 娘的 8 种表情</summary>
+<summary>其他 AI 娘的 9 种表情</summary>
 
-![DeepSeek 的 8 种表情](docs/images/moods-deepseek.png)
-![GPT 的 8 种表情](docs/images/moods-gpt.png)
-![Gemini 的 8 种表情](docs/images/moods-gemini.png)
-![通义千问的 8 种表情](docs/images/moods-qwen.png)
-![GLM 的 8 种表情](docs/images/moods-glm.png)
+![DeepSeek 的 9 种表情](docs/images/moods-deepseek.png)
+![GPT 的 9 种表情](docs/images/moods-gpt.png)
+![Gemini 的 9 种表情](docs/images/moods-gemini.png)
+![通义千问的 9 种表情](docs/images/moods-qwen.png)
+![GLM 的 9 种表情](docs/images/moods-glm.png)
 
 </details>
 

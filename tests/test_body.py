@@ -125,7 +125,7 @@ def test_moods_get_their_reaction_once(window):
         window.set_mood(mood)
         assert window._body[0] == kind
     window._body = None
-    window.set_mood("sad")  # no change of mood: nothing new
+    window.set_mood(window.mood)  # no change of mood: nothing new
     assert window._body is None
     window.say("sad", "唉……")  # but a line said in that mood shows it
     assert window._body[0] == "slump"

@@ -19,7 +19,7 @@ from . import characters, i18n, persona_en
 from .bedtime import mentions as mentions_bedtime
 from .memory import activity_name, duration_text
 
-MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "sleep")
+MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "shy", "sleep")
 MAX_LINE = 80  # characters of Chinese
 MAX_LINE_EN = 160  # English takes about twice the characters for the same line
 
@@ -237,9 +237,9 @@ INTERACTION_TALK = {
     "pat": [("happy", "（眯眼）嘿嘿……再摸一下也可以哦。"), ("happy", "头发要被揉乱啦……不过，算了～"),
             ("happy", "摸头让我的注意力 +1……不对，是 +10！"), ("talk", "（抱紧书）这、这是在夸我吗？"),
             ("happy", "被摸头的时候，连书都变轻了～"), ("talk", "嗯……这个奖励我收下了，谢谢主人。")],
-    "pat_shy": [("happy", "（脸红）又、又摸……主人今天怎么这么黏人。"), ("talk", "（小声）再这样我要害羞得写不出注释了……"),
-                ("happy", "（把脸埋进书里）……我没有在偷笑，真的没有。"), ("talk", "第二次了……我的心跳频率有点超出预期。"),
-                ("happy", "（偷偷抬头）……还、还没摸够吗？")],
+    "pat_shy": [("shy", "（脸红）又、又摸……主人今天怎么这么黏人。"), ("shy", "（小声）再这样我要害羞得写不出注释了……"),
+                ("shy", "（把脸埋进书里）……我没有在偷笑，真的没有。"), ("shy", "第二次了……我的心跳频率有点超出预期。"),
+                ("shy", "（偷偷抬头）……还、还没摸够吗？")],
     "pat_annoyed": [("angry", "好啦好啦，头发都要被揉成鸟窝了！……不过也不是很讨厌。"),
                     ("angry", "第三次了！我的发型可是精心对齐过的！"), ("panic", "摸头次数已超出配额……请稍后再试～"),
                     ("angry", "再摸下去，我就要给这只手加个速率限制了！"),

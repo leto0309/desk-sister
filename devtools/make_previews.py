@@ -1,7 +1,6 @@
 """Make the README previews in docs/images/ from the sprites, in Chinese and in English: girls.gif and
 girls-en.gif (all six standing, animated: they take turns to talk and blink now and then, drawn from the face parts
-by the app's own rules), moods-<girl>.png (each new girl's 8 moods; Claude's Chinese sheet is the hand-made
-moods.png) and moods-<girl>-en.png (all six). Needs Microsoft YaHei (msyh.ttc, msyhbd.ttc).
+by the app's own rules), moods-<girl>.png and moods-<girl>-en.png (every girl's moods, in Chinese and English). Needs Microsoft YaHei (msyh.ttc, msyhbd.ttc).
 
     python devtools/make_previews.py [--fonts DIR]
 """
@@ -33,13 +32,13 @@ FONT_FILES = ("msyh.ttc", "msyhbd.ttc")
 BACKGROUND = (255, 255, 255)
 GREY = (120, 120, 120)
 TEXT = {
-    "zh": {"lineup": "六位 AI 娘", "moods": "{name} · 8 种表情", "credit": "AI 生成，角色原设 ZipZipPipe · 仅限非商用",
+    "zh": {"lineup": "六位 AI 娘", "moods": "{name} · {count} 种表情", "credit": "AI 生成，角色原设 ZipZipPipe · 仅限非商用",
            "idle": "待机", "talk": "说话", "happy": "开心", "think": "思考",
-           "panic": "慌张", "angry": "生气", "sad": "难过", "sleep": "睡觉"},
-    "en": {"lineup": "Six AI girls", "moods": "{name} · 8 moods",
+           "panic": "慌张", "angry": "生气", "sad": "难过", "shy": "害羞", "sleep": "睡觉"},
+    "en": {"lineup": "Six AI girls", "moods": "{name} · {count} moods",
            "credit": "AI-generated after designs by ZipZipPipe · non-commercial use only",
            "idle": "Idle", "talk": "Talking", "happy": "Happy", "think": "Thinking",
-           "panic": "Panicking", "angry": "Angry", "sad": "Sad", "sleep": "Sleeping"},
+           "panic": "Panicking", "angry": "Angry", "sad": "Sad", "shy": "Shy", "sleep": "Sleeping"},
 }
 fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
 
@@ -162,12 +161,16 @@ def save_animated(lang: str, filename: str) -> None:
 
 def moods(girl: str, lang: str) -> Image.Image:
     theme = CHARACTERS[girl].theme
-    cell, height, top, row = 250, 290, 70, 345
-    canvas = Image.new("RGB", (cell * 4, top + row * 2 + 40), BACKGROUND)
+    cell, height, top, row, per_row = 250, 290, 70, 345, 5
+    rows = -(-len(MOODS) // per_row)
+    canvas = Image.new("RGB", (cell * per_row, top + row * rows + 40), BACKGROUND)
     draw = ImageDraw.Draw(canvas)
-    centred(draw, canvas.width / 2, 16, TEXT[lang]["moods"].format(name=name(girl, lang)), 30, theme.deep, bold=True)
+    title = TEXT[lang]["moods"].format(name=name(girl, lang), count=len(MOODS))
+    centred(draw, canvas.width / 2, 16, title, 30, theme.deep, bold=True)
     for i, mood in enumerate(MOODS):
-        x, y = (i % 4) * cell, top + (i // 4) * row
+        x, y = (i % per_row) * cell, top + (i // per_row) * row
+        if i // per_row == rows - 1:  # a short last row is centred
+            x += (per_row - (len(MOODS) - per_row * (rows - 1))) * cell // 2
         image = sprite(girl, mood, height)
         canvas.paste(image, (x + (cell - image.width) // 2, y), image)
         centred(draw, x + cell / 2, y + height + 6, TEXT[lang][mood], 20, theme.main)
@@ -187,8 +190,7 @@ def main() -> None:
     save_animated("zh", "girls.gif")
     save_animated("en", "girls-en.gif")
     for girl in CHARACTERS:
-        if girl != "claude":
-            save(moods(girl, "zh"), f"moods-{girl}.png")
+        save(moods(girl, "zh"), f"moods-{girl}.png")
         save(moods(girl, "en"), f"moods-{girl}-en.png")
 
 

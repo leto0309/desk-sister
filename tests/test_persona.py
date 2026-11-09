@@ -97,3 +97,27 @@ def test_the_persona_keeps_its_fixed_rules_and_card_traits():
     for card in ("真实小脾气", "先指出一个最具体的问题", "说着麻烦，仍愿意陪着处理", "犯错就承认并改正"):
         assert card in prompt, card
 
+
+
+def test_she_may_reply_shy_and_every_girl_is_told_so():
+    """The ninth expression (2026-11-09): the model may answer with it, in either language."""
+    from claude_pet import characters
+
+    assert parse_reply("shy|才、才没有被夸到呢……") == Reply("shy", "才、才没有被夸到呢……")
+    for girl in characters.CHARACTERS:
+        for lang in ("zh", "en"):
+            assert "shy" in characters.system_prompt(girl, english=lang == "en").split("|")[-1], (girl, lang)
+
+
+def test_the_second_round_of_head_pats_is_shy_for_every_girl():
+    from claude_pet import characters, i18n, persona
+
+    for lang in ("zh", "en"):
+        i18n.set_language(lang)
+        try:
+            for girl in characters.CHARACTERS:
+                persona.set_girl(girl)
+                assert {mood for mood, _text in persona.lines("INTERACTION_TALK")["pat_shy"]} == {"shy"}, (girl, lang)
+        finally:
+            persona.set_girl("claude")
+            i18n.set_language("zh")

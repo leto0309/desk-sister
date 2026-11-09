@@ -55,6 +55,7 @@ MOOD_EDITS = {  # parts/<mood>_<part>.png, edits of that expression's own raw sp
     "panic": ("mouth_half", "mouth_open"),
     "angry": ("mouth_half", "mouth_open", "eyes_half", "eyes_closed"),
     "sad": ("mouth_half", "mouth_open", "eyes_half", "eyes_closed"),
+    "shy": ("mouth_half", "mouth_open", "eyes_half", "eyes_closed"),
 }
 
 

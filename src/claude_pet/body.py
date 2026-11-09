@@ -11,12 +11,12 @@ import math
 from PySide6.QtCore import QPointF
 from PySide6.QtGui import QTransform
 
-DURATIONS = {"land": 0.5, "hop": 0.55, "stomp": 0.6, "shiver": 0.7, "slump": 2.6,
+DURATIONS = {"land": 0.5, "hop": 0.55, "stomp": 0.6, "shiver": 0.7, "slump": 2.6, "fidget": 1.6,
              "stretch": 2.6, "look": 3.4, "sway": 3.0, "doze": 3.6}
 IDLE_ACTIONS = ("stretch", "look", "sway")  # while she stands idle; "doze" joins them at night
 NIGHT_ACTIONS = ("doze",)
 IDLE_EVERY = (60.0, 120.0)  # seconds between two idle actions
-REACTIONS = {"happy": "hop", "angry": "stomp", "panic": "shiver", "sad": "slump"}  # mood -> movement
+REACTIONS = {"happy": "hop", "angry": "stomp", "panic": "shiver", "sad": "slump", "shy": "fidget"}  # mood -> movement
 SHIVER_HZ = 5.0  # fast enough to read as a tremble, slow enough for frames 60 ms apart to show it
 SWING_MAX = 9.0  # degrees either way while carried
 SWING_LIMIT = 12.0  # with the overshoot; less when the window leaves little room at her sides
@@ -78,6 +78,9 @@ def pose(kind: str, t: float, width: int, height: int, sign: int = 1) -> tuple[f
     if kind == "shiver":  # a quick side-to-side tremble that dies away
         fade = 1 - t / DURATIONS["shiver"]
         return 0.015 * width * math.sin(2 * math.pi * SHIVER_HZ * t) * fade, 0.0, 0.0, 1.0, 1.0
+    if kind == "fidget":  # shy: she shrinks a little and sways from side to side, then stands up again
+        e = _ramp(t, 0.0, 0.25) * (1 - _ramp(t, 1.25, 1.6))
+        return 0.0, 0.0, sign * 1.4 * e * math.sin(2 * math.pi * t / 0.8), 1 + 0.01 * e, 1 - 0.03 * e
     if kind == "stretch":  # up on her toes, a little wobble at the top, then down with a small squash
         e = _ramp(t, 0.0, 0.9) * (1 - _ramp(t, 1.7, 2.3))
         wobble = sign * 0.7 * math.sin(2 * math.pi * (t - 0.9) / 0.8) if 0.9 < t < 1.7 else 0.0
