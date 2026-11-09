@@ -17,6 +17,9 @@ FALLBACK = {
     "not_subscription": ("sad", "I only work with a Claude subscription login... this doesn't look like one, so I'll stop "
                                 "looking rather than spend API credit. (To use your own API key, switch on the "
                                 "\"How she thinks\" page in Settings.)"),
+    "not_logged_in": ("sad", "Claude Code isn't signed in right now... I'll stop looking for now. (Run claude auth "
+                              "login in a terminal and sign in with your Claude subscription account; signing in on "
+                              "the website alone isn't enough.)"),
     "not_chatgpt": ("sad", "Codex isn't signed in with a ChatGPT subscription... I'll stop looking rather than spend "
                            "API credit. (Run codex login in a terminal and sign in with your ChatGPT account.)"),
     "no_codex": ("sad", "I can't find the codex command... call me again once the Codex CLI is installed and signed in~"),

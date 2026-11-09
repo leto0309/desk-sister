@@ -175,6 +175,95 @@ def test_movements_end_by_themselves(window):
     assert window._body is None and window.body_transform() is None
 
 
+def _idle_due(window):
+    if window._idle_at is None:
+        window._move_body(window.clock.now)  # the first frame schedules the first idle action
+    window.clock.now = window._idle_at + 0.01
+    window._move_body(window.clock.now)
+
+
+def test_the_first_idle_action_is_timed_by_the_clock_in_use(window):
+    """Gemini's review: timed at creation by the real clock, a test's clock set later could find it long due."""
+    window.clock.now = 1e9  # far past any time.monotonic() taken when the window was made
+    window._move_body(window.clock.now)
+    assert window._body is None
+    low, high = body.IDLE_EVERY
+    assert low <= window._idle_at - window.clock.now <= high
+
+
+def test_an_idle_action_comes_now_and_then_while_she_stands_idle(window):
+    window._rng = random.Random(1)
+    seen = set()
+    for _ in range(40):
+        window._body = None
+        _idle_due(window)
+        assert window._body is not None and window._body[0] in body.IDLE_ACTIONS
+        seen.add(window._body[0])
+        low, high = body.IDLE_EVERY
+        assert low <= window._idle_at - window.clock.now <= high
+    assert seen == set(body.IDLE_ACTIONS)  # the doze only at night
+
+
+def test_she_dozes_only_at_night(window):
+    window._rng = random.Random(2)
+    window.night = lambda: True
+    kinds = set()
+    for _ in range(60):
+        window._body = None
+        _idle_due(window)
+        kinds.add(window._body[0])
+    assert "doze" in kinds
+
+
+@pytest.mark.parametrize("busy", ["talking", "other mood", "walking", "asleep", "calm", "off", "held"])
+def test_no_idle_action_while_she_is_busy(window, busy):
+    if busy == "talking":
+        window.full_text = "主人好～"
+    elif busy == "other mood":
+        window.set_mood("think")
+        window._body = None
+    elif busy == "walking":
+        window.set_walking(1)
+    elif busy == "asleep":
+        window.set_mood("sleep")
+    elif busy == "calm":
+        window.calm = True
+    elif busy == "off":
+        window.set_body_motion(False)
+    else:
+        window._dragging = True
+    _idle_due(window)
+    assert window._body is None
+
+
+def test_an_idle_action_stops_when_she_starts_to_talk(window):
+    window.start_body("look")
+    assert window.body_pose() is not None
+    window.full_text = "嗯？"
+    assert window.body_pose() is None and window._body is None
+
+
+def test_a_stretch_closes_her_eyes_and_a_look_blinks(window):
+    window.start_body("stretch")
+    window.clock.now += 1.3
+    window._animate()
+    assert window.eyes == "eyes_closed"
+    window.clock.now += 1.3  # over
+    window._move_body(window.clock.now)
+    window._blink_at = window.clock.now + 10
+    window._animate()
+    assert window.eyes is None
+    window.start_body("look")
+    window.clock.now += 1.6
+    window._animate()
+    assert window.eyes == "eyes_closed"
+
+
+def test_a_doze_closes_her_eyes_then_she_jolts_awake():
+    assert body.eyes("doze", 1.8) == "eyes_closed" and body.eyes("doze", 2.5) is None
+    assert body.pose("doze", 2.47, 187, 220)[1] < -3  # the jolt lifts her
+
+
 def _press(window, local: QPoint):
     pos = QPointF(local)
     glob = QPointF(window.mapToGlobal(local))

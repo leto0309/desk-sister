@@ -211,6 +211,107 @@ def test_not_subscription_result_is_reported(app, tmp_path, monkeypatch):
     assert "订阅" in ctrl.window.full_text and ctrl.auth_ok_until == 0.0
 
 
+def test_no_claude_code_login_is_named_as_such(app, tmp_path, monkeypatch):
+    """Seen 2026-11-08: Claude Code had lost its login, and she said it was "not a subscription login"."""
+    ctrl, _calls = make_controller(app, tmp_path, monkeypatch)
+    result = claude_client.ClaudeResult(False, error="not logged in", not_subscription=True, not_logged_in=True)
+    ctrl._on_reply(Outcome(ctrl.generation, "reply", result=result, auth_ok=False))
+    assert "claude auth login" in ctrl.window.full_text and "不是订阅登录" not in ctrl.window.full_text
+    assert controller_module.login_fallback(controller_module.CODEX_CLI, result) == "not_chatgpt"
+    assert controller_module.login_fallback(controller_module.CLAUDE_CLI, result) == "not_logged_in"
+
+
+def test_the_subscription_check_tells_no_login_from_another_login(monkeypatch):
+    assert claude_client._parse_auth_status('{"loggedIn": false}') == (False, claude_client.NOT_LOGGED_IN)
+    ok, reason = claude_client._parse_auth_status('{"loggedIn": true, "authMethod": "api_key", "apiProvider": "firstParty"}')
+    assert not ok and reason != claude_client.NOT_LOGGED_IN
+
+
+class FakeLoginCall:
+    def __init__(self, answer):
+        self.answer, self.asked = answer, []
+
+    def check_subscription(self, executable):
+        self.asked.append(executable)
+        return self.answer
+
+    check_login = check_subscription
+
+    def cancel(self):
+        pass
+
+
+def login_controller(app, tmp_path, monkeypatch, answer, **config):
+    ctrl, calls = make_controller(app, tmp_path, monkeypatch, **config)
+    fake = FakeLoginCall(answer)
+    monkeypatch.setattr(ctrl, "_new_call", lambda _provider: fake)
+    return ctrl, calls, fake
+
+
+def test_a_missing_login_is_told_soon_after_start(app, tmp_path, monkeypatch):
+    """Seen 2026-11-08: she only found out at her first look, which the gates put off for about 90 seconds."""
+    ctrl, calls, fake = login_controller(app, tmp_path, monkeypatch, (False, claude_client.NOT_LOGGED_IN))
+    ctrl._check_login()
+    assert fake.asked == ["claude.exe"] and calls == []  # only the login was asked about: nothing sent to a model
+    assert "claude auth login" in ctrl.window.full_text
+    assert ctrl.last_error == "Claude Code 没有登录：在终端运行 claude auth login" and ctrl.auth_ok_until == 0.0
+
+
+def test_a_good_login_at_start_is_quiet_and_saves_the_next_check(app, tmp_path, monkeypatch):
+    ctrl, _calls, fake = login_controller(app, tmp_path, monkeypatch, (True, ""))
+    before = ctrl.window.full_text
+    ctrl._check_login()
+    assert fake.asked and ctrl.window.full_text == before and ctrl.last_error == ""
+    assert ctrl.auth_ok_until > time.monotonic()
+
+
+def test_another_kind_of_login_at_start_gets_the_subscription_line(app, tmp_path, monkeypatch):
+    reason = "auth api_key/firstParty is not a claude.ai subscription"
+    ctrl, _calls, _fake = login_controller(app, tmp_path, monkeypatch, (False, reason))
+    ctrl._check_login()
+    assert "订阅" in ctrl.window.full_text and "claude auth login" not in ctrl.window.full_text
+    assert ctrl.last_error.startswith("不是订阅登录")
+
+
+@pytest.mark.parametrize("reason", ["auth status timed out", "auth status unavailable: OSError", "cancelled",
+                                    claude_client.LAUNCH_PENDING, "auth status unreadable"])
+def test_a_check_that_could_not_run_says_nothing(app, tmp_path, monkeypatch, reason):
+    ctrl, _calls, _fake = login_controller(app, tmp_path, monkeypatch, (False, reason))
+    before = ctrl.window.full_text
+    ctrl._check_login()
+    assert ctrl.window.full_text == before and ctrl.last_error == ""
+
+
+def test_no_login_check_when_paused_or_with_an_api_key(app, tmp_path, monkeypatch):
+    ctrl, _calls, fake = login_controller(app, tmp_path, monkeypatch, (False, claude_client.NOT_LOGGED_IN), paused=True)
+    ctrl._check_login()
+    ctrl.config.paused = False
+    ctrl.config.backend = "api"
+    ctrl._check_login()
+    assert fake.asked == []
+
+
+def test_a_login_check_that_comes_back_after_a_look_started_is_dropped(app, tmp_path, monkeypatch):
+    ctrl, _calls, fake = login_controller(app, tmp_path, monkeypatch, (False, claude_client.NOT_LOGGED_IN), sync=False)
+    work = []
+    ctrl._spawn = work.append
+    ctrl._check_login()
+    ctrl.generation += 1  # a look (or a pause) began while the check was running
+    before = ctrl.window.full_text
+    work[0]()
+    app.processEvents()
+    assert fake.asked and ctrl.window.full_text == before and ctrl.last_error == ""
+
+
+def test_codex_login_is_checked_at_start_too(app, tmp_path, monkeypatch):
+    ctrl, _calls, fake = login_controller(app, tmp_path, monkeypatch, (False, "不是 ChatGPT 订阅登录（未登录）"),
+                                          backend="codex")
+    monkeypatch.setattr(controller_module.codex_client, "find_codex", lambda: "codex.exe")
+    ctrl._check_login()
+    assert fake.asked == ["codex.exe"] and ctrl.codex == "codex.exe"
+    assert "ChatGPT" in ctrl.window.full_text
+
+
 def test_pause_before_the_worker_runs_takes_no_screenshot(app, tmp_path, monkeypatch):
     ctrl, calls = make_controller(app, tmp_path, monkeypatch)
     fake_window(monkeypatch, WindowInfo(1, "main.py", "Code.exe", 4242, (0, 0, 800, 600)))
@@ -452,7 +553,9 @@ def test_failure_reason_is_shown_under_her_until_the_next_success(app, tmp_path,
 def test_failure_reasons_are_short_and_specific():
     summary = controller_module.error_summary
     assert summary(claude_client.ClaudeResult(False, error="timeout", timed_out=True), 120) == "超时（120 秒内没有回复）"
-    assert summary(claude_client.ClaudeResult(False, error="not logged in", not_subscription=True), 120).startswith("不是订阅登录")
+    assert summary(claude_client.ClaudeResult(False, error="api key", not_subscription=True), 120).startswith("不是订阅登录")
+    logged_out = claude_client.ClaudeResult(False, error="not logged in", not_subscription=True, not_logged_in=True)
+    assert summary(logged_out, 120) == "Claude Code 没有登录：在终端运行 claude auth login"
     long = summary(claude_client.ClaudeResult(False, error="x" * 500), 120)
     assert len(long) == controller_module.ERROR_MAX and long.endswith("…")
     assert summary(claude_client.ClaudeResult(False, error=""), 120) == "未知错误"

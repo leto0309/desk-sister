@@ -222,6 +222,8 @@ class PetWindow(QWidget):
         self.calm = False  # full-screen quiet (set by the controller): no body movements
         self._body: tuple[str, float, int] | None = None  # (movement, started, direction) while one plays
         self._body_next: str | None = None  # a mood reaction waiting for a landing to finish
+        self.night = lambda: False  # set by the controller: is it night (when she may doze)?
+        self._idle_at: float | None = None  # the next idle action; set on the first frame, by whatever clock is in use
         self.swing = 0.0  # degrees she hangs at while carried (and while it settles after)
         self._swing_speed = 0.0
         self._swing_x: int | None = None
@@ -466,8 +468,13 @@ class PetWindow(QWidget):
         return (not self.body_motion or self.walking or self.mood == "sleep" or self._press_pos is not None
                 or self.calm)
 
+    def _idle_action_over(self) -> bool:
+        """An idle action stops once she has something else to do: another mood, words, being picked up."""
+        return (self._body is not None and self._body[0] in body.IDLE_ACTIONS + body.NIGHT_ACTIONS
+                and (self.mood != "idle" or bool(self.full_text) or self._dragging))
+
     def body_pose(self) -> tuple[float, float, float, float, float] | None:
-        if self._body is not None and self._body_still():
+        if self._body is not None and (self._body_still() or self._idle_action_over()):
             self._body, self._body_next = None, None
         if self._body is None:
             return None
@@ -480,6 +487,13 @@ class PetWindow(QWidget):
             self._body = None
             if self._body_next:
                 self.start_body(self._body_next)
+        if self._idle_at is None:
+            self._idle_at = now + self._rng.uniform(*body.IDLE_EVERY)
+        elif now >= self._idle_at:
+            self._idle_at = now + self._rng.uniform(*body.IDLE_EVERY)
+            if self._body is None and self.mood == "idle" and not self.full_text and not self._dragging:
+                kinds = body.IDLE_ACTIONS + (body.NIGHT_ACTIONS if self.night() else ())
+                self.start_body(self._rng.choice(kinds))  # unless she is walking, held, in quiet...
         dt, self._swing_at = min(max(now - self._swing_at, 0.0), 0.1), now
         if not self.body_motion or self.walking or self.calm or self.mood == "sleep":
             self.swing, self._swing_speed, self._swing_x = 0.0, 0.0, None
@@ -568,7 +582,15 @@ class PetWindow(QWidget):
         self._blink(self.clock())
         self._move_head(self.clock())
         self._move_body(self.clock())
+        self.eyes = self._idle_eyes() or self.eyes
         self.update()
+
+    def _idle_eyes(self) -> str | None:
+        """Shut for a stretch or a doze, a blink while looking around."""
+        if self._body is None or self.mood != "idle" or self.body_pose() is None:
+            return None
+        kind, started, _sign = self._body
+        return body.eyes(kind, self.clock() - started)
 
     # ---- painting ----------------------------------------------------
     def _bubble_rect(self, text: str) -> QRect:

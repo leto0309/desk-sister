@@ -61,6 +61,7 @@ TEXT = {
     "超时（{0} 秒内没有回复）": "Timed out (no reply within {0} seconds)",
     "还没有设置 API Key（设置里的「调用方式」页）": "No API key set yet (Settings, \"How she thinks\" page)",
     "不是订阅登录：{0}": "Not a subscription login: {0}",
+    "Claude Code 没有登录：在终端运行 claude auth login": "Claude Code is not signed in: run claude auth login in a terminal",
     "任务卡住，已放弃": "The task got stuck and was dropped",
     "未知错误": "Unknown error",
     # ---- autostart and credentials -------------------------------------------------------------------

@@ -31,6 +31,7 @@ class ClaudeResult:
     timed_out: bool = False
     cancelled: bool = False
     not_subscription: bool = False
+    not_logged_in: bool = False  # with not_subscription: Claude Code has no login at all (not a different kind of login)
     no_api_key: bool = False  # API Key mode: no key saved yet
     bad_api_key: bool = False  # API Key mode: the key was rejected
 
@@ -134,13 +135,16 @@ def child_env() -> dict[str, str]:
     return env
 
 
+NOT_LOGGED_IN = "not logged in"
+
+
 def _parse_auth_status(stdout: str) -> tuple[bool, str]:
     try:
         status = json.loads(stdout)
     except ValueError:
         return False, "auth status unreadable"
     if not isinstance(status, dict) or not status.get("loggedIn"):
-        return False, "not logged in"
+        return False, NOT_LOGGED_IN
     if status.get("authMethod") != "claude.ai" or status.get("apiProvider") != "firstParty":
         return False, f"auth {status.get('authMethod')}/{status.get('apiProvider')} is not a claude.ai subscription"
     return True, ""

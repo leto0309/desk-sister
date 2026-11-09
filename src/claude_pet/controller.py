@@ -52,6 +52,7 @@ PAT_COOLDOWN_SEC = 5.0  # one reaction per head pat, however long the rubbing go
 RESIZE_SETTLE_MS = 1200  # resizing has stopped when nothing changed for this long
 SIZE_SHOWN_SEC = 2.5  # how long her height stays under her feet after Ctrl + wheel
 AUTH_CHECK_TTL = 1800
+LOGIN_CHECK_DELAY_MS = 6000  # after start: her hello is read first, then the login is checked once
 AUTOSTART_LABEL = N_("开机自启")
 MEMORY_TALK_CHANCE = 0.25  # share of self-talk turns that mention today's main activity (if >= 1 h)
 HOTKEY_RETRY_SEC = 60  # Ctrl+Alt+P taken: how often it is tried again (another program may let go of it)
@@ -213,6 +214,8 @@ def error_summary(result: claude_client.ClaudeResult, timeout_sec: int) -> str:
     """One short line for the status text under the pet."""
     if result.timed_out:
         return tr("超时（{0} 秒内没有回复）", timeout_sec)
+    if result.not_logged_in:
+        return tr("Claude Code 没有登录：在终端运行 claude auth login")
     if result.not_subscription:
         return tr("不是订阅登录：{0}", result.error)[:ERROR_MAX]
     if result.no_api_key:
@@ -220,6 +223,30 @@ def error_summary(result: claude_client.ClaudeResult, timeout_sec: int) -> str:
     lines = [line.strip() for line in (result.error or "").splitlines() if line.strip()]
     text = lines[0] if lines else tr("未知错误")
     return text if len(text) <= ERROR_MAX else text[: ERROR_MAX - 1] + "…"
+
+
+@dataclass
+class LoginCheck:
+    generation: int
+    backend: str
+    kind: str
+    ok: bool = False
+    reason: str = ""
+    codex: str = ""  # Codex found by the check, kept for the looks
+
+
+def login_check_is_sure(reason: str) -> bool:
+    """A refusal she should tell 主人 about; a check that could not run (timed out, launching) proves nothing."""
+    if reason in ("cancelled", claude_client.LAUNCH_PENDING, "auth status unreadable"):
+        return False
+    return "timed out" not in reason and "unavailable" not in reason
+
+
+def login_fallback(kind: str, result: claude_client.ClaudeResult) -> str:
+    """Her line when the subscription check refused: Codex, no Claude Code login at all, or a login of another kind."""
+    if kind == CODEX_CLI:
+        return "not_chatgpt"
+    return "not_logged_in" if result.not_logged_in else "not_subscription"
 
 
 def full_screen_now(fallback_hwnd: int = 0) -> bool:
@@ -323,6 +350,7 @@ class PetController(QObject):
     download_progress = Signal(int, int)  # (bytes so far, of)
     download_done = Signal(object, object)  # (the verified exe or None, its version or an i18n.Msg why not)
     game_ready = Signal(object)  # a GameOutcome
+    login_checked = Signal(object)  # LoginCheck: the check soon after start
 
     def __init__(self, app: QApplication, config: Config, sprite_folder: Path, config_file: Path | None = None,
                  autostart: Autostart | None = None, memory: CompanionMemory | None = None,
@@ -403,6 +431,7 @@ class PetController(QObject):
         self._memory_tick_at = self._clock()
         self._memory_flush_at = self._clock()
         self.window.clock = lambda: self._clock()
+        self.window.night = lambda: bedtime.is_night(self._hour(), self.config.night_start_hour)
         self.claude = claude_client.find_claude(config.claude_path)
         self.codex: str | None = None  # found when Codex mode is first used
         codex_client.schedule_cleanup(sweep=True)  # screenshots a crash left in %TEMP%, in the background
@@ -419,6 +448,8 @@ class PetController(QObject):
         self.game_ready.connect(self._on_game)
 
         self.reply_ready.connect(self._on_reply)
+        self.login_checked.connect(self._on_login_checked)
+        self._login_call: claude_client.ClaudeCall | None = None
         self.codex_found.connect(self._on_codex_found)
         self.update_found.connect(self._on_update_found)
         self.download_progress.connect(self._on_download_progress)
@@ -507,6 +538,7 @@ class PetController(QObject):
                 self.window.say(*self._reply_tuple(persona.pick(persona.lines("HELLO_LINES"))))
             # First look once the dwell gate can pass, so she does not wait a whole interval.
             QTimer.singleShot(max(8, self.config.dwell_sec + 1) * 1000, self.tick)
+            self._check_login_soon()
 
     @property
     def _cleanup_running(self) -> bool:
@@ -514,6 +546,8 @@ class PetController(QObject):
 
     def shutdown(self) -> None:
         self._cancel_inflight()
+        if self._login_call is not None:
+            self._login_call.cancel()
         self.game_timer.stop()
         self.focus_log.flush(float("inf"))  # one last try for anything a locked file kept from being saved
         self.voice.stop()
@@ -595,6 +629,64 @@ class PetController(QObject):
         # Whatever happens on the worker (even a PrintWindow that never returns), the pet recovers.
         QTimer.singleShot((self.config.timeout_sec * 2 + 60) * 1000, partial(self._watchdog, job.generation, force))
         self._spawn(partial(self._work, job))
+
+    def _check_login_soon(self) -> None:
+        QTimer.singleShot(LOGIN_CHECK_DELAY_MS, self._check_login)
+
+    def _check_login(self) -> None:
+        """Once after start: is Claude Code (or Codex) signed in with a subscription? Nothing is sent to a model.
+        Without this she only found out at her first look, which the gates (dwell, Claude Code working...)
+        could put off for minutes."""
+        if self.busy or self.quit_pending or self.config.paused or self.game is not None:
+            return
+        provider = self._provider()
+        if provider.kind not in (CLAUDE_CLI, CODEX_CLI):
+            return  # API keys need no login
+        if provider.kind == CLAUDE_CLI and not self.claude:
+            return  # already told at start (no_claude)
+        call = self._new_call(provider)
+        check = LoginCheck(self.generation, provider.id, provider.kind)
+        self._login_call = call
+        claude, codex = self.claude, self.codex
+
+        def work():
+            if check.kind == CLAUDE_CLI:
+                check.ok, check.reason = call.check_subscription(claude)
+            else:
+                check.codex = codex or codex_client.find_codex() or ""
+                if check.codex:
+                    check.ok, check.reason = call.check_login(check.codex)
+                else:
+                    check.reason = "cancelled"  # no Codex CLI: the first look says so
+            self.login_checked.emit(check)
+
+        self._spawn(work)
+
+    def _on_login_checked(self, check: "LoginCheck") -> None:
+        self._login_call = None
+        if self.quit_pending or check.generation != self.generation or check.backend != self.config.backend:
+            return  # paused, switched or a look started meanwhile: that look checks for itself
+        if check.codex and not self.codex:
+            self.codex = check.codex
+        if check.ok:
+            self.auth_ok_until = time.monotonic() + AUTH_CHECK_TTL
+            return
+        if not login_check_is_sure(check.reason):
+            log.info("login check at start inconclusive: %s", check.reason)
+            return
+        log.warning("login check at start failed: %s", check.reason)
+        result = claude_client.ClaudeResult(
+            False, error=check.reason, not_subscription=True,
+            not_logged_in=check.kind == CLAUDE_CLI and check.reason == claude_client.NOT_LOGGED_IN)
+        self.last_error = error_summary(result, self.config.timeout_sec)
+        self._refresh_status()
+        if self.busy:
+            return
+        reply = persona.fallback(login_fallback(check.kind, result))
+        if self.quiet:
+            self.deferred = reply  # said once the full-screen app is gone
+            return
+        self.window.say(*self._reply_tuple(reply))
 
     def _new_call(self, provider: providers.Provider):
         """A cancellable call object for the chosen provider; the key is read on the worker, never kept here."""
@@ -1176,7 +1268,9 @@ class PetController(QObject):
                 return claude_client.ClaudeResult(False, error=reason), None
             if not auth_ok:
                 log.warning("subscription check failed: %s", reason)
-                return claude_client.ClaudeResult(False, error=reason, not_subscription=True), False
+                logged_out = job.kind == CLAUDE_CLI and reason == claude_client.NOT_LOGGED_IN
+                return claude_client.ClaudeResult(
+                    False, error=reason, not_subscription=True, not_logged_in=logged_out), False
         if job.quiet_check is not None and job.quiet_check():
             # Went full screen while the subscription was checked: skip quietly, not a failure.
             return claude_client.ClaudeResult(False, error="quiet", cancelled=True), auth_ok
@@ -1255,7 +1349,7 @@ class PetController(QObject):
         elif result.bad_api_key:
             reply = persona.fallback("bad_api_key")
         elif result.not_subscription:
-            reply = persona.fallback("not_chatgpt" if self._provider().kind == CODEX_CLI else "not_subscription")
+            reply = persona.fallback(login_fallback(self._provider().kind, result))
         elif result.ok:
             parsed = persona.parse_reply(result.text)
             if parsed:
@@ -1479,7 +1573,7 @@ class PetController(QObject):
             return GameOutcome(job.generation, "cancelled")
         if result.no_api_key or result.bad_api_key or result.not_subscription:
             kind = "no_api_key" if result.no_api_key else "bad_api_key" if result.bad_api_key else \
-                "not_chatgpt" if job.kind == CODEX_CLI else "not_subscription"
+                login_fallback(job.kind, result)
             return GameOutcome(job.generation, "stop", *self._reply_tuple(persona.fallback(kind)), auth_ok=auth_ok)
         if not result.ok and job.model_failures < len(GAME_MODEL_RETRY_MS):
             # The game has no clock: a call that failed is no reason to spend a hand on a guess.

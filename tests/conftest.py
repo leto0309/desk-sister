@@ -135,6 +135,16 @@ def _chinese_by_default():
 
 
 @pytest.fixture(autouse=True)
+def _no_login_check_at_start(monkeypatch):
+    """start() must not run the real `claude auth status` a few seconds later; tests call _check_login themselves."""
+    try:
+        from claude_pet.controller import PetController
+    except ImportError:  # no Qt here
+        return
+    monkeypatch.setattr(PetController, "_check_login_soon", lambda self: None)
+
+
+@pytest.fixture(autouse=True)
 def _silent(monkeypatch):
     """No test makes a sound: her voice player plays nothing."""
     from claude_pet import voice
