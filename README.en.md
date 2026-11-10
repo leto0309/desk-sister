@@ -15,16 +15,16 @@ settings-window colours.
 
 ![The six AI girls](docs/images/girls-en.gif)
 
-![Claude's 9 moods](docs/images/moods-claude-en.png)
+![Claude's 10 moods](docs/images/moods-claude-en.png)
 
 <details>
-<summary>The other girls' 9 moods</summary>
+<summary>The other girls' 10 moods</summary>
 
-![DeepSeek's 9 moods](docs/images/moods-deepseek-en.png)
-![GPT's 9 moods](docs/images/moods-gpt-en.png)
-![Gemini's 9 moods](docs/images/moods-gemini-en.png)
-![Qwen's 9 moods](docs/images/moods-qwen-en.png)
-![GLM's 9 moods](docs/images/moods-glm-en.png)
+![DeepSeek's 10 moods](docs/images/moods-deepseek-en.png)
+![GPT's 10 moods](docs/images/moods-gpt-en.png)
+![Gemini's 10 moods](docs/images/moods-gemini-en.png)
+![Qwen's 10 moods](docs/images/moods-qwen-en.png)
+![GLM's 10 moods](docs/images/moods-glm-en.png)
 
 </details>
 

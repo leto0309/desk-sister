@@ -48,6 +48,7 @@ STYLE_NAMES = {"": N_("她自己的声音"), "squeaky": N_("尖细可爱"), "bri
 MOODS = {  # pitch factor, spread of the pitch steps
     "idle": (1.0, 1.0), "talk": (1.0, 1.0), "happy": (1.12, 1.2), "think": (0.95, 0.7), "panic": (1.2, 1.8),
     "angry": (0.88, 1.3), "sad": (0.82, 0.6), "shy": (1.06, 0.6),  # shy: a little higher, small and soft
+    "proud": (1.05, 1.15),  # proud: a little higher and livelier, sure of herself
 }
 STEPS = 9  # pitch steps per voice, cached
 SILENT = set("，。！？、…～,.!?;；：:（）()「」『』—\n \t\"'“”")

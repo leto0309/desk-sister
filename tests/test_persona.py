@@ -121,3 +121,35 @@ def test_the_second_round_of_head_pats_is_shy_for_every_girl():
         finally:
             persona.set_girl("claude")
             i18n.set_language("zh")
+
+
+def test_she_may_reply_proud_and_every_girl_is_told_so():
+    """The tenth expression (2026-11-10): the model may answer with it, in either language."""
+    from claude_pet import characters
+
+    assert parse_reply("proud|哼哼，我早就说过会这样。") == Reply("proud", "哼哼，我早就说过会这样。")
+    for girl in characters.CHARACTERS:
+        for lang in ("zh", "en"):
+            assert "proud" in characters.system_prompt(girl, english=lang == "en").split("|")[-1], (girl, lang)
+
+
+def test_every_girl_lands_and_grows_proud_once_in_both_languages():
+    from claude_pet import characters, i18n, persona
+
+    where = {}
+    try:
+        for lang in ("zh", "en"):
+            i18n.set_language(lang)
+            for girl in characters.CHARACTERS:
+                persona.set_girl(girl)
+                talk = persona.lines("INTERACTION_TALK")
+                for kind in ("land", "grow"):
+                    proud = [i for i, (mood, _text) in enumerate(talk[kind]) if mood == "proud"]
+                    assert len(proud) == 1, (girl, lang, kind)
+                    where[girl, lang, kind] = proud[0]
+    finally:
+        persona.set_girl("claude")
+        i18n.set_language("zh")
+    for girl in characters.CHARACTERS:
+        for kind in ("land", "grow"):  # the same line in both languages
+            assert where[girl, "zh", kind] == where[girl, "en", kind], (girl, kind)

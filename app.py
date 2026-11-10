@@ -50,6 +50,9 @@ def self_test() -> int:
             assert decode_embedded(module.PART_IMAGES[part], module.PART_CHECKSUMS[part]).width > 100, (girl, part)
         assert persona.girl_lines(girl) is not None, f"{girl}'s lines are not in this build"
     assert persona.system_prompt("glm").count("表情|台词") == 1  # each girl's persona and the fixed rules
+    import importlib.util
+
+    assert importlib.util.find_spec("claude_pet.main_gc") is not None  # the GUI-thread garbage collector is in this build
     print("desk-sister self-test passed")
     return 0
 
@@ -64,6 +67,7 @@ def main() -> int:
     from claude_pet.autostart import Autostart, current_launch
     from claude_pet.controller import PetController
     from claude_pet.journal import Journal
+    from claude_pet.main_gc import MainThreadCollector
     from claude_pet.memory import CompanionMemory
 
     data = app_data_dir()
@@ -77,6 +81,8 @@ def main() -> int:
     if not lock.tryLock(100):
         print("Desk Sister is already running.")
         return 0
+    # Before the pet and its worker threads exist: from here on only this thread collects garbage (see main_gc).
+    collector = MainThreadCollector(app)  # noqa: F841  kept for the life of the app
     # Written first, so a log without this line means logging itself is broken in that process.
     from claude_pet import __version__
 

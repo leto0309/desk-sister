@@ -34,11 +34,11 @@ GREY = (120, 120, 120)
 TEXT = {
     "zh": {"lineup": "六位 AI 娘", "moods": "{name} · {count} 种表情", "credit": "AI 生成，角色原设 ZipZipPipe · 仅限非商用",
            "idle": "待机", "talk": "说话", "happy": "开心", "think": "思考",
-           "panic": "慌张", "angry": "生气", "sad": "难过", "shy": "害羞", "sleep": "睡觉"},
+           "panic": "慌张", "angry": "生气", "sad": "难过", "shy": "害羞", "proud": "得意", "sleep": "睡觉"},
     "en": {"lineup": "Six AI girls", "moods": "{name} · {count} moods",
            "credit": "AI-generated after designs by ZipZipPipe · non-commercial use only",
            "idle": "Idle", "talk": "Talking", "happy": "Happy", "think": "Thinking",
-           "panic": "Panicking", "angry": "Angry", "sad": "Sad", "shy": "Shy", "sleep": "Sleeping"},
+           "panic": "Panicking", "angry": "Angry", "sad": "Sad", "shy": "Shy", "proud": "Proud", "sleep": "Sleeping"},
 }
 fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
 

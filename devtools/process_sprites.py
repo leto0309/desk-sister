@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image
 
-MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "shy", "sleep")
+MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "shy", "proud", "sleep")
 
 
 def remove_border_white(image: Image.Image, tolerance: int = 18) -> Image.Image:

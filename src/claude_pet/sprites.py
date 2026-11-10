@@ -17,6 +17,7 @@ MOOD_PARTS = {  # made from each expression's own sprite, named "<mood>_<part>";
     "angry": ("mouth_half", "mouth_open", "eyes_half", "eyes_closed"),
     "sad": ("mouth_half", "mouth_open", "eyes_half", "eyes_closed"),
     "shy": ("mouth_half", "mouth_open", "eyes_half", "eyes_closed"),
+    "proud": ("mouth_half", "mouth_open", "eyes_half", "eyes_closed"),
 }
 TALK_EYES = ("talk_eyes_half", "talk_eyes_closed")  # idle's blink, also covering the talk sprite's own eyes
 PARTS = IDLE_PARTS + TALK_EYES + tuple(f"{mood}_{part}" for mood, parts in MOOD_PARTS.items() for part in parts)

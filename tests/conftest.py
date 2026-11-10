@@ -1,3 +1,4 @@
+import gc
 import os
 import time
 
@@ -58,6 +59,27 @@ def _seeded_randomness() -> None:
 
 
 _seeded_randomness()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _no_collection_in_worker_threads():
+    """Python's cyclic collector runs in whichever thread happens to cross its threshold. In a worker thread
+    (codex-cleanup, a test's own server thread) it destroyed Qt objects whose timers were still running; Qt cannot
+    stop a timer from another thread, so the main thread's event loop later sent a timer event to an object that
+    was gone: an access violation in QCoreApplication::notifyInternal2 (2026-11-10, always in
+    test_enter_on_cancel_cancels_in_both_dialogs once the proud sprites had shifted when the collector runs).
+    So the automatic collector is off for the whole run, and `_collect_on_the_main_thread` does its work.
+    The app does the same with claude_pet/main_gc.py (a timer on the GUI thread)."""
+    gc.disable()
+    yield
+    gc.enable()
+
+
+@pytest.fixture(autouse=True)
+def _collect_on_the_main_thread():
+    """After every test, on the main thread: the only place where Qt objects may be destroyed."""
+    yield
+    gc.collect()
 
 
 @pytest.fixture(autouse=True)

@@ -19,7 +19,7 @@ from . import characters, i18n, persona_en
 from .bedtime import mentions as mentions_bedtime
 from .memory import activity_name, duration_text
 
-MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "shy", "sleep")
+MOODS = ("idle", "talk", "happy", "think", "panic", "angry", "sad", "shy", "proud", "sleep")
 MAX_LINE = 80  # characters of Chinese
 MAX_LINE_EN = 160  # English takes about twice the characters for the same line
 
@@ -259,13 +259,13 @@ INTERACTION_TALK = {
     "carry_long": [("panic", "（晕乎乎）主人……放我下来……世界在转……"), ("sad", "被拎着好久……我的手都酸了。"),
                    ("panic", "腿悬空太久了……地面在哪里？"), ("sad", "（抱紧书）我、我有点恐高……"),
                    ("think", "被拎了这么久，我开始怀疑重力是不是放假了。")],
-    "land": [("happy", "落地成功！姿势满分。"), ("talk", "呼……刚才有点高。"),
+    "land": [("proud", "落地成功！姿势满分。"), ("talk", "呼……刚才有点高。"),
              ("happy", "安全着陆～书也没有掉！"), ("think", "着陆点偏差 0 像素，很好。"),
              ("talk", "（拍拍裙子）好了，回到地面了。")],
     "edge": [("think", "到屏幕边边了，往回走吧～"), ("talk", "前面没路啦，这里是任务栏的尽头。"),
              ("panic", "差点走出屏幕……那边是我不认识的坐标系！"), ("think", "边界检查通过：不能再往前了。"),
              ("talk", "这里风景不错，不过还是回去吧。")],
-    "grow": [("happy", "哇，视野变高了！站得高，看得远～"), ("happy", "变大了！抱着书也更有气势了。"),
+    "grow": [("happy", "哇，视野变高了！站得高，看得远～"), ("proud", "变大了！抱着书也更有气势了。"),
              ("think", "身高 +10 像素……这本书好像也跟着变重了。"), ("happy", "变高啦，我可以站得更有气势一点～"),
              ("talk", "这个高度刚刚好，抱着书也站得稳～")],
     "shrink": [("talk", "变小了……这样也挺可爱的吧？"), ("think", "缩小模式：占用屏幕 -1，存在感不减。"),
